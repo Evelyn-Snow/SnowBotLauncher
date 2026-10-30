@@ -17,6 +17,9 @@ echo [2/4] PyInstaller 打包 exe...
 if errorlevel 1 goto :err
 
 echo [3/4] 检查 Inno Setup...
+del /q "dist\QQBotLauncher\launcher_config.json" 2>nul
+del /q "dist\QQBotLauncher\launcher.lock" 2>nul
+rmdir /s /q "dist\QQBotLauncher\logs" 2>nul
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" (

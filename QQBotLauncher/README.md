@@ -45,6 +45,19 @@ build.bat
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
+## 安装
+
+运行生成好的安装包：
+
+```
+installer\output\QQBotLauncher-Setup-1.0.0.exe
+```
+
+- 默认安装到 `C:\Program Files\QQBotLauncher`，创建开始菜单与桌面快捷方式
+- 安装与运行都需要管理员权限（NapCat 需要向 QQ 注入引导模块）
+- 卸载：Windows 设置 → 应用，或开始菜单中的「卸载 QQ 机器人控制台」；配置、日志会一并清理
+- 安装包未做代码签名，首次运行可能出现 SmartScreen 提示，选择「更多信息 → 仍要运行」即可
+
 ## 说明
 
 - 控制台需要管理员权限：NapCat 需要向 QQ 注入引导模块；安装包中的 exe 已内嵌 `requireAdministrator` 清单。
