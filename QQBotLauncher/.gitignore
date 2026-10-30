@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+installer/output/
+launcher_config.json
+launcher.lock
+logs/
+*.log
+*.spec
