@@ -13,13 +13,10 @@ echo [1/4] 安装依赖...
 if errorlevel 1 goto :err
 
 echo [2/4] PyInstaller 打包 exe...
-".venv\Scripts\pyinstaller.exe" --noconfirm --clean --windowed --uac-admin --name QQBotLauncher --icon app.ico app.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --uac-admin --name SnowBotLauncher --icon app.ico --add-data "examples;examples" --add-data "docs;docs" app.py
 if errorlevel 1 goto :err
 
 echo [3/4] 检查 Inno Setup...
-del /q "dist\QQBotLauncher\launcher_config.json" 2>nul
-del /q "dist\QQBotLauncher\launcher.lock" 2>nul
-rmdir /s /q "dist\QQBotLauncher\logs" 2>nul
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" (
@@ -28,13 +25,13 @@ if not exist "%ISCC%" (
 )
 
 echo [4/4] 生成安装包...
-"%ISCC%" "installer\QQBotLauncher.iss"
+"%ISCC%" "installer\SnowBotLauncher.iss"
 if errorlevel 1 goto :err
 
 echo.
 echo 构建完成：
-echo   exe:     dist\QQBotLauncher\QQBotLauncher.exe
-echo   setup:   installer\output\QQBotLauncher-Setup-1.0.0.exe
+echo   exe:     dist\SnowBotLauncher\SnowBotLauncher.exe
+echo   setup:   installer\output\SnowBotLauncher-Setup-1.1.0.exe
 pause
 exit /b 0
 

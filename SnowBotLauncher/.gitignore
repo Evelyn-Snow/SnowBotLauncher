@@ -5,8 +5,8 @@ __pycache__/
 build/
 dist/
 installer/output/
-launcher_config.json
-launcher.lock
+config.json
+snowbot.lock
 logs/
 *.log
 *.spec

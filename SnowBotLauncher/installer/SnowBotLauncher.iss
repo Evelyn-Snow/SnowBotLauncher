@@ -1,18 +1,18 @@
-#define MyAppName "QQ 机器人控制台"
-#define MyAppVersion "1.0.0"
-#define MyAppExeName "QQBotLauncher.exe"
-#define MyAppId "{{B7E9A3C4-5D1F-4A8B-9C2E-3F6D7A1B4C8E}"
+#define MyAppName "SnowBotLauncher"
+#define MyAppVersion "1.1.0"
+#define MyAppExeName "SnowBotLauncher.exe"
+#define MyAppId "{{3F6D2A9B-1C4E-4D7A-8B2F-5E9C7D1A6B30}"
 
 [Setup]
 AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-AppPublisher=AIMade
-DefaultDirName={autopf}\QQBotLauncher
+AppPublisher=SnowBot
+DefaultDirName={autopf}\SnowBotLauncher
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=output
-OutputBaseFilename=QQBotLauncher-Setup-{#MyAppVersion}
+OutputBaseFilename=SnowBotLauncher-Setup-{#MyAppVersion}
 SetupIconFile=..\app.ico
 Compression=lzma2
 SolidCompression=yes
@@ -27,8 +27,9 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Files]
-Source: "..\dist\QQBotLauncher\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs; Excludes: "launcher_config.json,launcher.lock,logs\*,*.log"
+Source: "..\dist\SnowBotLauncher\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -39,7 +40,4 @@ Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-Type: filesandordirs; Name: "{app}\logs"
 Type: filesandordirs; Name: "{app}\__pycache__"
-Type: files; Name: "{app}\launcher_config.json"
-Type: files; Name: "{app}\launcher.lock"

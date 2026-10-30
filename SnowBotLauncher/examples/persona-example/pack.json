@@ -1,0 +1,45 @@
+{
+  "schema": "snowbot-pack/1",
+  "id": "example-persona",
+  "name": "示例：人格配置包",
+  "version": "1.0.0",
+  "author": "SnowBotLauncher",
+  "description": "演示 SnowBot Pack 的变量、占位符与备份机制。只会创建一个人格，不会修改默认模型；应用后可在 AstrBot「人格」页选用。",
+  "tags": ["示例", "人格"],
+  "variables": [
+    {
+      "key": "owner_qq",
+      "label": "主人 QQ",
+      "type": "text",
+      "required": true,
+      "pattern": "\\d+",
+      "placeholder": "123456789"
+    },
+    {
+      "key": "persona_name",
+      "label": "人格名称",
+      "type": "text",
+      "default": "小雪",
+      "required": true
+    },
+    {
+      "key": "tone",
+      "label": "说话语气",
+      "type": "select",
+      "default": "温柔",
+      "options": [
+        {"value": "温柔", "label": "温柔"},
+        {"value": "活泼", "label": "活泼"},
+        {"value": "毒舌", "label": "毒舌"}
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "type": "persona",
+      "id": "${persona_name}",
+      "file": "persona.md",
+      "replace": {"{OWNER_QQ}": "${owner_qq}"}
+    }
+  ]
+}
