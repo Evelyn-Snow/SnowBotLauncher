@@ -33,6 +33,24 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 
 格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
+## 项目结构
+
+```text
+main.py                      # 程序入口
+snowbot/
+├─ core/                     # 路径、配置、服务管理
+│  ├─ paths.py
+│  ├─ config.py
+│  └─ services.py
+├─ astrbot/client.py         # AstrBot WebUI API 客户端
+├─ packs/engine.py           # SnowBot 配置包引擎
+└─ ui/
+   ├─ theme.py               # 主题与图标
+   ├─ widgets.py             # 通用组件
+   ├─ main_window.py         # 主窗口、托盘、全局状态
+   └─ pages/                 # 控制台 / 配置包 / 增强配置 / 设置 / 说明
+```
+
 ## 环境要求
 
 - Windows 10/11 x64
@@ -74,8 +92,8 @@ build.bat
 
 构建流程：
 
-1. PyInstaller 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.2.0.exe`
+1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.3.0.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -84,7 +102,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.2.0.exe
+installer\output\SnowBotLauncher-Setup-1.3.0.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式

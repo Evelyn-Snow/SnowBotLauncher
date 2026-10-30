@@ -24,15 +24,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from astrbot_api import ApiError, AstrBotClient, get_path, set_path, zip_folder
+from ..astrbot.client import ApiError, AstrBotClient, get_path, set_path, zip_folder
 
 SCHEMA = "snowbot-pack/1"
 BACKUP_SCHEMA = "snowbot-backup/1"
-DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "SnowBotLauncher"
-PACKS_DIR = DATA_DIR / "packs"
-BACKUPS_DIR = DATA_DIR / "backups"
-PRESETS_DIR = DATA_DIR / "presets"
-TEMP_DIR = DATA_DIR / "temp"
+from ..core.paths import BACKUPS_DIR, DATA_DIR, PACKS_DIR, PRESETS_DIR, TEMP_DIR
 STEP_TYPES = {
     "persona",
     "config.set",

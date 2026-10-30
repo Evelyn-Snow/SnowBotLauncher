@@ -11,6 +11,7 @@ import json
 import os
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtWidgets import (
@@ -36,9 +37,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from astrbot_api import ApiError, AstrBotClient, get_path, set_path, zip_folder
+from ...astrbot.client import ApiError, AstrBotClient, get_path, set_path, zip_folder
 
-DATA_DIR = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "SnowBotLauncher"
+from ...core.paths import DATA_DIR
+from ...core.services import port_listening
 MEME_EXT = "/plugins/extensions/meme_manager"
 EDGE_VOICES = [
     "zh-CN-XiaoyiNeural",
@@ -106,6 +108,28 @@ class EnhanceTab(QWidget):
         if not self.client:
             raise ApiError("请先连接 AstrBot")
         return self.client
+
+    def _need_client(self) -> bool:
+        if not self.client:
+            QMessageBox.information(
+                self,
+                "请先连接 AstrBot",
+                "请先在页面顶部填写 AstrBot 后台密码，并点击「连接 AstrBot」。",
+            )
+            return False
+        return True
+
+    def _need_meme(self) -> bool:
+        if not self._need_client():
+            return False
+        if "meme_manager" not in self._plugin_names():
+            QMessageBox.information(
+                self,
+                "未安装表情包插件",
+                "请先在 AstrBot 的插件市场安装并启用 meme_manager，再使用这些按钮。",
+            )
+            return False
+        return True
 
     def _set_status(self, text: str, ok: bool | None = None):
         self.status.setText(text)
@@ -178,7 +202,6 @@ class EnhanceTab(QWidget):
         outer.addLayout(bar)
 
         self.tabs = QTabWidget()
-        self.tabs.setEnabled(False)
         self.tabs.addTab(self._build_persona_tab(), "人格")
         self.tabs.addTab(self._build_meme_tab(), "表情包")
         self.tabs.addTab(self._build_voice_tab(), "语音")
@@ -258,7 +281,7 @@ class EnhanceTab(QWidget):
         return None
 
     def refresh_personas(self):
-        if not self.client:
+        if not self._need_client():
             return
 
         def task():
@@ -334,7 +357,7 @@ class EnhanceTab(QWidget):
             self.persona_id.setText(Path(path).stem)
 
     def save_persona(self):
-        if not self.client:
+        if not self._need_client():
             return
         pid = self.persona_id.text().strip()
         prompt = self.persona_prompt.toPlainText().strip()
@@ -355,6 +378,8 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, f"正在保存人格「{pid}」…")
 
     def delete_persona(self):
+        if not self._need_client():
+            return
         pid = self.current_persona_id
         if not pid:
             QMessageBox.information(self, "未选择", "请先在左侧选择一个人格。")
@@ -386,6 +411,8 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, f"正在删除人格「{pid}」…")
 
     def set_default_persona(self):
+        if not self._need_client():
+            return
         pid = self.persona_id.text().strip()
         if not pid:
             QMessageBox.warning(self, "未选择", "请先选择或填写人格 ID。")
@@ -486,7 +513,7 @@ class EnhanceTab(QWidget):
         return _list_from(result, key, "packs", "rules", "items")
 
     def refresh_meme_packs(self):
-        if not self.client or "meme_manager" not in self._plugin_names():
+        if not self._need_meme():
             return
 
         def task():
@@ -531,7 +558,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在读取表情包列表…")
 
     def fetch_meme_index(self):
-        if not self.client or "meme_manager" not in self._plugin_names():
+        if not self._need_meme():
             return
 
         def task():
@@ -550,7 +577,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在拉取表情包资源广场索引…")
 
     def save_meme_accel(self):
-        if not self.client or "meme_manager" not in self._plugin_names():
+        if not self._need_meme():
             return
         url = self.meme_accel.text().strip()
 
@@ -567,6 +594,8 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在保存加速地址…")
 
     def install_meme_pack(self):
+        if not self._need_meme():
+            return
         pack_id = self.meme_pack_id.text().strip()
         if not pack_id:
             QMessageBox.warning(self, "缺少套装 ID", "请填写要安装的 pack_id。")
@@ -591,6 +620,8 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, f"正在下载表情包「{pack_id}」…")
 
     def set_selected_meme_default(self):
+        if not self._need_meme():
+            return
         item = self.meme_list.currentItem()
         if not item:
             QMessageBox.information(self, "未选择", "请先选中一套表情包。")
@@ -611,6 +642,8 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, f"正在设置默认表情包「{pid}」…")
 
     def apply_meme_multi(self):
+        if not self._need_meme():
+            return
         ids = []
         for row in range(self.meme_list.count()):
             item = self.meme_list.item(row)
@@ -900,7 +933,7 @@ class EnhanceTab(QWidget):
         return None, False
 
     def save_voice(self):
-        if not self.client:
+        if not self._need_client():
             return
         mode = self.voice_mode.currentData()
         if mode == "off":
@@ -943,7 +976,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在保存并测试语音…")
 
     def disable_voice(self):
-        if not self.client:
+        if not self._need_client():
             return
 
         def task():
@@ -959,7 +992,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在关闭语音…")
 
     def install_edge_deps(self):
-        if not self.client:
+        if not self._need_client():
             return
 
         def task():
@@ -974,7 +1007,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在安装 Edge 语音依赖…")
 
     def install_doubao_plugin(self):
-        if not self.client:
+        if not self._need_client():
             return
         candidates = list((DATA_DIR / "packs").glob("*/plugins/astrbot_plugin_seed_audio_tts"))
         source = next(
@@ -1147,7 +1180,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在检查本机 Ollama…")
 
     def install_livingmemory(self):
-        if not self.client:
+        if not self._need_client():
             return
 
         def task():
@@ -1162,7 +1195,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在从插件市场安装长期记忆插件…")
 
     def save_memory(self):
-        if not self.client:
+        if not self._need_client():
             return
         mode = self.mem_mode.currentData()
         if mode == "off":
@@ -1217,7 +1250,7 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在保存并测试记忆…")
 
     def disable_memory(self):
-        if not self.client:
+        if not self._need_client():
             return
         has_lm = "astrbot_plugin_livingmemory" in self._plugin_names()
 
@@ -1247,6 +1280,17 @@ class EnhanceTab(QWidget):
         if not url.startswith("http"):
             url = "http://" + url
         url = url.rstrip("/")
+        host = urlsplit(url).hostname
+        if host in ("127.0.0.1", "localhost"):
+            port = urlsplit(url).port or int(self.cfg.get("dashboard_port", 6185))
+            if not port_listening(port):
+                QMessageBox.information(
+                    self,
+                    "AstrBot 未运行",
+                    "AstrBot 面板端口还没有就绪。\n"
+                    "请先在「控制台」页点击「一键启动全部」，等待约 20~30 秒后再连接。",
+                )
+                return
 
         def task():
             client = AstrBotClient(url)
@@ -1288,7 +1332,6 @@ class EnhanceTab(QWidget):
             self.conn_label.setToolTip("平台：" + (platforms[0] if platforms else "未找到"))
             self.conn_label.setStyleSheet("color:#4ade80;")
             self.pw_edit.clear()
-            self.tabs.setEnabled(True)
             self._populate_personas()
             self._load_meme_ui()
             self._load_voice_ui()

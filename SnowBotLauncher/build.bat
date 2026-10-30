@@ -13,7 +13,7 @@ echo [1/4] 安装依赖...
 if errorlevel 1 goto :err
 
 echo [2/4] PyInstaller 打包 exe...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --uac-admin --name SnowBotLauncher --icon app.ico --add-data "examples;examples" --add-data "docs;docs" app.py
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --uac-admin --name SnowBotLauncher --icon app.ico --add-data "examples;examples" --add-data "docs;docs" main.py
 if errorlevel 1 goto :err
 
 echo [3/4] 检查 Inno Setup...
@@ -31,7 +31,7 @@ if errorlevel 1 goto :err
 echo.
 echo 构建完成：
 echo   exe:     dist\SnowBotLauncher\SnowBotLauncher.exe
-echo   setup:   installer\output\SnowBotLauncher-Setup-1.2.0.exe
+echo   setup:   installer\output\SnowBotLauncher-Setup-1.3.0.exe
 pause
 exit /b 0
 
