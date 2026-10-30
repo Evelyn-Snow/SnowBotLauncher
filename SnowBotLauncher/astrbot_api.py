@@ -136,6 +136,17 @@ class AstrBotClient:
         self.require(self.call("PUT", f"/config-profiles/{urllib.parse.quote(name)}", config))
 
     # ---------- 人格 ----------
+    def list_personas(self) -> list:
+        result = self.call("GET", "/personas")
+        data = result.get("data")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            for key in ("personas", "items", "list"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        return []
+
     def get_persona(self, persona_id: str) -> dict | None:
         result = self.call(
             "GET", f"/personas/{urllib.parse.quote(persona_id, safe='')}"

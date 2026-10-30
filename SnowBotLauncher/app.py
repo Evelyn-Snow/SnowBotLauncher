@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 import pack_engine as pe
+from enhance_tab import EnhanceTab
 
 if getattr(sys, "frozen", False):
     APP_DIR = Path(sys.executable).resolve().parent
@@ -45,7 +46,7 @@ for _d in (DATA_DIR, LOG_DIR, PACKS_DIR, BACKUPS_DIR):
         pass
 
 APP_NAME = "SnowBotLauncher"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 AUTOSTART_TASK = "SnowBotLauncher"
 
 DEFAULT_CONFIG = {
@@ -647,7 +648,7 @@ class LauncherWindow(QMainWindow):
         titles.setSpacing(2)
         title = QLabel(APP_NAME)
         title.setObjectName("title")
-        sub = QLabel("AstrBot + NapCat 统一启停 / 配置包 / 后台挂起")
+        sub = QLabel("AstrBot + NapCat 统一启停 / 配置包 / 增强配置 / 后台挂起")
         sub.setObjectName("subtitle")
         titles.addWidget(title)
         titles.addWidget(sub)
@@ -689,6 +690,7 @@ class LauncherWindow(QMainWindow):
 
         self.tabs.addTab(self._build_console_tab(), "控制台")
         self.tabs.addTab(self._build_packs_tab(), "配置包")
+        self.tabs.addTab(EnhanceTab(self.cfg, astrbot_dashboard_info(self.cfg)), "增强配置")
         self.tabs.addTab(self._build_settings_tab(), "设置")
         self.tabs.addTab(self._build_about_tab(), "使用说明")
 
@@ -981,7 +983,7 @@ class LauncherWindow(QMainWindow):
 
 二、地址与账号
   AstrBot WebUI   http://localhost:{self.cfg['dashboard_port']}
-  AstrBot 账号    默认 astrbot / astrbot（建议登录后修改）
+  AstrBot 账号    自动读取 AstrBot 的 dashboard.username（密码按实际填写）
   NapCat WebUI    http://127.0.0.1:{self.cfg['napcat_port']}
   NapCat Token    自动读取 config/webui.json，可在控制台复制
   OneBot 地址     ws://127.0.0.1:{self.cfg['onebot_port']}/ws（NapCat 作为 WS 客户端连接）
@@ -994,21 +996,29 @@ class LauncherWindow(QMainWindow):
   · 配置包目录：{PACKS_DIR}
   · 备份目录：{BACKUPS_DIR}
 
-四、后台与自启
+四、增强配置
+  · 人格：读取/新建/编辑/删除人格，设为默认，导入 Markdown。
+  · 表情包：meme_manager 资源广场索引、按 pack_id 下载、默认套装、多套同时使用、GitHub 加速地址。
+  · 语音：Edge TTS / MiMo 克隆 / 豆包 Seed Audio，保存前自动测试，可调触发概率。
+  · 记忆：本机 Ollama / 硅基流动 / 自定义 OpenAI 兼容 Embedding，自动接入 LivingMemory 插件。
+  · 这些操作直接调 AstrBot 后台接口，使用前需在页面顶部连接（密码只保留在本次运行内存中）。
+
+五、后台与自启
   · 「后台挂起」或关闭窗口：隐藏到托盘，服务不中断。
   · 托盘菜单可启动/停止全部、恢复窗口、退出。
   · 设置页可开启开机自启（写入 Windows 计划任务，登录后自动运行且免 UAC）。
   · 还可开启「启动控制台后自动启动全部服务」，配合开机自启即可无人值守挂机。
   · 退出控制台不会自动停止服务；如需停止请用「停止全部」或托盘菜单。
 
-五、常见问题
+六、常见问题
   · NapCat 启动失败：确认以管理员身份运行；检查 QQ 是否已安装。
   · 面板打不开：查看下方 AstrBot 日志是否报错，检查端口是否被占用。
   · 机器人不回复：AstrBot 中尚未配置大模型服务商，或未设为默认。
   · 配置包应用失败：先预览计划，确认 AstrBot 已启动、账号密码正确、目标插件版本匹配。
+  · 增强配置登录失败：账号可能是自定义的（可在 AstrBot 的 data/cmd_config.json 查看 dashboard.username）。
   · 日志：AstrBot → {LOG_DIR}\\astrbot.log；NapCat → NapCat.Shell\\logs\\*.log
 
-六、目录
+七、目录
   程序    {APP_DIR}
   数据    {DATA_DIR}
   AstrBot {self.cfg['astrbot_dir']}
@@ -2005,6 +2015,8 @@ QLabel#cardTitle { font-size: 17px; font-weight: 600; color: #f1f5f9; }
 QLabel#muted { color: #94a3b8; font-size: 12px; }
 QLabel#pill { background:#151d31; color:#94a3b8; border:1px solid #24304a; border-radius:13px; padding:5px 14px; font-weight:600; }
 QLabel#value { color: #e2e8f0; }
+QTabWidget QLabel { color: #e5e7eb; }
+QTabWidget QLabel#muted { color: #94a3b8; }
 QPushButton { background: #1b2539; border: 1px solid #2a3a55; padding: 7px 14px; border-radius: 8px; }
 QPushButton:hover { background: #243149; border-color: #3a4d6e; }
 QPushButton:pressed { background: #162033; }
@@ -2026,7 +2038,7 @@ QTabBar::tab { background: transparent; color: #94a3b8; padding: 8px 18px; margi
 QTabBar::tab:selected { background: #1b2740; color: #e2e8f0; }
 QTabBar::tab:hover { color: #e2e8f0; }
 QPlainTextEdit { background: #070b16; border: 1px solid #1c2740; border-radius: 10px; color: #a7f3d0; }
-QLineEdit, QSpinBox { background: #0e1526; border: 1px solid #24304a; border-radius: 8px; padding: 6px 10px; color: #e2e8f0; }
+QLineEdit, QSpinBox, QDoubleSpinBox { background: #0e1526; border: 1px solid #24304a; border-radius: 8px; padding: 6px 10px; color: #e2e8f0; }
 QLineEdit:focus, QSpinBox:focus { border-color: #3b82f6; }
 QCheckBox { spacing: 8px; color: #cbd5e1; }
 QGroupBox { border: 1px solid #1f2b44; border-radius: 12px; margin-top: 18px; padding: 16px 14px 12px 14px; font-weight: 600; color: #cbd5e1; }

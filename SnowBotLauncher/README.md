@@ -24,6 +24,13 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 - **扩展性**：支持插件市场/随包插件、任意 `/api/v1` 请求、Python 脚本步骤（需显式授权）
 - **旧版兼容**：识别 dafeiyu 风格的 `settings/pack.json + tools/import_*.py`，自动转换为脚本步骤
 
+### 增强配置
+- **人格**：读取/新建/编辑/删除人格，设为默认，直接导入 Markdown
+- **表情包**：meme_manager 资源广场索引、按 pack_id 下载、默认套装、多套同时使用、GitHub 加速地址
+- **语音**：Edge TTS / 小米 MiMo 克隆 / 豆包 Seed Audio，保存前自动测试，触发概率可调
+- **记忆**：本机 Ollama / 硅基流动 / 自定义 OpenAI 兼容 Embedding，自动接入 LivingMemory 插件
+- 以上操作直接调用 AstrBot 后台接口；密码只在本次运行内存中使用，不落盘
+
 格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
 ## 环境要求
@@ -68,7 +75,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.1.0.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.2.0.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -77,7 +84,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.1.0.exe
+installer\output\SnowBotLauncher-Setup-1.2.0.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式
