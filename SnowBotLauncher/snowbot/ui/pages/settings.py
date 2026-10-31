@@ -90,6 +90,20 @@ class SettingsMixin:
         bform.addWidget(self.chk_auto_services)
         layout.addWidget(behavior)
 
+        maintenance = QGroupBox("维护")
+        m_layout = QVBoxLayout(maintenance)
+        mirror_hint = QLabel(
+            "NapCat 插件商店打不开时，可注入国内可用的 GitHub 加速镜像；"
+            "修改后需要重启 NapCat 才会生效。"
+        )
+        mirror_hint.setWordWrap(True)
+        mirror_hint.setObjectName("muted")
+        fix_mirror_btn = QPushButton("修复 NapCat 插件商店镜像")
+        fix_mirror_btn.clicked.connect(self.fix_napcat_plugin_store)
+        m_layout.addWidget(mirror_hint)
+        m_layout.addWidget(fix_mirror_btn)
+        layout.addWidget(maintenance)
+
         btns = QHBoxLayout()
         save_btn = QPushButton("保存设置")
         save_btn.setObjectName("primary")
@@ -129,6 +143,16 @@ class SettingsMixin:
         btn.clicked.connect(browse)
         h.addWidget(btn)
         return w
+
+    def fix_napcat_plugin_store(self):
+        from snowbot.core.napcat_fix import patch_napcat_mirror
+
+        path = self.dir_napcat.text().strip() or self.cfg.get("napcat_dir", "")
+        ok, message = patch_napcat_mirror(path)
+        if ok:
+            QMessageBox.information(self, "修复完成", message)
+        else:
+            QMessageBox.warning(self, "修复失败", message)
 
     def save_settings(self):
         self.cfg.update(
