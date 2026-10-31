@@ -22,7 +22,7 @@ for _d in (DATA_DIR, LOG_DIR, PACKS_DIR, BACKUPS_DIR):
         pass
 
 APP_NAME = "SnowBotLauncher"
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.3.6"
 AUTOSTART_TASK = "SnowBotLauncher"
 
 PRESETS_DIR = DATA_DIR / "presets"

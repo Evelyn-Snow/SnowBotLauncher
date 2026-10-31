@@ -298,13 +298,11 @@ class AstrBotClient:
         current = self.get_provider(provider_id)
         if current:
             merged = {**current, **provider}
-            self.require(
-                self.call(
-                    "POST",
-                    "/config/provider/update",
-                    {"id": provider_id, "config": merged},
-                )
-            )
+            # AstrBot 4.3.x 的 provider 更新接口会先加载新实例，再用旧列表同步，
+            # 把刚加载的实例误终止。改为删除后新增，确保实例真正进入 inst_map。
+            if not self.delete_provider(provider_id):
+                raise ApiError("更新提供商失败：无法移除旧配置")
+            self.require(self.call("POST", "/config/provider/new", merged))
         else:
             self.require(self.call("POST", "/config/provider/new", provider))
 
