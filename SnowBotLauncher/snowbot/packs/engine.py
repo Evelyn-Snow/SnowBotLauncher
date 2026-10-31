@@ -563,9 +563,12 @@ def _run_step(step: dict, ctx: PackContext) -> StepResult:
 
     if kind == "config.set":
         values = fill(step.get("values", {}), mapping)
+        # 先取最新配置，避免覆盖前序步骤新增的提供商/插件配置
+        config = client.get_profile()
         for dotted, value in values.items():
-            set_path(ctx.config, dotted, value)
-        client.put_profile(ctx.config)
+            set_path(config, dotted, value)
+        client.put_profile(config)
+        ctx.config = config
         return StepResult(f"修改全局配置（{len(values)} 项）", True)
 
     if kind == "plugin.install":

@@ -425,10 +425,12 @@ class EnhanceTab(QWidget):
             return
 
         def task():
-            set_path(self.config, "provider_settings.default_personality", pid)
-            if "agent_runner" in self.config:
-                set_path(self.config, "agent_runner.config.persona.persona_id", pid)
-            self.client.put_profile(self.config)
+            config = self.client.get_profile()
+            set_path(config, "provider_settings.default_personality", pid)
+            if "agent_runner" in config:
+                set_path(config, "agent_runner.config.persona.persona_id", pid)
+            self.client.put_profile(config)
+            self.config = config
             return pid
 
         def done(result):
@@ -960,7 +962,9 @@ class EnhanceTab(QWidget):
             if not ok:
                 provider["enable"] = False
                 self.client.upsert_provider(provider)
-            settings = self.config.setdefault("provider_tts_settings", {})
+            # 重新读取配置，避免用连接时的旧快照覆盖刚写入的提供商
+            config = self.client.get_profile()
+            settings = config.setdefault("provider_tts_settings", {})
             settings.update(
                 {
                     "enable": bool(global_enable and ok),
@@ -968,7 +972,8 @@ class EnhanceTab(QWidget):
                     "trigger_probability": prob,
                 }
             )
-            self.client.put_profile(self.config)
+            self.client.put_profile(config)
+            self.config = config
             return ok, why, provider["id"]
 
         def done(result):
@@ -988,9 +993,11 @@ class EnhanceTab(QWidget):
             return
 
         def task():
-            settings = self.config.setdefault("provider_tts_settings", {})
+            config = self.client.get_profile()
+            settings = config.setdefault("provider_tts_settings", {})
             settings["enable"] = False
-            self.client.put_profile(self.config)
+            self.client.put_profile(config)
+            self.config = config
             return True
 
         def done(_result):
