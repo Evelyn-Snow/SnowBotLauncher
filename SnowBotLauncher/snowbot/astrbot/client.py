@@ -50,6 +50,8 @@ def zip_folder(folder: Path) -> bytes:
     buf = io.BytesIO()
     top = folder.name
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        # AstrBot 的 unzip_file 假定第一个条目是插件目录
+        zf.writestr(f"{top}/", b"")
         for path in folder.rglob("*"):
             if path.is_dir():
                 continue

@@ -9,6 +9,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shutil
+import tempfile
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -1029,8 +1031,30 @@ class EnhanceTab(QWidget):
             return
 
         def task():
-            self.client.upload_plugin(zip_folder(source), source.name + ".zip")
-            return self.client.list_plugins()
+            temp_root = Path(tempfile.mkdtemp(prefix="seed-audio-"))
+            try:
+                patched = temp_root / source.name
+                shutil.copytree(source, patched)
+                main_py = patched / "main.py"
+                text = main_py.read_text(encoding="utf-8")
+                old = (
+                    "from astrbot.core.utils.astrbot_path import "
+                    "get_astrbot_temp_path"
+                )
+                if old in text:
+                    compat = """from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+
+def get_astrbot_temp_path():
+    path = os.path.join(get_astrbot_data_path(), "temp")
+    os.makedirs(path, exist_ok=True)
+    return path"""
+                    text = text.replace(old, compat)
+                    main_py.write_text(text, encoding="utf-8")
+                self.client.upload_plugin(zip_folder(patched), patched.name + ".zip")
+                return self.client.list_plugins()
+            finally:
+                shutil.rmtree(temp_root, ignore_errors=True)
 
         def done(plugins):
             self.plugins = plugins
