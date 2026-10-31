@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
@@ -142,6 +143,36 @@ class EnhanceTab(QWidget):
         else:
             self.status.setObjectName("muted")
             self.status.setStyleSheet("")
+
+    def _copy_result(self, text: str, what: str = "信息"):
+        text = (text or "").strip()
+        if not text:
+            self._set_status("没有可复制的内容", False)
+            return
+        QApplication.clipboard().setText(text)
+        self._set_status(f"{what}已复制到剪贴板", True)
+
+    @staticmethod
+    def _voice_error_hint(message: str) -> str:
+        text = str(message)
+        if "45000030" in text or "资源未授权" in text:
+            return (
+                "\n\n原因：当前应用没有 Seed Audio 1.0 的使用权限（资源未授权）。\n"
+                "请确认：1）APP ID 与 Access Token 来自豆包语音控制台的同一个应用；"
+                "2）该应用已开通/申请 Seed Audio 1.0；"
+                "3）使用的是豆包语音的 Access Token，不是火山方舟 API Key。"
+            )
+        if "45000010" in text:
+            return (
+                "\n\n原因：APP ID 与 Access Token 不匹配或已失效。"
+                "请到豆包语音控制台重新复制同一应用的 APP ID 和 Access Token。"
+            )
+        if "401" in text or "403" in text:
+            return (
+                "\n\n原因：鉴权失败。请检查 APP ID、Access Token 是否属于同一应用，"
+                "以及账号是否已开通对应的语音服务、配额是否充足。"
+            )
+        return ""
 
     def _set_busy(self, busy: bool):
         self.btn_connect.setEnabled(not busy)
@@ -805,7 +836,19 @@ class EnhanceTab(QWidget):
         self.voice_result = QLabel("")
         self.voice_result.setWordWrap(True)
         self.voice_result.setObjectName("muted")
-        layout.addWidget(self.voice_result)
+        self.voice_result.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        voice_result_row = QHBoxLayout()
+        voice_result_row.addWidget(self.voice_result, 1)
+        copy_voice = QPushButton("复制")
+        copy_voice.setObjectName("ghost")
+        copy_voice.clicked.connect(
+            lambda: self._copy_result(self.voice_result.text(), "语音信息")
+        )
+        voice_result_row.addWidget(copy_voice)
+        layout.addLayout(voice_result_row)
         self.voice_mode.currentIndexChanged.connect(
             lambda index: self.voice_stack.setCurrentIndex(index)
         )
@@ -983,7 +1026,10 @@ class EnhanceTab(QWidget):
                 self.voice_result.setText(f"语音已启用：{pid}。{note}")
                 self._set_status(f"语音已保存并测试通过：{pid}", True)
             else:
-                self.voice_result.setText(f"语音测试未通过：{why}\n已先把提供商停用，处理后重新保存。")
+                hint = self._voice_error_hint(why)
+                self.voice_result.setText(
+                    f"语音测试未通过：{why}{hint}\n已先把提供商停用，处理后重新保存。"
+                )
                 self._set_status("语音已保存但测试失败，已停用", False)
 
         self._run_task(task, done, "正在保存并测试语音…")
@@ -1137,7 +1183,19 @@ def get_astrbot_temp_path():
         self.mem_result = QLabel("")
         self.mem_result.setWordWrap(True)
         self.mem_result.setObjectName("muted")
-        layout.addWidget(self.mem_result)
+        self.mem_result.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        mem_result_row = QHBoxLayout()
+        mem_result_row.addWidget(self.mem_result, 1)
+        copy_mem = QPushButton("复制")
+        copy_mem.setObjectName("ghost")
+        copy_mem.clicked.connect(
+            lambda: self._copy_result(self.mem_result.text(), "记忆信息")
+        )
+        mem_result_row.addWidget(copy_mem)
+        layout.addLayout(mem_result_row)
         self.mem_mode.currentIndexChanged.connect(self._on_mem_mode)
         return page
 
