@@ -333,7 +333,11 @@ def build_context(pack: dict, variables: dict, cfg: dict, log: Callable[[str], N
     platforms.sort(key=lambda p: (p.get("id") != "napcat", not p.get("enable", True)))
     platform_id = platforms[0].get("id", "") if platforms else ""
 
-    provider_id = get_path(config, "agent_runner.config.model.provider_id") or ""
+    provider_id = (
+        get_path(config, "provider_settings.default_provider_id")
+        or get_path(config, "agent_runner.config.model.provider_id")
+        or ""
+    )
     if not provider_id:
         providers = [
             p for p in config.get("provider", [])
@@ -638,9 +642,11 @@ def _run_step(step: dict, ctx: PackContext) -> StepResult:
 
     if kind == "tool.permission":
         tool = str(fill(step.get("tool", ""), mapping))
-        permission = str(fill(step.get("permission", "admin"), mapping))
-        client.set_tool_permission(tool, permission)
-        return StepResult(f"设置工具权限「{tool}」→ {permission}", True)
+        return StepResult(
+            f"工具权限「{tool}」",
+            True,
+            "当前 AstrBot 4.x 不支持通过 API 设置工具权限，已跳过",
+        )
 
     if kind == "http":
         method = str(step.get("method", "POST")).upper()

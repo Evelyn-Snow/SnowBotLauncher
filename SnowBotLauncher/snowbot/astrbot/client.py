@@ -1,12 +1,16 @@
-"""AstrBot WebUI API 客户端。
+"""AstrBot 4.x WebUI API 客户端。
 
-封装配置包需要用到的后台接口：登录、全局配置、人格、插件、模型提供商、
-PIP 安装、工具权限，以及通用的 /api/v1 请求（供扩展步骤使用）。
+按 AstrBot 4.3.x 的实际路由实现：
+- 登录：POST /api/auth/login（密码为 MD5）
+- 配置：GET /api/config/get，POST /api/config/astrbot/update
+- 人格：/api/persona/list|detail|create|update|delete
+- 插件：/api/plugin/get|install|install-upload|on|off|reload
+- 插件配置：/api/config/get?plugin_name=，/api/config/plugin/update?plugin_name=
+- 提供商：/api/config/provider/new|update|delete|check_one
 """
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import json
@@ -56,13 +60,14 @@ def zip_folder(folder: Path) -> bytes:
 
 
 class AstrBotClient:
-    def __init__(self, base_url: str, timeout: int = 30):
+    def __init__(self, base_url: str, timeout: int = 30, api_prefix: str = "/api"):
         self.root = base_url.rstrip("/")
+        self.api_prefix = api_prefix
         self.token: str | None = None
         self.timeout = timeout
 
     # ---------- 基础请求 ----------
-    def call(
+    def _request(
         self,
         method: str,
         path: str,
@@ -70,8 +75,9 @@ class AstrBotClient:
         raw_body: bytes | None = None,
         content_type: str = "application/json",
         timeout: int | None = None,
+        absolute: bool = False,
     ) -> dict:
-        url = self.root + "/api/v1" + path
+        url = self.root + path if absolute else self.root + self.api_prefix + path
         data = raw_body
         if data is None and body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -98,15 +104,29 @@ class AstrBotClient:
         payload["_http"] = code
         return payload
 
+    def call(
+        self,
+        method: str,
+        path: str,
+        body=None,
+        raw_body: bytes | None = None,
+        content_type: str = "application/json",
+        timeout: int | None = None,
+    ) -> dict:
+        return self._request(
+            method, path, body, raw_body, content_type, timeout, absolute=False
+        )
+
     @staticmethod
     def ok(result: dict) -> bool:
-        return result.get("_http", 200) < 400 and result.get("status", "ok") != "error"
+        status = result.get("status")
+        return result.get("_http", 200) < 400 and status in ("ok", "success", None)
 
     @staticmethod
     def message(result: dict) -> str:
         return str(
-            result.get("message") or result.get("detail") or result.get("data") or result
-        )[:400]
+            result.get("message") or result.get("detail") or result.get("status") or result
+        )[:500]
 
     def require(self, result: dict) -> dict:
         if not self.ok(result):
@@ -115,8 +135,20 @@ class AstrBotClient:
 
     # ---------- 认证 ----------
     def login(self, username: str, password: str) -> bool:
-        for candidate in (password, hashlib.md5(password.encode("utf-8")).hexdigest()):
-            result = self.call("POST", "/auth/login", {"username": username, "password": candidate})
+        md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+        candidates = [
+            ("/api/auth/login", md5),
+            ("/api/auth/login", password),
+            ("/api/v1/auth/login", md5),
+            ("/api/v1/auth/login", password),
+        ]
+        for path, candidate in candidates:
+            result = self._request(
+                "POST",
+                path,
+                {"username": username, "password": candidate},
+                absolute=True,
+            )
             data = result.get("data")
             if isinstance(data, dict) and data.get("token"):
                 self.token = str(data["token"])
@@ -125,7 +157,12 @@ class AstrBotClient:
 
     # ---------- 全局配置 ----------
     def get_profile(self, name: str = "default") -> dict:
-        result = self.require(self.call("GET", f"/config-profiles/{urllib.parse.quote(name)}"))
+        if name in ("", None, "default"):
+            result = self.require(self.call("GET", "/config/get"))
+        else:
+            result = self.require(
+                self.call("GET", f"/config/abconf?id={urllib.parse.quote(name)}")
+            )
         data = result.get("data") or {}
         config = data.get("config") if isinstance(data, dict) else None
         if not isinstance(config, dict):
@@ -133,24 +170,22 @@ class AstrBotClient:
         return config
 
     def put_profile(self, config: dict, name: str = "default") -> None:
-        self.require(self.call("PUT", f"/config-profiles/{urllib.parse.quote(name)}", config))
+        self.require(
+            self.call(
+                "POST",
+                "/config/astrbot/update",
+                {"config": config, "conf_id": name or "default"},
+            )
+        )
 
     # ---------- 人格 ----------
     def list_personas(self) -> list:
-        result = self.call("GET", "/personas")
+        result = self.call("GET", "/persona/list")
         data = result.get("data")
-        if isinstance(data, list):
-            return data
-        if isinstance(data, dict):
-            for key in ("personas", "items", "list"):
-                if isinstance(data.get(key), list):
-                    return data[key]
-        return []
+        return data if isinstance(data, list) else []
 
     def get_persona(self, persona_id: str) -> dict | None:
-        result = self.call(
-            "GET", f"/personas/{urllib.parse.quote(persona_id, safe='')}"
-        )
+        result = self.call("POST", "/persona/detail", {"persona_id": persona_id})
         data = result.get("data")
         if self.ok(result) and isinstance(data, dict) and data.get("persona_id") == persona_id:
             return data
@@ -158,53 +193,47 @@ class AstrBotClient:
 
     def upsert_persona(self, persona_id: str, system_prompt: str, extra: dict | None = None) -> None:
         current = self.get_persona(persona_id)
-        qid = urllib.parse.quote(persona_id, safe="")
+        body = {"persona_id": persona_id, "system_prompt": system_prompt}
+        if extra:
+            for key in ("begin_dialogs", "tools"):
+                if key in extra:
+                    body[key] = extra[key]
         if current:
-            body = {
-                k: v
-                for k, v in current.items()
-                if k in ("begin_dialogs", "skills", "folder_id", "sort_order", "custom_error_message")
-            }
-            body.update({"system_prompt": system_prompt, "tools": None})
-            if extra:
-                body.update(extra)
-            self.require(self.call("PUT", f"/personas/{qid}", body))
+            self.require(self.call("POST", "/persona/update", body))
         else:
-            body = {
-                "persona_id": persona_id,
-                "system_prompt": system_prompt,
-                "begin_dialogs": [],
-                "tools": None,
-            }
-            if extra:
-                body.update(extra)
-            self.require(self.call("POST", "/personas", body))
+            body.setdefault("begin_dialogs", [])
+            body.setdefault("tools", None)
+            self.require(self.call("POST", "/persona/create", body))
 
     def delete_persona(self, persona_id: str) -> bool:
-        result = self.call(
-            "DELETE", f"/personas/{urllib.parse.quote(persona_id, safe='')}"
-        )
-        return self.ok(result)
+        return self.ok(self.call("POST", "/persona/delete", {"persona_id": persona_id}))
 
     # ---------- 插件 ----------
     def list_plugins(self) -> list:
-        result = self.call("GET", "/plugins")
-        data = result.get("data")
+        data = self.call("GET", "/plugin/get").get("data")
         return data if isinstance(data, list) else []
 
     def plugin_installed(self, name: str) -> bool:
-        for plugin in self.list_plugins():
-            if isinstance(plugin, dict) and plugin.get("name") == name:
-                return True
-        return False
+        return any(
+            isinstance(plugin, dict) and plugin.get("name") == name
+            for plugin in self.list_plugins()
+        )
+
+    @staticmethod
+    def _repo_url(market_id: str) -> str:
+        value = str(market_id or "").strip()
+        if not value:
+            return value
+        if value.startswith(("http://", "https://")):
+            return value
+        if "github.com/" in value:
+            return "https://" + value.lstrip("/")
+        return "https://github.com/" + value.strip("/")
 
     def install_market_plugin(self, market_id: str, timeout: int = 600) -> None:
         self.require(
             self.call(
-                "POST",
-                "/plugins/install/github",
-                {"install_method": "market", "market_plugin_id": market_id},
-                timeout=timeout,
+                "POST", "/plugin/install", {"url": self._repo_url(market_id)}, timeout=timeout
             )
         )
 
@@ -219,7 +248,7 @@ class AstrBotClient:
         self.require(
             self.call(
                 "POST",
-                "/plugins/install/upload",
+                "/plugin/install-upload",
                 raw_body=head + payload + tail,
                 content_type=f"multipart/form-data; boundary={boundary}",
                 timeout=timeout,
@@ -227,10 +256,10 @@ class AstrBotClient:
         )
 
     def get_plugin_config(self, name: str) -> dict:
-        result = self.call(
-            "GET", f"/plugins/config?plugin_id={urllib.parse.quote(name)}"
+        result = self.require(
+            self.call("GET", f"/config/get?plugin_name={urllib.parse.quote(name)}")
         )
-        data = result.get("data")
+        data = result.get("data") or {}
         config = data.get("config") if isinstance(data, dict) else None
         if not isinstance(config, dict):
             raise ApiError(f"读不到插件 {name} 的配置")
@@ -238,29 +267,26 @@ class AstrBotClient:
 
     def put_plugin_config(self, name: str, config: dict) -> None:
         self.require(
-            self.call("PUT", "/plugins/config", {"plugin_id": name, "config": config})
+            self.call(
+                "POST",
+                f"/config/plugin/update?plugin_name={urllib.parse.quote(name)}",
+                config,
+            )
         )
 
     def set_plugin_enabled(self, name: str, enabled: bool) -> None:
         self.require(
-            self.call("PATCH", "/plugins/enabled", {"plugin_id": name, "enabled": bool(enabled)})
+            self.call("POST", "/plugin/on" if enabled else "/plugin/off", {"name": name})
         )
 
     def reload_plugin(self, name: str, timeout: int = 180) -> None:
-        self.require(
-            self.call("POST", "/plugins/reload", {"plugin_id": name}, timeout=timeout)
-        )
+        self.require(self.call("POST", "/plugin/reload", {"name": name}, timeout=timeout))
 
     # ---------- 模型提供商 ----------
     def get_provider(self, provider_id: str) -> dict | None:
-        result = self.call(
-            "GET", f"/providers/{urllib.parse.quote(provider_id, safe='')}"
-        )
-        data = result.get("data")
-        if isinstance(data, dict):
-            data = data.get("provider", data)
-        if isinstance(data, dict) and data.get("id") == provider_id:
-            return data
+        for provider in self.get_profile().get("provider", []):
+            if isinstance(provider, dict) and provider.get("id") == provider_id:
+                return provider
         return None
 
     def upsert_provider(self, provider: dict) -> None:
@@ -272,43 +298,38 @@ class AstrBotClient:
             merged = {**current, **provider}
             self.require(
                 self.call(
-                    "PUT",
-                    f"/providers/{urllib.parse.quote(provider_id, safe='')}",
-                    {"config": merged},
+                    "POST",
+                    "/config/provider/update",
+                    {"id": provider_id, "config": merged},
                 )
             )
         else:
-            self.require(self.call("POST", "/providers", {"config": provider}))
+            self.require(self.call("POST", "/config/provider/new", provider))
 
     def delete_provider(self, provider_id: str) -> bool:
-        result = self.call(
-            "DELETE", f"/providers/{urllib.parse.quote(provider_id, safe='')}"
-        )
-        return self.ok(result)
+        return self.ok(self.call("POST", "/config/provider/delete", {"id": provider_id}))
 
     def test_provider(self, provider_id: str, timeout: int = 90) -> tuple[bool, str]:
         result = self.call(
-            "POST", "/providers/test", {"provider_id": provider_id}, timeout=timeout
+            "GET",
+            f"/config/provider/check_one?id={urllib.parse.quote(provider_id)}",
+            timeout=timeout,
         )
         data = result.get("data") if isinstance(result.get("data"), dict) else {}
-        status = str(data.get("status") or result.get("status") or "")
-        if self.ok(result) and status not in ("error", "unavailable", "failed"):
+        status = str(data.get("status") or "")
+        if self.ok(result) and status in ("available", "ok", "success"):
             return True, ""
-        return False, str(
-            data.get("error") or data.get("message") or self.message(result)
-        )[:300]
+        return False, str(data.get("error") or self.message(result))[:300]
 
     # ---------- 其他 ----------
     def install_pip(self, package: str, timeout: int = 600) -> None:
-        self.require(self.call("POST", "/pip/install", {"package": package}, timeout=timeout))
+        self.require(
+            self.call("POST", "/update/pip-install", {"package": package}, timeout=timeout)
+        )
 
     def set_tool_permission(self, tool: str, permission: str) -> None:
-        self.require(
-            self.call(
-                "PATCH",
-                f"/tools/{urllib.parse.quote(tool, safe='')}/permission",
-                {"permission": permission},
-            )
+        raise ApiError(
+            "当前 AstrBot 4.x 不支持通过 API 设置工具权限，请在 WebUI 的工具页手动调整"
         )
 
     def request(

@@ -41,7 +41,7 @@ from ...astrbot.client import ApiError, AstrBotClient, get_path, set_path, zip_f
 
 from ...core.paths import DATA_DIR
 from ...core.services import port_listening
-MEME_EXT = "/plugins/extensions/meme_manager"
+MEME_EXT = "/plug/meme_manager"
 EDGE_VOICES = [
     "zh-CN-XiaoyiNeural",
     "zh-CN-XiaoxiaoNeural",
@@ -296,7 +296,11 @@ class EnhanceTab(QWidget):
         self._run_task(task, done, "正在刷新人格…")
 
     def _populate_personas(self):
-        default_id = get_path(self.config, "agent_runner.config.persona.persona_id") or ""
+        default_id = (
+            get_path(self.config, "provider_settings.default_personality")
+            or get_path(self.config, "agent_runner.config.persona.persona_id")
+            or ""
+        )
         self.persona_default.setText(f"默认人格：{default_id or '未设置'}")
         self.persona_list.blockSignals(True)
         self.persona_list.clear()
@@ -419,7 +423,9 @@ class EnhanceTab(QWidget):
             return
 
         def task():
-            set_path(self.config, "agent_runner.config.persona.persona_id", pid)
+            set_path(self.config, "provider_settings.default_personality", pid)
+            if "agent_runner" in self.config:
+                set_path(self.config, "agent_runner.config.persona.persona_id", pid)
             self.client.put_profile(self.config)
             return pid
 
