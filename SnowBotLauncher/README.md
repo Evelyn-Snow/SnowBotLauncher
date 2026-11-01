@@ -54,6 +54,7 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 | `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
 | `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
 | `snow_experience` | 真实经历：自主读公版书/查资料/读论文（每周限次），经历注入聊天与日记 | [astrbot_plugin_snow_experience](https://github.com/Evelyn-Snow/astrbot_plugin_snow_experience) |
+| `snow_knowledge` | 知识库：把真实读过的书/资料/论文切片向量化，聊天时按话题检索引用 | [astrbot_plugin_snow_knowledge](https://github.com/Evelyn-Snow/astrbot_plugin_snow_knowledge) |
 
 插件发布流程见 [docs/publishing.md](docs/publishing.md)；配置包格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
@@ -178,7 +179,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.14.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.15.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -187,7 +188,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.14.exe
+installer\output\SnowBotLauncher-Setup-1.5.15.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式

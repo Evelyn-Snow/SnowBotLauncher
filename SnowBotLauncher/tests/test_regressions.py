@@ -50,6 +50,16 @@ from plugins.astrbot_plugin_snow_continuity.library import (  # noqa: E402
     should_boost,
     strip_end_mark,
 )
+from plugins.astrbot_plugin_snow_knowledge.library import (  # noqa: E402
+    batch_key,
+    chunk_id,
+    cosine_scores,
+    render_injection,
+    should_reinject,
+    split_text,
+    text_hash,
+    top_matches,
+)
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     derive_scope_id,
     scope_kind,
@@ -1197,6 +1207,67 @@ class FarewellTests(unittest.TestCase):
         )
         # 过了收束期不拦
         self.assertFalse(echo_suppressed(now - 1, "u1", "u1", "晚安", now))
+
+
+class KnowledgeTests(unittest.TestCase):
+    TEXT = (
+        "话说美猴王自得道之后，教主传他七十二般变化。"
+        "一日，祖师道：我今只传你长生之法。"
+        "猴王叩头礼拜，谨遵师命。" * 12
+    )
+
+    def test_split_respects_size_and_overlap(self):
+        chunks = split_text(self.TEXT, size=100, overlap=20)
+        self.assertGreater(len(chunks), 1)
+        for chunk in chunks:
+            self.assertLessEqual(len(chunk), 130)  # 允许重叠溢出一点
+        self.assertTrue(all(c.strip() for c in chunks))
+
+    def test_split_empty_and_short(self):
+        self.assertEqual(split_text(""), [])
+        self.assertEqual(split_text("短句。"), ["短句。"])
+
+    def test_split_handles_long_sentence_without_punctuation(self):
+        chunks = split_text("啊" * 500, size=100, overlap=10)
+        self.assertTrue(chunks)
+        self.assertLessEqual(max(len(c) for c in chunks), 100)
+
+    def test_chunk_id_idempotent(self):
+        self.assertEqual(chunk_id("书:西遊記", "同一段"), chunk_id("书:西遊記", "同一段"))
+        self.assertNotEqual(chunk_id("书:西遊記", "A"), chunk_id("书:西遊記", "B"))
+        self.assertEqual(len(text_hash("abc")), 16)
+
+    def test_cosine_and_top_matches(self):
+        matrix = [[1.0, 0.0], [0.9, 0.1], [0.0, 1.0]]
+        scores = cosine_scores([1.0, 0.0], matrix)
+        self.assertEqual(len(scores), 3)
+        self.assertAlmostEqual(scores[0], 1.0, places=5)
+        pairs = top_matches(scores, list(range(3)), top_k=2, threshold=0.5)
+        self.assertEqual(pairs[0][1], 0)
+        self.assertLessEqual(len(pairs), 2)
+        # 阈值过滤
+        self.assertEqual(top_matches([0.2, 0.1], [0, 1], top_k=2, threshold=0.5), [])
+
+    def test_render_injection(self):
+        hits = [
+            {"title": "西遊記", "text": "猴王拜师。", "score": 0.9},
+            {"title": "论文X", "text": "系外行星大气。", "score": 0.6},
+        ]
+        block = render_injection(hits, limit=600)
+        self.assertTrue(block.startswith("[知识库]"))
+        self.assertIn("西遊記", block)
+        self.assertIn("不要背诵原文", block)
+        self.assertEqual(render_injection([], 600), "")
+        # 超长截断
+        long_hits = [{"title": "T", "text": "字" * 400, "score": 0.9} for _ in range(5)]
+        self.assertLessEqual(len(render_injection(long_hits, limit=200)), 260)
+
+    def test_reinject_cooldown(self):
+        self.assertTrue(should_reinject("1,2", "1,2", 0, 1000, 30))  # 无记录
+        self.assertFalse(should_reinject("1,2", "1,2", 1000, 1010, 30))  # 冷却内
+        self.assertTrue(should_reinject("1,2", "1,2", 1000, 1000 + 1801, 30))  # 冷却过
+        self.assertTrue(should_reinject("1,2", "3,4", 1000, 1010, 30))  # 不同批次
+        self.assertEqual(batch_key([3, 1, 2]), "1,2,3")
 
 
 if __name__ == "__main__":

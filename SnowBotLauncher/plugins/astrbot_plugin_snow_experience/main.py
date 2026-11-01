@@ -58,6 +58,7 @@ class SnowExperience(Star):
         self._loop_task: asyncio.Task | None = None
         self._state: dict = {}
         self._state_loaded = False
+        self._last_material: tuple[str, str, str] | None = None
 
     # ---------------- 配置与状态 ----------------
     def _enabled(self) -> bool:
@@ -235,6 +236,25 @@ class SnowExperience(Star):
         state["records"] = records[-20:]
         self._save_state()
         logger.info(f"[{NAME}] 真实经历完成：{title}")
+        await self._feed_knowledge()
+
+    async def _feed_knowledge(self) -> None:
+        """把本次实际读到的原文送去知识库（未装 snow_knowledge 时静默跳过）。"""
+        material = self._last_material
+        self._last_material = None
+        if not material:
+            return
+        try:
+            meta = self.context.get_registered_star("astrbot_plugin_snow_knowledge")
+            plugin = getattr(meta, "star_cls", None) if meta else None
+            if plugin is None or not hasattr(plugin, "ingest"):
+                return
+            source, title, text = material
+            added = await plugin.ingest(source, title, text)
+            if added:
+                logger.info(f"[{NAME}] 已同步 {added} 段知识到知识库：{title}")
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 知识库同步失败（不影响经历记录）：{exc}")
 
     # ---------------- 事件执行 ----------------
     async def _execute(self, event_type: str) -> tuple[str, str, str]:
@@ -299,6 +319,8 @@ class SnowExperience(Star):
             "last_ts": time.time(),
         }
         gist = body.split("。")[0][:80]
+        # 供知识库摄取：本次实际读到的原文
+        self._last_material = (f"书:{title}", title, chunk)
         return title, gist, body
 
     async def _download_book(self) -> dict:
@@ -394,6 +416,7 @@ class SnowExperience(Star):
         if not body:
             raise RuntimeError("资料笔记生成失败")
         gist = body.split("。")[0][:80]
+        self._last_material = (f"资料:{query}", f"资料：{query}", material)
         return f"查了「{query}」", gist, body
 
     def _deepseek_keys(self) -> list[str]:
@@ -439,6 +462,11 @@ class SnowExperience(Star):
         state["arxiv_titles"] = titles[-100:]
         self._save_state()
         gist = body.split("。")[0][:80]
+        self._last_material = (
+            f"论文:{paper['title'][:40]}",
+            paper["title"],
+            paper["summary"],
+        )
         return f"论文《{paper['title'][:50]}》", gist, body
 
     # ---------------- 聊天注入 ----------------
