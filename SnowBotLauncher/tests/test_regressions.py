@@ -45,6 +45,13 @@ from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     scope_kind,
     scope_subdir,
 )
+from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
+    RateLimiter,
+    decide_channel,
+    looks_like_contact_request,
+    match_person,
+    relay_text,
+)
 from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
     SearchRateLimiter,
     has_explicit_search_request,
@@ -741,6 +748,70 @@ class SeedAudioPatchTests(unittest.TestCase):
 
     def test_unknown_source_untouched(self):
         self.assertEqual(patch_seed_audio_source("x = 1\n"), "x = 1\n")
+
+
+class MessengerTests(unittest.TestCase):
+    MEMBERS = [
+        {"qq": "10001", "name": "大肥鱼"},
+        {"qq": "10002", "name": "小雪"},
+        {"qq": "10003", "name": "雪豹"},
+        {"qq": "2663978299", "name": "路人甲"},
+    ]
+
+    def test_match_by_qq_and_name(self):
+        best, _ = match_person("2663978299", self.MEMBERS)
+        self.assertEqual(best["qq"], "2663978299")
+        best, _ = match_person("大肥鱼", self.MEMBERS)
+        self.assertEqual(best["qq"], "10001")
+        best, _ = match_person(" 雪豹 ", self.MEMBERS)
+        self.assertEqual(best["qq"], "10003")
+
+    def test_match_contains_and_ambiguity(self):
+        best, _ = match_person("雪", self.MEMBERS)
+        self.assertIsNotNone(best)  # 包含命中
+        best, tied = match_person("小雪", self.MEMBERS + [{"qq": "10004", "name": "小雪二号"}])
+        self.assertEqual(len(tied), 1)  # 全等优先且唯一
+
+    def test_match_none(self):
+        best, tied = match_person("不存在", self.MEMBERS)
+        self.assertIsNone(best)
+        self.assertEqual(tied, [])
+
+    def test_decide_channel_auto(self):
+        # 群内命中 → 群里@
+        self.assertEqual(decide_channel(True, True, True, "auto")[0], "group")
+        # 群内未命中但是好友 → 私聊
+        self.assertEqual(decide_channel(True, False, True, "auto")[0], "private")
+        # 群内未命中且非好友 → 失败
+        channel, why = decide_channel(True, False, False, "auto")
+        self.assertEqual(channel, "")
+        self.assertIn("不是好友", why)
+        # 私聊会话 + 非好友 → 失败
+        self.assertEqual(decide_channel(False, False, False, "auto")[0], "")
+
+    def test_decide_channel_explicit(self):
+        self.assertEqual(decide_channel(True, True, True, "private")[0], "private")
+        channel, why = decide_channel(True, False, True, "group")
+        self.assertEqual(channel, "")
+        self.assertIn("当前群", why)
+
+    def test_relay_text_truncates(self):
+        self.assertIn("回你了", relay_text("路人甲", "好的"))
+        long = relay_text("路人甲", "啊" * 300, limit=200)
+        self.assertTrue(long.endswith("…"))
+        self.assertLessEqual(len(long), 220)  # 正文截到 200，加上前缀
+
+    def test_rate_limiter(self):
+        rl = RateLimiter(3600, 2)
+        self.assertTrue(rl.allow(1000.0))
+        self.assertTrue(rl.allow(1001.0))
+        self.assertFalse(rl.allow(1002.0))
+        self.assertTrue(rl.allow(1000.0 + 3601))  # 窗口滑过
+
+    def test_contact_request_pattern(self):
+        self.assertTrue(looks_like_contact_request("去问小明明天来不来"))
+        self.assertTrue(looks_like_contact_request("帮我转告他一声"))
+        self.assertFalse(looks_like_contact_request("今天天气怎么样"))
 
 
 if __name__ == "__main__":
