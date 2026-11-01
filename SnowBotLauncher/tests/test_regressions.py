@@ -42,8 +42,13 @@ from plugins.astrbot_plugin_snow_sleep.library import (  # noqa: E402
     sleep_start_from_plan,
 )
 from plugins.astrbot_plugin_snow_continuity.library import (  # noqa: E402
+    END_MARK,
     contains_marker,
+    echo_suppressed,
+    has_end_mark,
+    is_farewell_echo,
     should_boost,
+    strip_end_mark,
 )
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     derive_scope_id,
@@ -1163,6 +1168,35 @@ class SleepGoodnightTests(unittest.TestCase):
         empty = {"persona_id": "小雪", "timeline": [{"start": "08:00", "end": "09:00", "state": "available", "activity": "x"}]}
         self.assertIsNone(sleep_start_from_plan(empty, "小雪"))
         self.assertIsNone(sleep_start_from_plan({}, "小雪"))
+
+
+class FarewellTests(unittest.TestCase):
+    def test_farewell_echo_short_messages(self):
+        for text in ("晚安", "晚安呀", "拜拜", "嗯嗯", "好的", "你也是，晚安", "睡了睡了"):
+            self.assertTrue(is_farewell_echo(text), text)
+        self.assertFalse(is_farewell_echo("晚安，对了明天那个论文的事你怎么看"))  # 有实质内容
+        self.assertFalse(is_farewell_echo(""), "空消息不算回声")
+
+    def test_strip_end_mark(self):
+        self.assertTrue(has_end_mark("晚安啦\n[[对话结束]]"))
+        cleaned = strip_end_mark("晚安啦，好梦\n[[对话结束]]")
+        self.assertEqual(cleaned, "晚安啦，好梦")
+        self.assertEqual(strip_end_mark("没有标记"), "没有标记")
+        # 纯标记整条清空
+        self.assertEqual(strip_end_mark(END_MARK), "")
+
+    def test_echo_suppressed_rules(self):
+        now = 1000.0
+        # 收束期内同一对象的道别 → 抑制
+        self.assertTrue(echo_suppressed(now + 600, "u1", "u1", "晚安", now))
+        # 不同对象不拦
+        self.assertFalse(echo_suppressed(now + 600, "u2", "u1", "晚安", now))
+        # 有实质内容不拦
+        self.assertFalse(
+            echo_suppressed(now + 600, "u1", "u1", "晚安，明天帮我看下那个报错", now)
+        )
+        # 过了收束期不拦
+        self.assertFalse(echo_suppressed(now - 1, "u1", "u1", "晚安", now))
 
 
 if __name__ == "__main__":
