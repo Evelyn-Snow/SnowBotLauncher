@@ -2,7 +2,7 @@
 
 AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **SnowBot 配置包** 系统：一键启停、状态监控、WebUI/Token 快捷入口、实时日志、后台挂起、开机自启、配置包导入与应用。
 
-基于 PySide6（Qt）实现，打包后为独立 exe，无需安装 Python。
+基于 PySide6（Qt）实现，打包后为独立 exe，无需安装 Python。**还没装过 AstrBot / NapCat 的新用户，请先看下方[前置准备](#前置准备astrbot-与-napcat)。**
 
 ## 功能
 
@@ -94,15 +94,52 @@ tests/                       # 不依赖运行中服务的回归测试
 scripts/                     # 开发辅助脚本
 ```
 
-## 环境要求
+## 前置准备（AstrBot 与 NapCat）
 
-- Windows 10/11 x64
-- AstrBot（源码 + venv）与 NapCat Shell 已部署在本机
-- 默认路径会自动检测官方 AstrBot Launcher 的实例：
-  - 实例：`%USERPROFILE%\.astrbot_launcher\instances\<id>\core`
-  - Python：实例目录下的 `venv\Scripts\python.exe`
-  - 兼容旧版源码目录（可在设置页手动选择或点「自动检测官方启动器实例」）
-  - NapCat：`C:\NapCat\NapCat.Shell`（自动检测 `launcher.bat`）
+**SnowBotLauncher 只是统一控制台，不负责下载安装 AstrBot 和 NapCat 本体。** 首次使用请按下面四步把环境装好、打通一次，之后日常启停都可以在启动器里完成。
+
+### 你需要准备
+
+| 组件 | 作用 | 获取 |
+|---|---|---|
+| QQ NT 桌面版 | NapCat 依赖 QQ 本体运行 | [QQ 官网](https://im.qq.com/pcqq/index.shtml) |
+| AstrBot | 机器人核心：接入大模型、插件、WebUI | [文档](https://docs.astrbot.app/) · [GitHub](https://github.com/AstrBotDevs/AstrBot) |
+| NapCat | QQ 协议端：把 QQ 消息接入 AstrBot | [文档](https://napneko.github.io/) · [GitHub](https://github.com/NapNeko/NapCatQQ) |
+
+> 建议：QQ 登录后关闭「自动更新」，QQ 大版本升级可能导致 NapCat 短暂不适配；用小号跑机器人，降低风控影响。
+
+> 系统要求：Windows 10/11 x64；NapCat 版本需与 QQ 版本匹配（QQ 升级后及时更新 NapCat）。
+
+### 第 1 步 · 安装 AstrBot
+
+推荐用官方启动器（与本项目自动检测的目录结构一致）：
+
+1. 打开 [AstrBot 文档](https://docs.astrbot.app/) 的安装页，下载 **AstrBot Launcher**（Windows 版）。
+2. 用启动器安装一个实例，默认装在 `%USERPROFILE%\.astrbot_launcher\instances\<id>\`，记住面板端口（默认 `6185`）。
+3. 装好后无需在启动器里手动填路径——SnowBotLauncher 会自动检测最新实例（`core` 目录 + 实例内 `venv\Scripts\python.exe`）。
+
+也可以源码方式部署：`git clone` AstrBot 后自建 venv 装依赖；这种目录可在启动器「设置」页手动选择，或点「自动检测官方启动器实例」。
+
+### 第 2 步 · 安装 NapCat
+
+1. 先安装并登录一次 QQ NT 桌面版。
+2. 按 [NapCat 安装文档](https://napneko.github.io/guide/start-install) 用 **NapCatInstaller**（Windows）安装 **NapCat.Shell**，或到 [Releases](https://github.com/NapNeko/NapCatQQ/releases) 下载 zip 解压。
+3. 启动器默认找 `C:\NapCat\NapCat.Shell`（需包含 `launcher.bat`）；装在别处时在启动器「设置」页指定目录。
+
+### 第 3 步 · 打通 AstrBot ↔ NapCat（一次性）
+
+1. 启动 AstrBot，浏览器打开面板 `http://127.0.0.1:6185`，默认账号 `astrbot / astrbot`，**首次登录后请改密码**。
+2. WebUI → 「消息平台」→ 新增平台，类型选 **aiocqhttp**，端口保持默认 `6199`。
+3. 启动 NapCat 并登录机器人 QQ（NapCat WebUI 默认 `http://127.0.0.1:6099`）。
+4. NapCat 的「网络配置」里新增 **反向 WebSocket 连接**，地址填 `ws://127.0.0.1:6199/ws`。
+5. AstrBot 消息平台页出现「在线」即打通；用另一个 QQ 给机器人发句私聊验证。
+
+### 第 4 步 · 回到 SnowBotLauncher
+
+1. 「设置」页确认 AstrBot 目录、NapCat 目录与三个端口（默认 `6185 / 6199 / 6099`）。
+2. 「控制台」页点「一键启动全部」，AstrBot 与 NapCat 状态灯都变绿。
+3. 「增强配置」页连接 AstrBot 后台，配置人格、语音、记忆等；或用「配置包」一键应用整套配置。
+4. **配置大模型服务商并设为默认**（DeepSeek / 智谱等，AstrBot WebUI 或增强配置页均可），机器人才会开始回复。
 
 ## 数据目录
 
