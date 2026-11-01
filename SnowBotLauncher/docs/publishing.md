@@ -22,7 +22,12 @@
 
 ## 二、插件上架 AstrBot 插件市场
 
-机制：每个插件放一个**独立公开仓库**（命名 `astrbot_plugin_*`），推送到 GitHub 后到 [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot) 用 `[Plugin]` 模板提 Issue，附插件仓库地址；机器人自动审核通过后收录进插件市场索引。
+机制：每个插件放一个**独立公开仓库**（命名 `astrbot_plugin_*`），推送到 GitHub 后提交到 AstrBot 插件市场。两条提审路径：
+
+- **AstrBot Cloud 发布页（推荐）**：打开 <https://cloud.astrbot.app/publish>，填插件仓库地址即可自动解析提交；**同一账号同时最多 3 个在审**，8 个插件分 3+3+2 三批提。
+- **GitHub Issue**：到 [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot/issues/new/choose) 选 `[Plugin]` 模板，内容用 `plugin-releases\_submit\<插件名>-issue.md` 里的文本。
+
+审核通过后收录进插件市场索引。
 
 ### 发布步骤（已全部准备就绪）
 
