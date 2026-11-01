@@ -40,6 +40,7 @@ knowledge/
 
 | 键 | 默认 | 说明 |
 |---|---|---|
+| min_retrieve_interval_seconds | 45 | 同会话检索最小间隔；期内复用上次结果，不重复调 embedding（每次约 300ms） |
 | enabled | true | 总开关 |
 | index_dir | 空 | 知识库目录；留空用插件数据目录 |
 | max_chunks_per_event | 20 | 单次经历最多入库片段数 |

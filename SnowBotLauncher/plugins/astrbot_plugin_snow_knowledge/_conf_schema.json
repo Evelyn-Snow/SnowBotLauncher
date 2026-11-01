@@ -4,6 +4,12 @@
     "type": "bool",
     "default": true
   },
+  "min_retrieve_interval_seconds": {
+    "description": "同会话检索最小间隔（秒）",
+    "type": "int",
+    "default": 45,
+    "hint": "该时间内同一会话复用上次检索结果，不再调用 embedding（每次 embedding 约 300ms，是主要延迟来源）；设 0 = 每轮都检索"
+  },
   "index_dir": {
     "description": "知识库目录",
     "type": "string",

@@ -48,6 +48,9 @@ class SnowKnowledge(Star):
         self._last_batch = ""
         self._last_batch_ts = 0.0
         self._last_batch_umo = ""
+        # 性能优化：同会话检索结果复用 + query 向量缓存
+        self._session_hits: dict[str, tuple[float, list[dict]]] = {}
+        self._query_vec_cache: dict[str, tuple[float, list[float]]] = {}
 
     # ---------------- 路径与配置 ----------------
     def _enabled(self) -> bool:
@@ -232,6 +235,19 @@ class SnowKnowledge(Star):
         return len(new_pieces)
 
     # ---------------- 检索 ----------------
+    async def _embed_query(self, query: str) -> list[float] | None:
+        """query 向量缓存（相同文本 10 分钟内复用，避免重复调 embedding）。"""
+        cached = self._query_vec_cache.get(query)
+        if cached and time.time() - cached[0] < 600:
+            return cached[1]
+        vectors = await self._embed([query])
+        if not vectors:
+            return None
+        if len(self._query_vec_cache) > 100:
+            self._query_vec_cache.clear()
+        self._query_vec_cache[query] = (time.time(), vectors[0])
+        return vectors[0]
+
     async def _retrieve(self, query: str) -> list[dict]:
         self._load()
         if not self._chunks or self._vectors is None:
@@ -239,10 +255,10 @@ class SnowKnowledge(Star):
         query = str(query or "").strip()
         if len(query) < 2:
             return []
-        vectors = await self._embed([query])
-        if not vectors:
+        qvec = await self._embed_query(query)
+        if not qvec:
             return []
-        scores = cosine_scores(vectors[0], self._vectors)
+        scores = cosine_scores(qvec, self._vectors)
         if not scores:
             return []
         pairs = top_matches(
@@ -266,6 +282,19 @@ class SnowKnowledge(Star):
         return hits
 
     # ---------------- 聊天注入 ----------------
+    async def _session_retrieve(self, umo: str, query: str) -> list[dict]:
+        """同会话最小间隔内复用上次结果，避免每轮都付 embedding 延迟。"""
+        interval = max(0, int(self._cfg("min_retrieve_interval_seconds", 45)))
+        now = time.time()
+        cached = self._session_hits.get(umo)
+        if cached and interval > 0 and now - cached[0] < interval:
+            return cached[1]
+        hits = await self._retrieve(query)
+        if len(self._session_hits) > 100:
+            self._session_hits.clear()
+        self._session_hits[umo] = (now, hits)
+        return hits
+
     @filter.on_llm_request()
     async def inject_knowledge(self, event: AstrMessageEvent, req):
         if not self._enabled():
@@ -276,15 +305,15 @@ class SnowKnowledge(Star):
         query = str(getattr(event, "message_str", "") or "").strip()
         if len(query) < 2:
             return
+        umo = str(event.unified_msg_origin or "")
         try:
-            hits = await self._retrieve(query)
+            hits = await self._session_retrieve(umo, query)
         except Exception as exc:
             logger.debug(f"[{NAME}] 检索失败：{exc}")
             return
         if not hits:
             return
         key = batch_key([h["index"] for h in hits])
-        umo = str(event.unified_msg_origin or "")
         now = time.time()
         if not should_reinject(
             self._last_batch if umo == self._last_batch_umo else "",
