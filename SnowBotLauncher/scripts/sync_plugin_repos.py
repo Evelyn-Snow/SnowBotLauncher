@@ -50,10 +50,19 @@ IGNORE = {"__pycache__", ".pytest_cache"}
 
 def parse_metadata(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
+    lists: dict[str, list[str]] = {}
+    current: str | None = None
     for line in path.read_text(encoding="utf-8").splitlines():
+        if line.startswith("  - ") and current is not None:
+            lists.setdefault(current, []).append(line[4:].strip())
+            continue
         if ":" in line and not line.startswith(" "):
             key, _, value = line.partition(":")
-            values[key.strip()] = value.strip()
+            key = key.strip()
+            values[key] = value.strip()
+            current = key if not value.strip() else None
+    for key, items in lists.items():
+        values[key] = "、".join(items)
     return values
 
 
