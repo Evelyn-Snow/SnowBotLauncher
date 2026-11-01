@@ -9,7 +9,7 @@
   "variables": [
     {
       "key": "owner_qq",
-      "label": "主人 QQ",
+      "label": "所有者 QQ",
       "type": "text",
       "required": true,
       "pattern": "\\d+",
@@ -19,7 +19,7 @@
       "key": "persona_name",
       "label": "人格名称",
       "type": "text",
-      "default": "小雪",
+      "default": "助手",
       "required": true
     },
     {

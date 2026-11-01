@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
 
-from ..astrbot.client import ApiError, AstrBotClient, get_path, set_path, zip_folder
+from ..astrbot.client import AstrBotClient, get_path, set_path, zip_folder
 
 SCHEMA = "snowbot-pack/1"
 BACKUP_SCHEMA = "snowbot-backup/1"
@@ -272,18 +272,44 @@ def preset_path(pack_id: str) -> Path:
 
 def load_preset(pack: dict) -> dict:
     try:
-        return json.loads(preset_path(pack["id"]).read_text(encoding="utf-8"))
+        data = json.loads(preset_path(pack["id"]).read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        return {
+            key: value
+            for key, value in data.items()
+            if not _is_secret_preset_key(key)
+        }
     except Exception:
         return {}
 
 
+def _is_secret_preset_key(key: str) -> bool:
+    lowered = str(key).lower()
+    return (
+        lowered in {"astrbot_password", "password", "token"}
+        or "password" in lowered
+        or "secret" in lowered
+        or "api_key" in lowered
+        or "access_key" in lowered
+        or "access_token" in lowered
+        or "token" in lowered
+        or lowered.endswith("_key")
+    )
+
+
 def save_preset(pack: dict, values: dict) -> None:
-    secret_keys = {
+    # 预设只保存可复用变量与连接地址；密码/密钥一律不落盘。
+    explicit_secret = {
         var["key"]
         for var in pack.get("variables", [])
         if var.get("secret") or var.get("type") == "password"
     }
-    data = {key: value for key, value in values.items() if key not in secret_keys}
+    data = {
+        key: value
+        for key, value in values.items()
+        if key not in explicit_secret and not _is_secret_preset_key(key)
+    }
     try:
         preset_path(pack["id"]).write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -867,7 +893,7 @@ def _legacy_wrapper(base: Path, settings: dict, script: Path) -> dict:
             {"key": "base_url", "label": "AstrBot 后台地址", "type": "text", "default": "http://127.0.0.1:6185", "required": True},
             {"key": "astrbot_username", "label": "后台账号", "type": "text", "default": "astrbot", "required": True},
             {"key": "astrbot_password", "label": "后台密码", "type": "password", "secret": True, "required": True},
-            {"key": "owner_qq", "label": "主人 QQ（大号）", "type": "text", "required": True, "pattern": r"\d+", "placeholder": "123456789"},
+            {"key": "owner_qq", "label": "所有者 QQ（大号）", "type": "text", "required": True, "pattern": r"\d+", "placeholder": "123456789"},
             {
                 "key": "memory", "label": "记忆方式", "type": "select", "default": "0",
                 "options": [

@@ -1,0 +1,110 @@
+{
+  "enabled": {
+    "description": "启用图库",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后保存/发送/清理工具都不会工作，已有文件保留"
+  },
+  "library_path": {
+    "description": "图库目录",
+    "type": "string",
+    "default": "~/Documents/BotMemory/表情包",
+    "hint": "图片存放在该目录的 images 子目录，index.json 记录描述、标签和使用次数"
+  },
+  "owner_session": {
+    "description": "所有者私聊会话",
+    "type": "string",
+    "default": "",
+    "hint": "例如 napcat:FriendMessage:123456789；留空时以 AstrBot 管理员为准"
+  },
+  "allow_member_save": {
+    "description": "允许非所有者保存图片",
+    "type": "bool",
+    "default": false,
+    "hint": "默认只有所有者/管理员能存图；打开后群友也能让机器人存图，可能收到隐私图片"
+  },
+  "max_items": {
+    "description": "图库最大图片数",
+    "type": "int",
+    "default": 300,
+    "hint": "超过后按使用次数和最后使用时间淘汰；QQ 非会员的表情包收藏也有类似上限，建议 300"
+  },
+  "retention_days": {
+    "description": "远古图片保留天数",
+    "type": "int",
+    "default": 180,
+    "hint": "超过这个天数且使用次数低于下面的阈值时才删除；常用的图会一直保留"
+  },
+  "min_uses": {
+    "description": "低频阈值",
+    "type": "int",
+    "default": 2,
+    "hint": "使用次数低于这个值、且超过保留天数的图会被清理；设为 0 表示只按天数清理"
+  },
+  "max_file_mb": {
+    "description": "单张图片大小上限（MB）",
+    "type": "int",
+    "default": 8,
+    "hint": "超过这个大小的图片不会保存，避免 GIF 或大图占满磁盘"
+  },
+  "max_total_mb": {
+    "description": "图库总大小上限（MB）",
+    "type": "int",
+    "default": 500,
+    "hint": "超过后按使用次数淘汰最不常用的图片"
+  },
+  "cleanup_interval_hours": {
+    "description": "自动清理间隔（小时）",
+    "type": "int",
+    "default": 6,
+    "hint": "建议 6-24 小时；每次清理只删除低频且超过保留天数的图"
+  },
+  "max_save_per_call": {
+    "description": "单次最多保存几张",
+    "type": "int",
+    "default": 3,
+    "hint": "一条消息带多张图时，最多保存前几张"
+  },
+  "prompt_enabled": {
+    "description": "在聊天提示里注入图库用法",
+    "type": "bool",
+    "default": true,
+    "hint": "让模型知道可以存图和按情绪发图；关闭后工具仍在，但模型不会主动使用"
+  },
+  "auto_save_enabled": {
+    "description": "允许模型自行收藏图片",
+    "type": "bool",
+    "default": true,
+    "hint": "模型判断某张图以后可能用到时，会自己调用保存工具并打标签；关闭后只保留用户明确要求的收藏"
+  },
+  "auto_save_min_interval_minutes": {
+    "description": "自动收藏最小间隔（分钟）",
+    "type": "int",
+    "default": 45,
+    "hint": "两次自动收藏之间至少间隔多久；设为 0 表示不限制间隔"
+  },
+  "auto_save_max_per_day": {
+    "description": "自动收藏每天上限",
+    "type": "int",
+    "default": 8,
+    "hint": "超过后当天不再自动收藏；用户明确要求保存不受这个限制"
+  },
+  "auto_save_probability": {
+    "description": "自动收藏概率（%）",
+    "type": "int",
+    "default": 100,
+    "hint": "100 表示模型判断值得存就存；降低后会更克制，例如 60 表示只有 60% 的几率真正保存"
+  },
+  "auto_save_owner_only": {
+    "description": "只在所有者消息里自动收藏",
+    "type": "bool",
+    "default": true,
+    "hint": "避免把群友或陌生人的图片自动收进图库；用户明确要求保存时仍按 allow_member_save 判断"
+  },
+  "auto_save_in_groups": {
+    "description": "允许在群聊里自动收藏",
+    "type": "bool",
+    "default": false,
+    "hint": "默认只在私聊自动收藏；打开后所有者在群里发的图也可能被收藏"
+  }
+}

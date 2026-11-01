@@ -1,0 +1,8 @@
+{
+  "enabled": {
+    "description": "启用分享卡片转文字",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 Json 卡片恢复为模型不可见"
+  }
+}

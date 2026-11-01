@@ -1,0 +1,734 @@
+"""重构后关键路径的轻量回归测试（不依赖正在运行的 AstrBot/NapCat）。"""
+
+from __future__ import annotations
+
+import ast
+import json
+import shutil
+import sys
+import tempfile
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from snowbot.core import paths  # noqa: E402
+from snowbot.astrbot.seed_audio_patch import patch_seed_audio_source  # noqa: E402
+from snowbot.core.config import default_config  # noqa: E402
+from snowbot.core.services import ServiceManager  # noqa: E402
+from snowbot.packs import engine as pe  # noqa: E402
+from snowbot.core.persona_files import import_persona_file, render_persona  # noqa: E402
+from plugins.astrbot_plugin_bili_vision.library import resolve_video_id  # noqa: E402
+from plugins.astrbot_plugin_share_card.library import (  # noqa: E402
+    extract_share_text,
+    merge_share_text,
+    looks_like_bilibili_share,
+)
+from plugins.astrbot_plugin_star_citizen.library import (  # noqa: E402
+    UEXClient,
+    _match,
+)
+from plugins.astrbot_plugin_snow_sleep.library import (  # noqa: E402
+    in_sleep_window,
+    is_command_text,
+    parse_hhmm,
+)
+from plugins.astrbot_plugin_snow_continuity.library import (  # noqa: E402
+    contains_marker,
+    should_boost,
+)
+from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
+    derive_scope_id,
+    scope_kind,
+    scope_subdir,
+)
+from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
+    SearchRateLimiter,
+    has_explicit_search_request,
+)
+from snowbot.core.group_config import (  # noqa: E402
+    build_scoped_groups,
+    is_scope_enabled,
+    parse_group_ids,
+    scope_group_text,
+)
+from snowbot.core.vision_config import (  # noqa: E402
+    DEFAULT_CAPTION_PROMPT,
+    apply_vision_mode,
+    clear_vision_mode,
+)
+from snowbot.ui.pages.enhance.storage import StorageMixin  # noqa: E402
+
+
+class PathRegressionTests(unittest.TestCase):
+    def test_source_app_dir_is_project_root(self):
+        self.assertEqual(paths.APP_DIR, ROOT)
+        self.assertTrue((paths.APP_DIR / "main.py").is_file())
+
+    def test_resource_examples_are_visible_in_source_mode(self):
+        self.assertTrue((paths.RESOURCE_DIR / "examples").is_dir())
+
+
+class ConfigRegressionTests(unittest.TestCase):
+    def test_defaults_include_official_launcher_and_quick_login(self):
+        cfg = default_config()
+        for key in ("astrbot_dir", "python_exe", "napcat_dir", "dashboard_port"):
+            self.assertIn(key, cfg)
+        self.assertTrue(cfg.get("napcat_quick_login"))
+
+
+class PersonaFileRegressionTests(unittest.TestCase):
+    def test_render_placeholders(self):
+        text = "你叫{BOT_NAME}，主人是 {OWNER_QQ}（{OWNER_NAME}）。未知 {OTHER} 保留。"
+        rendered = render_persona(
+            text,
+            {"BOT_NAME": "助手", "OWNER_QQ": "123456", "OWNER_NAME": "你"},
+        )
+        self.assertIn("你叫助手，主人是 123456（你）", rendered)
+        self.assertIn("{OTHER}", rendered)
+        self.assertEqual(
+            render_persona("${OWNER_QQ}", {"OWNER_QQ": "123456"}), "123456"
+        )
+
+    def test_import_markdown_into_library(self):
+        tmp = Path(tempfile.mkdtemp(prefix="snowbot-persona-"))
+        try:
+            source = tmp / "my-persona.md"
+            source.write_text("hello {OWNER_QQ}", encoding="utf-8")
+            library = tmp / "library"
+            target = import_persona_file(source, library)
+            self.assertEqual(target.parent, library)
+            self.assertEqual(target.read_text(encoding="utf-8"), "hello {OWNER_QQ}")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class NapCatRegressionTests(unittest.TestCase):
+    def test_token_with_utf8_bom(self):
+        root = Path(tempfile.mkdtemp(prefix="snowbot-token-"))
+        try:
+            cfg_dir = root / "config"
+            cfg_dir.mkdir()
+            (cfg_dir / "webui.json").write_text(
+                json.dumps({"token": "token-123"}), encoding="utf-8-sig"
+            )
+            cfg = {
+                "napcat_dir": str(root),
+                "dashboard_port": 1,
+                "onebot_port": 2,
+                "napcat_port": 3,
+            }
+            self.assertEqual(ServiceManager(cfg).napcat_token(), "token-123")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_quick_login_argument_is_passed(self):
+        root = Path(tempfile.mkdtemp(prefix="snowbot-napcat-"))
+        try:
+            (root / "config").mkdir()
+            (root / "launcher.bat").write_text(
+                '@echo off\r\n> "%~dp0args.txt" echo %*\r\n', encoding="utf-8"
+            )
+            (root / "config" / "onebot11_123.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            (root / "config" / "napcat_123.json").write_text(
+                '{"fileLog": false, "consoleLog": false}', encoding="utf-8"
+            )
+            cfg = {
+                "napcat_dir": str(root),
+                "dashboard_port": 1,
+                "onebot_port": 2,
+                "napcat_port": 3,
+                "napcat_quick_login": True,
+            }
+            with patch("snowbot.core.services.qq_processes", return_value=[]), patch(
+                "snowbot.core.services.port_listening", return_value=False
+            ), patch("snowbot.core.services.LOG_DIR", root):
+                ok, _ = ServiceManager(cfg).start_napcat()
+            self.assertTrue(ok)
+            for _ in range(30):
+                if (root / "args.txt").exists():
+                    break
+                time.sleep(0.1)
+            self.assertEqual((root / "args.txt").read_text(encoding="utf-8").strip(), "-q 123")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+
+class PackRegressionTests(unittest.TestCase):
+    def test_preset_never_persists_password_or_keys(self):
+        tmp = Path(tempfile.mkdtemp(prefix="snowbot-preset-"))
+        try:
+            pack = {"id": "preset-secret-test", "variables": []}
+            with patch.object(pe, "PRESETS_DIR", tmp):
+                pe.save_preset(
+                    pack,
+                    {
+                        "owner_qq": "123456",
+                        "astrbot_username": "admin",
+                        "astrbot_password": "do-not-save",
+                        "api_key": "do-not-save",
+                        "some_token": "do-not-save",
+                    },
+                )
+                data = json.loads((tmp / "preset-secret-test.json").read_text(encoding="utf-8"))
+                self.assertEqual(data["owner_qq"], "123456")
+                self.assertNotIn("astrbot_password", data)
+                self.assertNotIn("api_key", data)
+                self.assertNotIn("some_token", data)
+                # 旧预设即使带密码，读取时也不能回填。
+                (tmp / "preset-secret-test.json").write_text(
+                    json.dumps({"owner_qq": "123456", "astrbot_password": "old"}), encoding="utf-8"
+                )
+                self.assertNotIn("astrbot_password", pe.load_preset(pack))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_import_export_duplicate(self):
+        tmp = Path(tempfile.mkdtemp(prefix="snowbot-pack-"))
+        try:
+            packs = tmp / "packs"
+            packs.mkdir()
+            imported = pe.import_pack(ROOT / "examples" / "persona-example", packs)
+            self.assertEqual(imported["id"], "example-persona")
+            pack = pe.load_pack(packs / "example-persona")
+            duplicate = pe.duplicate_pack(pack, packs)
+            self.assertTrue((packs / duplicate["id"] / "pack.json").is_file())
+            export = tmp / "export.zip"
+            pe.export_pack(pack, export)
+            self.assertTrue(export.is_file())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+class VisionModeRegressionTests(unittest.TestCase):
+    @staticmethod
+    def _profile() -> dict:
+        return {
+            "provider_settings": {"default_image_caption_provider_id": "old-vision"},
+            "agent_runner": {
+                "config": {"model": {"fallback_provider_ids": ["old-vision", "text-fallback"]}}
+            },
+        }
+
+    def test_context_mode_uses_fallback_and_clears_caption(self):
+        profile = self._profile()
+        apply_vision_mode(profile, "snowbot-vision", old_id="old-vision", context_mode=True)
+        settings = profile["provider_settings"]
+        model = profile["agent_runner"]["config"]["model"]
+        self.assertEqual(settings["default_image_caption_provider_id"], "")
+        self.assertEqual(model["fallback_provider_ids"], ["text-fallback", "snowbot-vision"])
+
+    def test_caption_mode_sets_caption_and_removes_fallback(self):
+        profile = self._profile()
+        apply_vision_mode(profile, "snowbot-vision", old_id="old-vision", context_mode=False)
+        settings = profile["provider_settings"]
+        model = profile["agent_runner"]["config"]["model"]
+        self.assertEqual(settings["default_image_caption_provider_id"], "snowbot-vision")
+        self.assertEqual(settings["image_caption_prompt"], DEFAULT_CAPTION_PROMPT)
+        self.assertEqual(model["fallback_provider_ids"], ["text-fallback"])
+
+    def test_disable_clears_caption_and_fallback(self):
+        profile = {
+            "provider_settings": {"default_image_caption_provider_id": "snowbot-vision"},
+            "agent_runner": {
+                "config": {"model": {"fallback_provider_ids": ["snowbot-vision", "text-fallback"]}}
+            },
+        }
+        clear_vision_mode(profile, "snowbot-vision")
+        settings = profile["provider_settings"]
+        model = profile["agent_runner"]["config"]["model"]
+        self.assertEqual(settings["default_image_caption_provider_id"], "")
+        self.assertEqual(model["fallback_provider_ids"], ["text-fallback"])
+
+    def test_malformed_sections_are_rebuilt(self):
+        profile = {"provider_settings": None, "agent_runner": None}
+        apply_vision_mode(profile, "snowbot-vision", context_mode=True)
+        self.assertEqual(
+            profile["provider_settings"]["default_image_caption_provider_id"], ""
+        )
+        self.assertEqual(
+            profile["agent_runner"]["config"]["model"]["fallback_provider_ids"],
+            ["snowbot-vision"],
+        )
+
+
+
+class StoragePathRegressionTests(unittest.TestCase):
+    def test_prepare_storage_path_creates_directory(self):
+        tmp = Path(tempfile.mkdtemp(prefix="snowbot-storage-"))
+        try:
+            target = tmp / "记忆" / "图片"
+            got = StorageMixin._prepare_storage_path(str(target))
+            self.assertEqual(got, target.resolve())
+            self.assertTrue(got.is_dir())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_prepare_storage_path_rejects_empty_and_relative(self):
+        with self.assertRaises(ValueError):
+            StorageMixin._prepare_storage_path("")
+        with self.assertRaises(ValueError):
+            StorageMixin._prepare_storage_path("relative/path")
+
+
+
+class GroupConfigRegressionTests(unittest.TestCase):
+    def test_parse_group_ids(self):
+        self.assertEqual(
+            parse_group_ids("123, 456，789 00012;abc"), ["123", "456", "789", "00012"]
+        )
+        self.assertEqual(parse_group_ids(""), [])
+        self.assertEqual(parse_group_ids("123,123"), ["123"])
+
+    def test_build_scoped_groups(self):
+        self.assertEqual(build_scoped_groups(False, ["123"]), ["0"])
+        self.assertEqual(build_scoped_groups(True, ["123", "0"]), ["123"])
+        self.assertEqual(build_scoped_groups(True, []), [])
+        self.assertEqual(build_scoped_groups(True, ["123", "123"]), ["123"])
+
+    def test_scope_roundtrip(self):
+        self.assertFalse(is_scope_enabled(["0"]))
+        self.assertTrue(is_scope_enabled([]))
+        self.assertTrue(is_scope_enabled(["123"]))
+        self.assertEqual(scope_group_text(["0"]), "")
+        self.assertEqual(scope_group_text(["123", "456"]), "123, 456")
+
+
+
+class SearchMannersRegressionTests(unittest.TestCase):
+    def test_explicit_detection(self):
+        self.assertTrue(has_explicit_search_request("帮我搜索一下 AstrBot 最新版本"))
+        self.assertTrue(has_explicit_search_request("查一下今天的天气"))
+        self.assertTrue(has_explicit_search_request("百度一下这个报错"))
+        self.assertTrue(has_explicit_search_request("please search it"))
+        self.assertFalse(has_explicit_search_request("今天过得怎么样"))
+        # 宽松策略：包含关键词就算显式请求，“搜索框在哪”也会命中
+        self.assertTrue(has_explicit_search_request("搜索框在哪"))
+
+    def test_limiter_interval_and_daily_cap(self):
+        import tempfile
+        import shutil
+        from pathlib import Path
+
+        tmp = Path(tempfile.mkdtemp(prefix="snow-search-"))
+        try:
+            limiter = SearchRateLimiter(tmp, min_interval_minutes=30, max_per_day=2)
+            base = time.mktime((2026, 10, 31, 12, 0, 0, 0, 0, -1))
+            self.assertTrue(limiter.allow(base)[0])
+            limiter.record(base)
+            ok, why = limiter.allow(base + 60)
+            self.assertFalse(ok)
+            self.assertIn("太近", why)
+            self.assertTrue(limiter.allow(base + 31 * 60)[0])
+            limiter.record(base + 31 * 60)
+            ok, why = limiter.allow(base + 32 * 60)
+            self.assertFalse(ok)
+            self.assertIn("上限", why)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_limiter_new_day_resets(self):
+        import tempfile
+        import shutil
+        from pathlib import Path
+
+        tmp = Path(tempfile.mkdtemp(prefix="snow-search-"))
+        try:
+            limiter = SearchRateLimiter(tmp, min_interval_minutes=0, max_per_day=1)
+            base = time.mktime((2026, 10, 31, 12, 0, 0, 0, 0, -1))
+            limiter.record(base)
+            ok, _ = limiter.allow(base + 60)
+            self.assertFalse(ok)
+            ok, _ = limiter.allow(base + 86400)
+            self.assertTrue(ok)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+
+class ObsidianScopeRegressionTests(unittest.TestCase):
+    def test_derive_scope_from_group(self):
+        self.assertEqual(
+            derive_scope_id(platform_id="aiocqhttp", umo="napcat:GroupMessage:123", group_id="777", sender_id="888"),
+            "群聊-777",
+        )
+
+    def test_derive_scope_from_private_and_webchat(self):
+        self.assertEqual(
+            derive_scope_id(platform_id="aiocqhttp", umo="napcat:FriendMessage:2345678901", sender_id="2345678901"),
+            "私聊-2345678901",
+        )
+        self.assertEqual(
+            derive_scope_id(platform_id="webchat", umo="webchat:FriendMessage:webchat!demo_user!abc"),
+            "网页-demo_user",
+        )
+
+    def test_scope_subdir_is_safe(self):
+        self.assertEqual(scope_subdir("群聊-123"), "群聊-123")
+        self.assertEqual(scope_subdir('a/b<c>'), "a_b_c_")
+        self.assertEqual(scope_subdir(""), "")
+
+    def test_scope_kind(self):
+        self.assertEqual(scope_kind("群聊-1"), "群聊")
+        self.assertEqual(scope_kind("私聊-2"), "私聊")
+        self.assertEqual(scope_kind("网页-x"), "网页")
+        self.assertEqual(scope_kind(""), "全局")
+
+
+
+class ContinuityRegressionTests(unittest.TestCase):
+    def test_marker_matching(self):
+        self.assertTrue(contains_marker("你今天干嘛了"))
+        self.assertTrue(contains_marker("在吗"))
+        self.assertFalse(contains_marker("今天天气不错"))
+
+    def test_should_boost_second_person_with_attention(self):
+        ok, reason = should_boost(
+            text="你怎么不理我了",
+            attention_score=0.77,
+            attention_threshold=0.3,
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, "second_person_with_attention")
+
+    def test_should_boost_in_flight_reply(self):
+        ok, reason = should_boost(
+            text="你刚才一直不理我",
+            attention_score=0.02,
+            recent_interaction=True,
+            markers=("你",),
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, "recent_interaction_marker")
+
+    def test_should_boost_recent_interaction_image(self):
+        ok, reason = should_boost(
+            text="",
+            has_image=True,
+            recent_interaction=True,
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, "recent_interaction_image")
+
+    def test_should_not_boost_image_without_interaction(self):
+        ok, reason = should_boost(text="", has_image=True, recent_interaction=False)
+        self.assertFalse(ok)
+        self.assertEqual(reason, "no_match")
+
+    def test_should_boost_recent_poke(self):
+        import time as time_mod
+
+        now = time_mod.time()
+        ok, reason = should_boost(
+            text="怎么又不理我",
+            attention_score=0.1,
+            poke_ts=now - 30,
+            now=now,
+            poke_window_seconds=120,
+        )
+        self.assertTrue(ok)
+        self.assertEqual(reason, "recent_poke")
+
+    def test_should_boost_rejects_low_attention_without_marker(self):
+        ok, reason = should_boost(
+            text="今天天气不错",
+            attention_score=0.9,
+            markers=("你",),
+        )
+        self.assertFalse(ok)
+        self.assertEqual(reason, "no_match")
+
+    def test_should_boost_rejects_commands(self):
+        ok, _ = should_boost(text="/help", attention_score=0.9, markers=("你",))
+        self.assertFalse(ok)
+
+
+
+class SleepWindowRegressionTests(unittest.TestCase):
+    def test_parse_hhmm(self):
+        self.assertEqual(parse_hhmm("00:00", (0, 0)), (0, 0))
+        self.assertEqual(parse_hhmm("7:30", (0, 0)), (7, 30))
+        self.assertEqual(parse_hhmm("24:00", (0, 0)), (0, 0))
+        self.assertEqual(parse_hhmm("bad", (1, 2)), (1, 2))
+
+    def test_window_crosses_midnight(self):
+        # 00:00-07:00：23:59 不睡，00:00 和 06:59 睡，07:00 醒
+        self.assertTrue(in_sleep_window(0, "00:00", "07:00"))
+        self.assertTrue(in_sleep_window(6 * 60 + 59, "00:00", "07:00"))
+        self.assertFalse(in_sleep_window(7 * 60, "00:00", "07:00"))
+        self.assertFalse(in_sleep_window(23 * 60 + 59, "00:00", "07:00"))
+
+    def test_window_normal_range(self):
+        # 23:30-07:30 跨午夜
+        self.assertTrue(in_sleep_window(23 * 60 + 30, "23:30", "07:30"))
+        self.assertTrue(in_sleep_window(3 * 60, "23:30", "07:30"))
+        self.assertFalse(in_sleep_window(12 * 60, "23:30", "07:30"))
+
+    def test_command_detection(self):
+        self.assertTrue(is_command_text("/help"))
+        self.assertFalse(is_command_text("你好"))
+        self.assertFalse(is_command_text(""))
+
+
+
+class StarCitizenLibraryTests(unittest.TestCase):
+    @staticmethod
+    def _client():
+        return UEXClient()
+
+    def test_match_scoring(self):
+        self.assertEqual(_match("polaris", "Polaris"), 1.0)
+        self.assertGreaterEqual(_match("polaris", "RSI Polaris"), 0.9)
+        self.assertGreaterEqual(_match("agri", "Agricium"), 0.8)
+        self.assertEqual(_match("不存在", "Polaris"), 0.0)
+
+    def test_find_vehicle_fuzzy(self):
+        client = self._client()
+        client.vehicles = lambda: [
+            {"name": "Polaris", "name_full": "RSI Polaris", "slug": "polaris",
+             "company_name": "RSI", "crew": "6,12", "scu": "576"},
+            {"name": "Carrack", "name_full": "Anvil Carrack", "slug": "carrack"},
+        ]
+        client._cache["vehicles"] = (time.time(), client.vehicles())
+        found = client.find_vehicle("北极星")  # 中文不匹配应返回 None
+        self.assertIsNone(found)
+        found = client.find_vehicle("polaris")
+        self.assertIsNotNone(found)
+        self.assertEqual(found["name"], "Polaris")
+
+    def test_vehicle_summary_contains_key_fields(self):
+        client = self._client()
+        summary = client.vehicle_summary({
+            "name": "Polaris", "name_full": "RSI Polaris", "company_name": "RSI",
+            "crew": "6,12", "scu": "576", "length": "166", "mass": "17155000",
+            "is_military": True, "is_carrier": True,
+        })
+        self.assertIn("RSI Polaris", summary)
+        self.assertIn("军用", summary)
+        self.assertIn("货舱：576 SCU", summary)
+
+    def test_commodity_prices_sorting(self):
+        client = self._client()
+        client._cache["commodities"] = (time.time(), [
+            {"id": "1", "name": "Agricium", "slug": "agricium", "kind": "Metal"},
+        ])
+        client._cache["terminals"] = (time.time(), [
+            {"id": "10", "name": "Port Tressler"},
+            {"id": "20", "name": "Everus Harbor"},
+        ])
+        client.get = lambda endpoint, **params: [
+            {"id_terminal": "10", "price_buy": 900, "price_sell": None},
+            {"id_terminal": "20", "price_buy": 800, "price_sell": 950},
+        ]
+        result = client.commodity_prices("Agricium")
+        self.assertIsNotNone(result)
+        name, text = result
+        self.assertEqual(name, "Agricium")
+        self.assertIn("Port Tressler", text)
+        self.assertIn("买入 900", text)
+
+
+
+class ShareCardRegressionTests(unittest.TestCase):
+    BILI_CARD = {
+        "app": "com.tencent.structmsg",
+        "meta": {
+            "detail_1": {
+                "title": "【星际公民】4.0版本前瞻",
+                "desc": "看看新版本都有什么",
+                "qqdocurl": "https://b23.tv/abc123",
+                "url": "https://jump.qq.com/?url=https://www.bilibili.com/video/BV1xx",
+            }
+        },
+    }
+
+    def test_extract_bilibili_card(self):
+        text = extract_share_text(self.BILI_CARD)
+        self.assertIsNotNone(text)
+        self.assertIn("[分享卡片]", text)
+        self.assertIn("4.0版本前瞻", text)
+        self.assertIn("b23.tv/abc123", text)  # 优先 B站链接
+        self.assertTrue(looks_like_bilibili_share(self.BILI_CARD))
+
+    def test_extract_web_card(self):
+        card = {
+            "meta": {"news": {"title": "一篇好文章", "desc": "值得阅读", "url": "https://example.com/a"}}
+        }
+        text = extract_share_text(card)
+        self.assertIn("一篇好文章", text)
+        self.assertIn("example.com/a", text)
+
+    def test_extract_garbage_returns_none(self):
+        self.assertIsNone(extract_share_text({"foo": "bar"}))
+        self.assertIsNone(extract_share_text("不是json"))
+        self.assertIsNone(extract_share_text({"meta": {"detail_1": {"title": ""}}}))
+
+
+
+
+
+class BiliVisionRegressionTests(unittest.TestCase):
+    def test_resolve_bv_from_url(self):
+        self.assertEqual(
+            resolve_video_id("https://www.bilibili.com/video/BV1GJ411x7h7?spm=1"),
+            ("bvid", "BV1GJ411x7h7"),
+        )
+
+    def test_resolve_av_from_url(self):
+        self.assertEqual(
+            resolve_video_id("https://www.bilibili.com/video/av170001"),
+            ("aid", "170001"),
+        )
+
+    def test_resolve_invalid_raises(self):
+        with self.assertRaises(ValueError):
+            resolve_video_id("https://example.com/no-video")
+
+
+
+class ShareTextMergeTests(unittest.TestCase):
+    def test_merge_into_empty(self):
+        self.assertEqual(merge_share_text("", "[分享卡片] a"), "[分享卡片] a")
+
+    def test_merge_into_existing(self):
+        self.assertEqual(
+            merge_share_text("帮我看看", "[分享卡片] 标题：x"),
+            "帮我看看\n[分享卡片] 标题：x",
+        )
+
+    def test_merge_empty_share_keeps_base(self):
+        self.assertEqual(merge_share_text("帮我看看", ""), "帮我看看")
+
+
+SEED_AUDIO_SOURCE = '''import os
+import random
+import time
+
+from astrbot import logger
+from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+from astrbot.api.message_components import Plain, Record
+
+
+register_provider_adapter(
+    default_config_tmpl={
+        "id": "seed_audio_tts",
+        "timeout": 60,
+        "seed_audio_reply_probability": 0.33,
+    },
+)
+
+
+class ProviderSeedAudioTTS(TTSProvider):
+    def __init__(self, provider_config: dict, provider_settings: dict) -> None:
+        c = provider_config
+        prob = c.get("seed_audio_reply_probability", 0.33)
+        self.reply_probability = float(0.33 if prob in (None, "") else prob)
+
+
+class SeedAudioTTSPlugin(Star):
+    def __init__(self, context: Context) -> None:
+        super().__init__(context)
+        self._warned_double = False
+
+    def _whole_reply_provider(self):
+        return None
+
+    @filter.on_decorating_result(priority=-1000)
+    async def whole_reply_voice(self, event: AstrMessageEvent):
+        result = event.get_result()
+        prov = self._whole_reply_provider()
+        if random.random() > prov.reply_probability:
+            return
+        texts = [c.text for c in result.chain if isinstance(c, Plain)]
+        full = "\\n".join(texts)
+        path = await prov.get_audio(full)
+        new_chain = [Record(file=path, url=path, text=full)]
+        result.chain = new_chain
+'''
+
+
+class SeedAudioPatchTests(unittest.TestCase):
+    def test_patched_source_compiles(self):
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        ast.parse(out)
+        self.assertNotIn("from astrbot.core.utils.astrbot_path import get_astrbot_temp_path", out)
+        self.assertIn("def get_astrbot_temp_path()", out)
+
+    def test_force_voice_and_burst_added(self):
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        self.assertIn('VOICE_REQUEST_KEYWORDS = ("语音", "读出来", "说给我听", "用声音")', out)
+        self.assertIn("BURST_RESET_SECONDS = 600", out)
+        self.assertIn("_voice_blocked_reason", out)
+        self.assertIn("_note_voice(umo)", out)
+        self.assertIn('self.burst_probability = float(0.4 if burst in (None, "") else burst)', out)
+        self.assertIn('self.hourly_max = 10 if hmax in (None, "") else max(0, int(hmax))', out)
+        self.assertIn('"seed_audio_burst_probability": 0.4,', out)
+        self.assertNotIn("VOICE_COOLDOWN_SECONDS", out)
+
+    def test_burst_scheduling_logic(self):
+        import random as random_mod
+        import textwrap
+        from types import SimpleNamespace
+
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        funcs = {}
+        for node in ast.walk(ast.parse(out)):
+            if isinstance(node, ast.FunctionDef) and node.name in ("_voice_blocked_reason", "_note_voice"):
+                funcs[node.name] = textwrap.dedent(ast.get_source_segment(out, node))
+        self.assertEqual(set(funcs), {"_voice_blocked_reason", "_note_voice"})
+        mod: dict = {}
+        exec("import time, random\n" + "\n".join(funcs.values()), mod)
+        blocked, note = mod["_voice_blocked_reason"], mod["_note_voice"]
+        self_obj = SimpleNamespace(_voice_log={}, _streak={}, BURST_RESET_SECONDS=600)
+        prov = SimpleNamespace(reply_probability=0.08, burst_probability=0.4, burst_decay=0.5, hourly_max=10)
+
+        # 没发过语音：走基础概率，骰子 0.5 > 0.08 → 文字
+        with patch.object(random_mod, "random", return_value=0.5):
+            self.assertEqual(blocked(self_obj, prov, "a"), "骰子未中")
+
+        # 刚发过一条：惯性概率 0.4，骰子 0.3 ≤ 0.4 → 可以连发
+        now = time.time()
+        self_obj._voice_log["a"] = [now]
+        self_obj._streak["a"] = 1
+        with patch.object(random_mod, "random", return_value=0.3):
+            self.assertEqual(blocked(self_obj, prov, "a"), "")
+
+        # 连到第 3 条：0.4 × 0.5² = 0.1，骰子 0.15 未中 → 打断
+        self_obj._streak["a"] = 3
+        with patch.object(random_mod, "random", return_value=0.15):
+            self.assertEqual(blocked(self_obj, prov, "a"), "语音惯性骰子未中")
+
+        # 隔了 700 秒没发语音：惯性清零，回到基础概率
+        self_obj._streak["a"] = 1
+        self_obj._voice_log["a"] = [now - 700]
+        with patch.object(random_mod, "random", return_value=0.5):
+            self.assertEqual(blocked(self_obj, prov, "a"), "骰子未中")
+
+        # 一小时已达上限：不再掷骰子，直接保持文字
+        prov.hourly_max = 2
+        self_obj._voice_log["a"] = [now - 10, now - 5]
+        self_obj._streak["a"] = 0
+        self.assertEqual(blocked(self_obj, prov, "a"), "一小时内自发语音已到 2 条上限")
+
+        # 成功发语音后记录：惯性 +1，日志入列
+        obj2 = SimpleNamespace(_voice_log={}, _streak={}, BURST_RESET_SECONDS=600)
+        note(obj2, "b")
+        note(obj2, "b")
+        self.assertEqual(obj2._streak["b"], 2)
+        self.assertEqual(len(obj2._voice_log["b"]), 2)
+
+    def test_patch_is_idempotent(self):
+        once = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        self.assertEqual(patch_seed_audio_source(once), once)
+
+    def test_unknown_source_untouched(self):
+        self.assertEqual(patch_seed_audio_source("x = 1\n"), "x = 1\n")
+
+
+if __name__ == "__main__":
+    unittest.main()

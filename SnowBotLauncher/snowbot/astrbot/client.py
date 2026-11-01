@@ -138,11 +138,13 @@ class AstrBotClient:
     # ---------- 认证 ----------
     def login(self, username: str, password: str) -> bool:
         md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+        # AstrBot 4.29 使用明文密码；4.3.x 使用密码 MD5。优先当前新版的明文，
+        # 失败后再兼容旧版，避免每次连接都先产生一次无谓的失败登录。
         candidates = [
-            ("/api/auth/login", md5),
             ("/api/auth/login", password),
-            ("/api/v1/auth/login", md5),
+            ("/api/auth/login", md5),
             ("/api/v1/auth/login", password),
+            ("/api/v1/auth/login", md5),
         ]
         for path, candidate in candidates:
             result = self._request(
@@ -325,11 +327,6 @@ class AstrBotClient:
     def install_pip(self, package: str, timeout: int = 600) -> None:
         self.require(
             self.call("POST", "/update/pip-install", {"package": package}, timeout=timeout)
-        )
-
-    def set_tool_permission(self, tool: str, permission: str) -> None:
-        raise ApiError(
-            "当前 AstrBot 4.x 不支持通过 API 设置工具权限，请在 WebUI 的工具页手动调整"
         )
 
     def request(

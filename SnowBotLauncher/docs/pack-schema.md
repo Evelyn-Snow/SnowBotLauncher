@@ -35,7 +35,7 @@ my-pack/
 ```json
 {
   "key": "owner_qq",
-  "label": "主人 QQ",
+  "label": "所有者 QQ",
   "type": "text",
   "required": true,
   "pattern": "\\d+",
@@ -63,7 +63,7 @@ my-pack/
 | `${platform_id}` | OneBot v11 平台 ID |
 | `${chat_provider_id}` | 当前对话模型 ID |
 | `${owner_qq}` | 变量中同名值 |
-| `${owner_session}` | `平台ID:FriendMessage:主人QQ` |
+| `${owner_session}` | `平台ID:FriendMessage:所有者QQ` |
 | `${pack_dir}` / `${data_dir}` / `${backups_dir}` | 目录 |
 | `${pack_id}` / `${pack_name}` / `${pack_version}` | 包信息 |
 
@@ -199,7 +199,7 @@ my-pack/
 - 有 `settings/pack.json`
 - 有 `tools/import_*.py`
 
-SnowBotLauncher 会自动包装成 `legacy-*` 配置包：生成变量表和一个 `script` 步骤，调用原导入器并传入 `--answers`。大肥鱼配置包会得到主人 QQ、记忆方式、语音方案等变量。
+SnowBotLauncher 会自动包装成 `legacy-*` 配置包：生成变量表和一个 `script` 步骤，调用原导入器并传入 `--answers`。大肥鱼配置包会得到所有者 QQ、记忆方式、语音方案等变量。
 
 ## 安全建议
 

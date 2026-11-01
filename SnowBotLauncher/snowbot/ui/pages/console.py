@@ -1,30 +1,28 @@
 """控制台页：服务卡片、状态、日志与启停操作。"""
-import ctypes
-import json
-import os
-import shutil
-import subprocess
-import sys
 import time
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QSize, QThread, Signal
-from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QColor, QBrush, QFont, QLinearGradient,
-    QAction, QDesktopServices,
-)
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QGridLayout, QPlainTextEdit, QTabWidget, QLineEdit,
-    QCheckBox, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QScrollArea,
-    QSpinBox, QGroupBox, QFormLayout, QSizePolicy, QSpacerItem, QToolButton,
-    QListWidget, QListWidgetItem, QSplitter, QProgressBar, QComboBox, QInputDialog,
+    QApplication,
+    QSizePolicy,
+    QSplitter,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QPlainTextEdit,
+    QTabWidget,
+    QCheckBox,
+    QMessageBox,
+    QToolButton,
 )
 
 from snowbot.core.config import is_admin
 from snowbot.core.paths import APP_NAME, LOG_DIR
 from snowbot.core.services import tail_text
-from snowbot.ui.widgets import Card, link_button
+from snowbot.ui.widgets import Card, link_button, scroll_page
 
 
 class ConsoleMixin:
@@ -33,6 +31,11 @@ class ConsoleMixin:
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 8, 0, 0)
         layout.setSpacing(14)
+
+        top = QWidget()
+        top_layout = QVBoxLayout(top)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(14)
 
         cards = QHBoxLayout()
         cards.setSpacing(14)
@@ -49,9 +52,13 @@ class ConsoleMixin:
         )
         self.astrbot_card.add_row(1, "WebUI", self.astrbot_link)
 
-        ob = QLabel(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
-        ob.setObjectName("value")
-        self.astrbot_card.add_row(2, "OneBot", ob)
+        self.ob_lbl = QLabel(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
+        self.ob_lbl.setObjectName("value")
+        self.ob_lbl.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
+        self.ob_lbl.setToolTip(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
+        self.astrbot_card.add_row(2, "OneBot", self.ob_lbl)
 
         self.astrbot_runtime = QLabel("—")
         self.astrbot_runtime.setObjectName("muted")
@@ -94,6 +101,9 @@ class ConsoleMixin:
         self.token_lbl.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
         )
+        self.token_lbl.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred
+        )
         token_row.addWidget(self.token_lbl)
         self.btn_token_toggle = QToolButton()
         self.btn_token_toggle.setText("显示")
@@ -126,7 +136,7 @@ class ConsoleMixin:
             self.napcat_card.buttons.addWidget(b)
         cards.addWidget(self.napcat_card, 1)
 
-        layout.addLayout(cards)
+        top_layout.addLayout(cards)
 
         quick = QHBoxLayout()
         quick.setSpacing(10)
@@ -140,11 +150,22 @@ class ConsoleMixin:
         self.btn_stop_all.clicked.connect(self.stop_all)
         quick.addWidget(self.btn_start_all)
         quick.addWidget(self.btn_stop_all)
-        quick.addStretch(1)
         self.hint_lbl = QLabel("提示：NapCat 启动会拉起 QQ 登录窗口，需管理员权限。")
         self.hint_lbl.setObjectName("muted")
-        quick.addWidget(self.hint_lbl)
-        layout.addLayout(quick)
+        self.hint_lbl.setWordWrap(True)
+        quick.addWidget(self.hint_lbl, 1)
+        top_layout.addLayout(quick)
+        top_layout.addStretch(1)
+
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
+        splitter.addWidget(scroll_page(top, 320))
+
+        bottom = QWidget()
+        bottom_layout = QVBoxLayout(bottom)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(8)
+        bottom.setMinimumHeight(200)
 
         log_head = QHBoxLayout()
         log_title = QLabel("实时日志")
@@ -161,14 +182,20 @@ class ConsoleMixin:
         clear_log_btn.setObjectName("ghost")
         clear_log_btn.clicked.connect(self.clear_logs)
         log_head.addWidget(clear_log_btn)
-        layout.addLayout(log_head)
+        bottom_layout.addLayout(log_head)
 
         self.log_tabs = QTabWidget()
+        self.log_tabs.setMinimumHeight(180)
         self.astrbot_log_view = self._make_log_view()
         self.napcat_log_view = self._make_log_view()
         self.log_tabs.addTab(self.astrbot_log_view, "AstrBot")
         self.log_tabs.addTab(self.napcat_log_view, "NapCat")
-        layout.addWidget(self.log_tabs, 1)
+        bottom_layout.addWidget(self.log_tabs, 1)
+        splitter.addWidget(bottom)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 220])
+        layout.addWidget(splitter, 1)
 
         return page
 
@@ -184,7 +211,6 @@ class ConsoleMixin:
 
     def refresh_status(self):
         st = self.manager.status()
-        self._st = st
 
         astrbot_up = st["astrbot_up"]
         napcat_up = st["napcat_up"]
@@ -245,32 +271,33 @@ class ConsoleMixin:
         # 地址同步设置（只影响显示）
         self.astrbot_link.setText(f"http://localhost:{self.cfg['dashboard_port']}")
         self.napcat_link.setText(f"http://127.0.0.1:{self.cfg['napcat_port']}")
+        self.ob_lbl.setText(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
 
         # 顶部汇总
         running = int(astrbot_up) + int(napcat_up)
         if running == 2 and conn:
             self.header_pill.setText("● 全部运行中 · 连接正常")
             self.header_pill.setStyleSheet(
-                "background:#0f2e1d; color:#4ade80; border:1px solid #14532d;"
-                "border-radius:13px; padding:5px 14px; font-weight:600;"
+                "background:#0e2a1c; color:#4ade80; border:1px solid #1a4a2e;"
+                "border-radius:14px; padding:5px 16px; font-weight:600;"
             )
         elif running == 2:
             self.header_pill.setText("● 服务运行中 · 等待连接")
             self.header_pill.setStyleSheet(
-                "background:#2d2410; color:#fbbf24; border:1px solid #713f12;"
-                "border-radius:13px; padding:5px 14px; font-weight:600;"
+                "background:#2a2210; color:#fcd34d; border:1px solid #6b5214;"
+                "border-radius:14px; padding:5px 16px; font-weight:600;"
             )
         elif running == 1:
             self.header_pill.setText("● 部分运行")
             self.header_pill.setStyleSheet(
-                "background:#2d2410; color:#fbbf24; border:1px solid #713f12;"
-                "border-radius:13px; padding:5px 14px; font-weight:600;"
+                "background:#2a2210; color:#fcd34d; border:1px solid #6b5214;"
+                "border-radius:14px; padding:5px 16px; font-weight:600;"
             )
         else:
             self.header_pill.setText("● 全部已停止")
             self.header_pill.setStyleSheet(
-                "background:#151d31; color:#94a3b8; border:1px solid #24304a;"
-                "border-radius:13px; padding:5px 14px; font-weight:600;"
+                "background:#131c30; color:#9aa7bf; border:1px solid #263450;"
+                "border-radius:14px; padding:5px 16px; font-weight:600;"
             )
 
         self.btn_start_all.setEnabled(running < 2)

@@ -1,0 +1,9 @@
+name: astrbot_plugin_search_manners
+display_name: 搜索礼仪
+desc: 控制联网搜索的触发与表述：明确要求必搜，平时低频自发搜索并注明来源
+help: 说「搜索一下……」必定联网；平时遇到没把握的问题偶尔自己查，并先说明不太清楚
+version: v0.1.0
+author: SnowBot
+support_platforms:
+  - aiocqhttp
+  - webchat

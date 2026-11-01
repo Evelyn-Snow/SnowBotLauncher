@@ -1,0 +1,8 @@
+{
+  "vision_provider_id": {
+    "description": "视觉模型提供商 ID",
+    "type": "string",
+    "default": "snowbot-caption",
+    "hint": "用来描述视频画面的视觉模型；默认 snowbot-caption（GLM-4V-Flash，免费）"
+  }
+}

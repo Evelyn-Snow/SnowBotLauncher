@@ -1,0 +1,20 @@
+{
+  "enabled": {
+    "description": "启用搜索礼仪",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后不再注入触发/措辞提示，搜索频率完全由模型自己决定"
+  },
+  "min_interval_minutes": {
+    "description": "自发搜索最小间隔（分钟）",
+    "type": "int",
+    "default": 30,
+    "hint": "两次自发搜索之间至少间隔多久；用户明确要求搜索不受限制；0 表示不限制间隔"
+  },
+  "max_per_day": {
+    "description": "自发搜索每天上限",
+    "type": "int",
+    "default": 5,
+    "hint": "超过后当天只响应明确要求；0 表示不限制"
+  }
+}

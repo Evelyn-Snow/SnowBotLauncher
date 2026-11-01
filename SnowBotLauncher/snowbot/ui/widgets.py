@@ -1,8 +1,17 @@
 """通用界面组件。"""
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
+
 
 class Card(QFrame):
     def __init__(self, accent: str, letter: str, title: str, subtitle: str):
@@ -18,7 +27,7 @@ class Card(QFrame):
         icon.setFixedSize(44, 44)
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet(
-            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {accent}, stop:1 #8b5cf6);"
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {accent}, stop:1 #7c5cff);"
             "border-radius: 12px; color: white; font-size: 21px; font-weight: 700;"
         )
         head.addWidget(icon)
@@ -81,4 +90,27 @@ def link_button(text: str) -> QPushButton:
     btn = QPushButton(text)
     btn.setObjectName("link")
     btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setToolTip(text)
+    btn.setMinimumWidth(80)
+    btn.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
     return btn
+
+
+def scroll_page(widget: QWidget, min_height: int | None = None) -> QScrollArea:
+    """把页面放进可滚动容器，避免窗口变矮时控件被挤压。
+
+    Args:
+        widget: 页面内容。
+        min_height: 内容最小高度；留空时按当前 sizeHint 自动计算。
+    """
+    widget.ensurePolished()
+    if min_height is None:
+        min_height = max(320, widget.sizeHint().height() + 12)
+    widget.setMinimumHeight(min_height)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setFrameShape(QFrame.Shape.NoFrame)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    scroll.setWidget(widget)
+    scroll.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+    return scroll

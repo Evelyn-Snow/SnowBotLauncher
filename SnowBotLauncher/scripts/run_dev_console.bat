@@ -1,5 +1,5 @@
 @echo off
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set PYTHONUNBUFFERED=1
 ".venv\Scripts\python.exe" "main.py"
 echo.

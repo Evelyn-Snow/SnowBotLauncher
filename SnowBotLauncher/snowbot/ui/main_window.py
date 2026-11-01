@@ -1,24 +1,20 @@
 """主窗口：组装各页面、托盘与全局状态。"""
-import ctypes
-import json
-import os
-import shutil
-import subprocess
-import sys
-import time
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QSize, QThread, Signal
-from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QColor, QBrush, QFont, QLinearGradient,
-    QAction, QDesktopServices,
-)
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QGridLayout, QPlainTextEdit, QTabWidget, QLineEdit,
-    QCheckBox, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QScrollArea,
-    QSpinBox, QGroupBox, QFormLayout, QSizePolicy, QSpacerItem, QToolButton,
-    QListWidget, QListWidgetItem, QSplitter, QProgressBar, QComboBox, QInputDialog,
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QFrame,
+    QLabel,
+    QPushButton,
+    QTabWidget,
+    QMessageBox,
+    QSystemTrayIcon,
+    QMenu,
 )
 
 from snowbot.core.config import astrbot_dashboard_info, is_admin, load_config, save_config
@@ -30,6 +26,7 @@ from snowbot.ui.pages.enhance import EnhanceTab
 from snowbot.ui.pages.packs import PacksMixin
 from snowbot.ui.pages.settings import SettingsMixin
 from snowbot.ui.theme import make_app_icon
+from snowbot.ui.widgets import scroll_page
 
 
 class LauncherWindow(
@@ -42,7 +39,6 @@ class LauncherWindow(
             save_config(self.cfg)
         self.manager = ServiceManager(self.cfg)
         self.tray = None
-        self.quitting = False
         self.last_logs = {}
         self.token_visible = False
         self.astrbot_log = LOG_DIR / "astrbot.log"
@@ -53,7 +49,7 @@ class LauncherWindow(
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(make_app_icon())
         self.resize(1060, 760)
-        self.setMinimumSize(920, 660)
+        self.setMinimumSize(860, 520)
 
         self._build_ui()
         self._build_tray()
@@ -129,7 +125,7 @@ class LauncherWindow(
         outer.addWidget(self.tabs, 1)
 
         self.tabs.addTab(self._build_console_tab(), "控制台")
-        self.tabs.addTab(self._build_packs_tab(), "配置包")
+        self.tabs.addTab(scroll_page(self._build_packs_tab()), "配置包")
         self.tabs.addTab(EnhanceTab(self.cfg, astrbot_dashboard_info(self.cfg)), "增强配置")
         self.tabs.addTab(self._build_settings_tab(), "设置")
         self.tabs.addTab(self._build_about_tab(), "使用说明")
@@ -202,7 +198,6 @@ class LauncherWindow(
                 worker.wait(1500)
 
     def quit_app(self):
-        self.quitting = True
         self.status_timer.stop()
         self.log_timer.stop()
         self._stop_workers()

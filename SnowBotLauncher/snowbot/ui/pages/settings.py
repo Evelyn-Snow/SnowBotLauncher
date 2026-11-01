@@ -1,28 +1,33 @@
 """设置页：路径、端口、托盘与开机自启。"""
 import ctypes
-import json
-import os
-import shutil
 import subprocess
-import sys
-import time
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QSize, QThread, Signal
-from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QColor, QBrush, QFont, QLinearGradient,
-    QAction, QDesktopServices,
-)
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QGridLayout, QPlainTextEdit, QTabWidget, QLineEdit,
-    QCheckBox, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QScrollArea,
-    QSpinBox, QGroupBox, QFormLayout, QSizePolicy, QSpacerItem, QToolButton,
-    QListWidget, QListWidgetItem, QSplitter, QProgressBar, QComboBox, QInputDialog,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QLineEdit,
+    QCheckBox,
+    QFileDialog,
+    QMessageBox,
+    QScrollArea,
+    QSpinBox,
+    QGroupBox,
+    QFormLayout,
 )
 
-from snowbot.core.config import DEFAULT_CONFIG, launcher_command, save_config
-from snowbot.core.paths import AUTOSTART_TASK
+from snowbot.core.config import (
+    default_config,
+    discover_astrbot,
+    discover_napcat_dir,
+    launcher_command,
+    save_config,
+)
+from snowbot.core.paths import APP_DIR, AUTOSTART_TASK
+from snowbot.core.single_instance import acquire_single_instance, release_single_instance
 
 
 class SettingsMixin:
@@ -48,6 +53,17 @@ class SettingsMixin:
         form.addRow("AstrBot 目录", self._path_row(self.dir_astrbot, dir_mode=True))
         form.addRow("NapCat 目录", self._path_row(self.dir_napcat, dir_mode=True))
         form.addRow("Python 解释器", self._path_row(self.python_exe, dir_mode=False))
+        detect_btn = QPushButton("自动检测官方启动器实例")
+        detect_btn.setObjectName("ghost")
+        detect_btn.clicked.connect(self.detect_paths)
+        form.addRow("", detect_btn)
+        path_hint = QLabel(
+            "官方 AstrBot Launcher 的实例位于 %USERPROFILE%\\.astrbot_launcher\\instances；"
+            "检测会优先选择带有 core/main.py 和 venv/Scripts/python.exe 的实例。"
+        )
+        path_hint.setWordWrap(True)
+        path_hint.setObjectName("muted")
+        form.addRow("", path_hint)
         layout.addWidget(paths)
 
         ports = QGroupBox("端口设置")
@@ -84,10 +100,15 @@ class SettingsMixin:
         self.chk_autostart.setChecked(self.autostart_enabled())
         self.chk_auto_services = QCheckBox("启动控制台后自动启动全部服务")
         self.chk_auto_services.setChecked(bool(self.cfg.get("autostart_services", False)))
+        self.chk_quick_login = QCheckBox(
+            "启动 NapCat 时自动使用已保存 QQ 账号快速登录（避免每次扫码）"
+        )
+        self.chk_quick_login.setChecked(bool(self.cfg.get("napcat_quick_login", True)))
         bform.addWidget(self.chk_close_tray)
         bform.addWidget(self.chk_start_min)
         bform.addWidget(self.chk_autostart)
         bform.addWidget(self.chk_auto_services)
+        bform.addWidget(self.chk_quick_login)
         layout.addWidget(behavior)
 
         maintenance = QGroupBox("维护")
@@ -144,6 +165,25 @@ class SettingsMixin:
         h.addWidget(btn)
         return w
 
+    def detect_paths(self):
+        found = discover_astrbot()
+        napcat = discover_napcat_dir()
+        if not found:
+            QMessageBox.warning(
+                self,
+                "未找到 AstrBot 实例",
+                "没有找到可用的 AstrBot 实例。\n"
+                "请确认官方启动器已创建实例，或手动选择包含 main.py 的 core 目录和 venv Python。",
+            )
+            return
+        self.dir_astrbot.setText(found.get("astrbot_dir", ""))
+        self.python_exe.setText(found.get("python_exe", ""))
+        if found.get("dashboard_port"):
+            self.port_dash.setValue(int(found["dashboard_port"]))
+        if (napcat / "launcher.bat").is_file():
+            self.dir_napcat.setText(str(napcat))
+        self._toast("已检测到 AstrBot 实例，点击「保存设置」生效")
+
     def fix_napcat_plugin_store(self):
         from snowbot.core.napcat_fix import patch_napcat_mirror
 
@@ -166,6 +206,7 @@ class SettingsMixin:
                 "close_to_tray": self.chk_close_tray.isChecked(),
                 "start_minimized": self.chk_start_min.isChecked(),
                 "autostart_services": self.chk_auto_services.isChecked(),
+                "napcat_quick_login": self.chk_quick_login.isChecked(),
             }
         )
         want_autostart = self.chk_autostart.isChecked()
@@ -185,15 +226,17 @@ class SettingsMixin:
         self.refresh_status()
 
     def reset_settings(self):
-        self.dir_astrbot.setText(DEFAULT_CONFIG["astrbot_dir"])
-        self.dir_napcat.setText(DEFAULT_CONFIG["napcat_dir"])
-        self.python_exe.setText(DEFAULT_CONFIG["python_exe"])
-        self.port_dash.setValue(DEFAULT_CONFIG["dashboard_port"])
-        self.port_ob.setValue(DEFAULT_CONFIG["onebot_port"])
-        self.port_napcat.setValue(DEFAULT_CONFIG["napcat_port"])
-        self.chk_close_tray.setChecked(DEFAULT_CONFIG["close_to_tray"])
-        self.chk_start_min.setChecked(DEFAULT_CONFIG["start_minimized"])
+        defaults = default_config()
+        self.dir_astrbot.setText(defaults["astrbot_dir"])
+        self.dir_napcat.setText(defaults["napcat_dir"])
+        self.python_exe.setText(defaults["python_exe"])
+        self.port_dash.setValue(defaults["dashboard_port"])
+        self.port_ob.setValue(defaults["onebot_port"])
+        self.port_napcat.setValue(defaults["napcat_port"])
+        self.chk_close_tray.setChecked(defaults["close_to_tray"])
+        self.chk_start_min.setChecked(defaults["start_minimized"])
         self.chk_auto_services.setChecked(False)
+        self.chk_quick_login.setChecked(defaults.get("napcat_quick_login", True))
         self._toast("已恢复默认值，点击「保存设置」生效")
 
     def autostart_enabled(self) -> bool:
@@ -233,6 +276,8 @@ class SettingsMixin:
 
     def relaunch_admin(self):
         cmd = launcher_command()
+        # 先释放单实例锁，否则新进程会在旧进程退出前被锁挡住。
+        release_single_instance()
         try:
             params = subprocess.list2cmdline(cmd[1:]) if len(cmd) > 1 else ""
             r = ctypes.windll.shell32.ShellExecuteW(
@@ -240,5 +285,11 @@ class SettingsMixin:
             )
             if r > 32:
                 self.quit_app()
+            else:
+                acquire_single_instance()
+                QMessageBox.warning(
+                    self, "提权重启失败", f"ShellExecuteW 返回 {r}，控制台将继续运行。"
+                )
         except Exception as e:
+            acquire_single_instance()
             QMessageBox.warning(self, "提权重启失败", str(e))

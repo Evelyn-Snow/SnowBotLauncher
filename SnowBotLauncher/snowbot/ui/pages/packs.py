@@ -1,24 +1,30 @@
 """配置包页：列表、变量、预览、应用与备份。"""
-import ctypes
-import json
-import os
 import shutil
-import subprocess
-import sys
-import time
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QSize, QThread, Signal
-from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QColor, QBrush, QFont, QLinearGradient,
-    QAction, QDesktopServices,
-)
+from PySide6.QtCore import Qt, QUrl, QThread, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QGridLayout, QPlainTextEdit, QTabWidget, QLineEdit,
-    QCheckBox, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QScrollArea,
-    QSpinBox, QGroupBox, QFormLayout, QSizePolicy, QSpacerItem, QToolButton,
-    QListWidget, QListWidgetItem, QSplitter, QProgressBar, QComboBox, QInputDialog,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QPlainTextEdit,
+    QTabWidget,
+    QLineEdit,
+    QCheckBox,
+    QFileDialog,
+    QMessageBox,
+    QScrollArea,
+    QGroupBox,
+    QFormLayout,
+    QListWidget,
+    QListWidgetItem,
+    QSplitter,
+    QProgressBar,
+    QComboBox,
+    QInputDialog,
 )
 
 from snowbot.core.config import astrbot_dashboard_info
@@ -97,9 +103,9 @@ class PacksMixin:
         title.setObjectName("cardTitle")
         hint = QLabel("清单驱动 · 变量自定义 · 计划预览 · 备份还原 · 兼容旧版配置包")
         hint.setObjectName("muted")
+        hint.setWordWrap(True)
         top.addWidget(title)
-        top.addWidget(hint)
-        top.addStretch(1)
+        top.addWidget(hint, 1)
         self.btn_import_pack = QPushButton("导入配置包…")
         self.btn_import_pack.clicked.connect(self.import_pack_dialog)
         self.btn_refresh_packs = QPushButton("刷新")
@@ -116,6 +122,8 @@ class PacksMixin:
         splitter = QSplitter(Qt.Orientation.Horizontal)
 
         left = QWidget()
+        left.setMinimumWidth(190)
+        left.setMaximumWidth(320)
         left_layout = QVBoxLayout(left)
         left_layout.setContentsMargins(0, 0, 0, 0)
         self.pack_list = QListWidget()
@@ -225,7 +233,12 @@ class PacksMixin:
         right_layout.addWidget(self.pack_detail_tabs, 1)
         right_layout.addWidget(log_group)
         splitter.addWidget(right)
-        splitter.setSizes([260, 740])
+        splitter.setChildrenCollapsible(False)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([240, 700])
+        splitter.setMinimumHeight(420)
+        self.pack_detail_tabs.setMinimumHeight(200)
         layout.addWidget(splitter, 1)
 
         return page

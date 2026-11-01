@@ -1,4 +1,5 @@
 """端口探测、进程控制与 AstrBot/NapCat 服务管理。"""
+import json
 import os
 import socket
 import subprocess
@@ -6,9 +7,10 @@ import time
 from pathlib import Path
 
 import psutil
+import re
 
 from .config import now_str
-from .paths import LOG_DIR
+from .paths import FFMPEG_BIN_DIR, LOG_DIR
 
 def list_tcp_connections():
     try:
@@ -92,6 +94,9 @@ def kill_tree(pid: int, timeout: float = 6.0) -> None:
         pass
 
 
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
 def tail_text(path: Path, max_bytes: int = 80000, max_lines: int = 700) -> str:
     try:
         if not path or not path.exists():
@@ -102,6 +107,8 @@ def tail_text(path: Path, max_bytes: int = 80000, max_lines: int = 700) -> str:
             f.seek(max(0, size - max_bytes))
             data = f.read()
         text = data.decode("utf-8", "replace")
+        # AstrBot 日志带 ANSI 颜色转义码，直接显示会出现 [0m[33m 之类乱码。
+        text = ANSI_RE.sub("", text)
         return "\n".join(text.splitlines()[-max_lines:])
     except Exception:
         return ""
@@ -144,7 +151,7 @@ class ServiceManager:
     def napcat_token(self) -> str:
         p = Path(self.cfg["napcat_dir"]) / "config" / "webui.json"
         try:
-            return json.loads(p.read_text(encoding="utf-8")).get("token", "")
+            return str(json.loads(p.read_text(encoding="utf-8-sig")).get("token", ""))
         except Exception:
             return ""
 
@@ -185,6 +192,14 @@ class ServiceManager:
         )
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
+        env["PYTHONIOENCODING"] = "utf-8"
+        # 语音发送需要 ffmpeg/ffprobe（Record 组件转 wav），优先用启动器自带的组件目录。
+        if FFMPEG_BIN_DIR.is_dir():
+            env["PATH"] = f"{FFMPEG_BIN_DIR}{os.pathsep}{env.get('PATH', '')}"
+        # 官方启动器也是通过环境变量覆盖面板监听地址/端口，这里保持一致，
+        # 否则设置页修改端口后 AstrBot 仍会绑定 cmd_config.json 里的旧端口。
+        env["DASHBOARD_HOST"] = "127.0.0.1"
+        env["DASHBOARD_PORT"] = str(int(cfg["dashboard_port"]))
         try:
             p = subprocess.Popen(
                 [str(py), "main.py"],
@@ -217,7 +232,7 @@ class ServiceManager:
             if not p.exists():
                 continue
             try:
-                data = json.loads(p.read_text(encoding="utf-8"))
+                data = json.loads(p.read_text(encoding="utf-8-sig"))
                 data["fileLog"] = True
                 data["consoleLog"] = True
                 p.write_text(
@@ -251,9 +266,15 @@ class ServiceManager:
         log_path = LOG_DIR / "napcat_console.log"
         log_f = open(log_path, "ab", buffering=0)
         log_f.write(f"\n===== {now_str()} 启动 NapCat =====\n".encode("utf-8"))
+        command = ["cmd", "/c", "launcher.bat"]
+        quick_account = self.napcat_account()
+        quick_login = bool(self.cfg.get("napcat_quick_login", True) and quick_account)
+        if quick_login:
+            # NapCat 不带 -q 时会强制走二维码登录；已保存的账号应直接快速登录。
+            command.extend(["-q", quick_account])
         try:
             p = subprocess.Popen(
-                ["cmd", "/c", "launcher.bat"],
+                command,
                 cwd=str(d),
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
@@ -271,7 +292,12 @@ class ServiceManager:
 
         self.procs["napcat"] = p
         self.started_at["napcat"] = time.time()
-        return True, "NapCat 启动中，QQ 登录窗口即将出现…"
+        return (
+            True,
+            f"NapCat 启动中，正在快速登录 {quick_account}…"
+            if quick_login
+            else "NapCat 启动中，QQ 登录窗口即将出现…",
+        )
 
     # ---------- 停止 ----------
     def stop_astrbot(self):
@@ -321,7 +347,10 @@ class ServiceManager:
         msgs.append(m1)
         ok2, m2 = self.start_napcat()
         msgs.append(m2)
-        return ok1 or ok2, "；".join(msgs)
+        # “已经在运行”对一键启动来说属于成功，不应弹黄色警告。
+        ok1 = ok1 or "已在运行" in m1
+        ok2 = ok2 or "已在运行" in m2
+        return bool(ok1 and ok2), "；".join(msgs)
 
     def stop_all(self):
         msgs = []

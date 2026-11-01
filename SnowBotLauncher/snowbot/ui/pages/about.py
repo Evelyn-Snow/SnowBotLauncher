@@ -1,29 +1,8 @@
 """使用说明页。"""
-import ctypes
-import json
-import os
-import shutil
-import subprocess
-import sys
-import time
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl, QSize, QThread, Signal
-from PySide6.QtGui import (
-    QIcon, QPixmap, QPainter, QColor, QBrush, QFont, QLinearGradient,
-    QAction, QDesktopServices,
-)
-from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFrame,
-    QLabel, QPushButton, QGridLayout, QPlainTextEdit, QTabWidget, QLineEdit,
-    QCheckBox, QFileDialog, QMessageBox, QSystemTrayIcon, QMenu, QScrollArea,
-    QSpinBox, QGroupBox, QFormLayout, QSizePolicy, QSpacerItem, QToolButton,
-    QListWidget, QListWidgetItem, QSplitter, QProgressBar, QComboBox, QInputDialog,
-)
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QPlainTextEdit
 
-from snowbot.core.paths import (
-    APP_DIR, APP_VERSION, BACKUPS_DIR, DATA_DIR, LOG_DIR, PACKS_DIR,
-)
+from snowbot.core.paths import APP_DIR, APP_VERSION, BACKUPS_DIR, DATA_DIR, LOG_DIR, PACKS_DIR
 
 
 class AboutMixin:
@@ -55,7 +34,7 @@ class AboutMixin:
 
 三、配置包
   · 「配置包」页可导入并应用 SnowBot Pack：人格、插件、模型、语音、表情包等一键配置。
-  · 每个包用变量表自定义（主人 QQ、记忆方式、语音方案、密钥等），可预览计划后再执行。
+  · 每个包用变量表自定义（所有者 QQ、记忆方式、语音方案、密钥等），可预览计划后再执行。
   · 应用前自动备份 AstrBot 配置，可在「还原备份」中回滚；支持重复执行（已完成的跳过）。
   · 兼容大肥鱼等旧版 pack.json 配置包，会以「脚本步骤」方式调用其导入器。
   · 配置包目录：{PACKS_DIR}
@@ -66,6 +45,10 @@ class AboutMixin:
   · 表情包：meme_manager 资源广场索引、按 pack_id 下载、默认套装、多套同时使用、GitHub 加速地址。
   · 语音：Edge TTS / MiMo 克隆 / 豆包 Seed Audio，保存前自动测试，可调触发概率。
   · 记忆：本机 Ollama / 硅基流动 / 自定义 OpenAI 兼容 Embedding，自动接入 LivingMemory 插件。
+  · 视觉：上下文视觉模型 / 图片描述模式，可选择是否在图片轮次保留工具调用。
+  · 存储：自定义记忆文件（Obsidian）和图片图库目录，并可打开语义记忆数据库位置。
+  · 群聊：读空气开关、生效群白名单、连聊/反戳概率、@空消息回询与群聊记忆捕获。
+  · 搜索：联网查证开关、搜索源 Key、自发搜索频率；明确要求必搜并附来源。
   · 这些操作直接调 AstrBot 后台接口，使用前需在页面顶部连接（密码只保留在本次运行内存中）。
 
 五、后台与自启
