@@ -29,6 +29,7 @@ EXT_PLUGINS = (
     ("astrbot_plugin_snow_profile", "Bot 用户画像"),
     ("astrbot_plugin_snow_experience", "Bot 真实经历"),
     ("astrbot_plugin_snow_knowledge", "Bot 知识库"),
+    ("astrbot_plugin_snow_guard", "Bot 安全守卫"),
     ("astrbot_plugin_snow_imagebox", "Bot 图库"),
     ("astrbot_plugin_obsidian_notes", "Bot Obsidian 笔记"),
     ("astrbot_plugin_search_manners", "搜索礼仪"),

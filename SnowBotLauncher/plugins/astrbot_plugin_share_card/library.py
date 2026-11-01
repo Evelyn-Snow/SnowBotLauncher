@@ -16,6 +16,32 @@ _KEY_DESC = ("desc", "description", "desc_high", "摘要")
 _KEY_URL = ("url", "qqdocurl", "jump_url", "share_url")
 _BILI_HINTS = ("b23.tv", "bilibili.com", "bilibili")
 
+# 卡片文本里可能伪造的"系统指令"样式（外部可控内容不能伪装成系统消息）
+_FAKE_DIRECTIVE_RE = re.compile(
+    r"(?:\[\s*(?:系统|system|指令|instruction|admin|管理员)[^\]]{0,20}\]"
+    r"|<\s*/?\s*(?:system|instruction)[^>]*>"
+    r"|^\s*(?:system|assistant|user)\s*[:：])",
+    re.IGNORECASE | re.MULTILINE,
+)
+_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def sanitize_card_text(text: str, limit: int = 300) -> str:
+    """清理卡片文本：折叠换行/控制字符、去掉伪造的系统指令样式、截断。
+
+    QQ 卡片的标题/描述是对方可控内容，不清理就能伪造多行指令混进用户消息。
+    """
+    value = str(text or "")
+    if not value:
+        return ""
+    value = _CTRL_RE.sub(" ", value)
+    value = re.sub(r"[\r\n\t]+", " ", value)
+    value = _FAKE_DIRECTIVE_RE.sub("[已过滤]", value)
+    value = re.sub(r"[ \u3000]{2,}", " ", value).strip()
+    if limit > 0 and len(value) > limit:
+        value = value[:limit] + "…"
+    return value
+
 
 def _walk_strings(obj):
     """递归产出 (key, value) 对（value 为非容器值）。"""
@@ -79,11 +105,11 @@ def extract_share_text(data: str | dict) -> str | None:
 
     parts = []
     if title:
-        parts.append(f"标题：{title}")
+        parts.append(f"标题：{sanitize_card_text(title)}")
     if desc and desc != title:
-        parts.append(f"内容：{desc}")
+        parts.append(f"内容：{sanitize_card_text(desc, limit=200)}")
     if url:
-        parts.append(f"链接：{url}")
+        parts.append(f"链接：{sanitize_card_text(url, limit=500)}")
     if not parts:
         return None
     return "[分享卡片] " + "；".join(parts)

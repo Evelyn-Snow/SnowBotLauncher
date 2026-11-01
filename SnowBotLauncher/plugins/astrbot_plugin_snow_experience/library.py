@@ -201,7 +201,11 @@ def pick_gutendex_book(payload: dict, used_ids: set[str]) -> tuple[str, str] | N
     """从 Gutendex 结果里选一本有纯文本格式的书，返回 (gutenberg_id, 标题)。"""
     results = (payload or {}).get("results") or []
     for book in results:
-        gid = str(book.get("id") or "")
+        raw_id = book.get("id")
+        # 只接受纯数字 id：它会被拼进 gutenberg.org 的路径，必须防路径注入
+        if not str(raw_id or "").isdigit():
+            continue
+        gid = str(raw_id)
         title = str(book.get("title") or "").strip()
         if not gid or not title or gid in used_ids:
             continue

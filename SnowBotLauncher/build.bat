@@ -31,7 +31,7 @@ if errorlevel 1 goto :err
 echo.
 echo 构建完成：
 echo   exe:     dist\SnowBotLauncher\SnowBotLauncher.exe
-echo   setup:   installer\output\SnowBotLauncher-Setup-1.5.16.exe
+echo   setup:   installer\output\SnowBotLauncher-Setup-1.5.17.exe
 pause
 exit /b 0
 

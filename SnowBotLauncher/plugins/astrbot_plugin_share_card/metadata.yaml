@@ -2,7 +2,7 @@ name: astrbot_plugin_share_card
 display_name: 分享卡片转文字
 desc: 把 QQ 分享的 B站视频、网页等 Json 卡片提取成标题/内容/链接纯文本，让模型能看见并回应
 help: 群里或私聊分享 B站视频、文章链接，机器人就能阅读并聊起来
-version: v0.1.2
+version: v0.1.3
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_share_card
 author: Evelyn-Snow
 support_platforms:
