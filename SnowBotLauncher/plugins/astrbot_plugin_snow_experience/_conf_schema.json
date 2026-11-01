@@ -10,6 +10,12 @@
     "default": "",
     "hint": "留空 = 插件数据目录 books/；可填任意绝对路径，往里丢 .txt/.epub 她就会优先读"
   },
+  "events_dir": {
+    "description": "经历记录目录",
+    "type": "string",
+    "default": "",
+    "hint": "读后感/资料笔记/论文笔记的存放目录；留空 = 插件数据目录 events/"
+  },
   "topics": {
     "description": "兴趣关键词池",
     "type": "string",

@@ -83,6 +83,12 @@ class SnowExperience(Star):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def _events_dir(self) -> Path:
+        raw = str(self.conf.get("events_dir") or "").strip()
+        path = Path(os.path.expandvars(raw)) if raw else self._data_dir() / "events"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _cfg(self, key: str, default):
         return self.conf.get(key, default)
 
@@ -218,7 +224,7 @@ class SnowExperience(Star):
             logger.warning(f"[{NAME}] 事件未完成（不消耗配额）：{exc}")
             return
         ts = time.time()
-        record_path = self._data_dir() / "events" / f"{today}-{event_type}.md"
+        record_path = self._events_dir() / f"{today}-{event_type}.md"
         record_path.parent.mkdir(parents=True, exist_ok=True)
         with open(record_path, "w", encoding="utf-8") as f:
             f.write(render_event_record(ts, event_type, title, body))
