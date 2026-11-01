@@ -57,7 +57,7 @@ class VoiceMixin:
         self.voice_prob.setRange(0.0, 1.0)
         self.voice_prob.setSingleStep(0.05)
         self.voice_prob.setDecimals(2)
-        self.voice_prob.setValue(0.08)
+        self.voice_prob.setValue(0.05)
         top.addWidget(self.voice_prob)
         top.addStretch(1)
         layout.addLayout(top)
@@ -137,7 +137,7 @@ class VoiceMixin:
         self.doubao_burst_prob.setRange(0.0, 1.0)
         self.doubao_burst_prob.setSingleStep(0.05)
         self.doubao_burst_prob.setDecimals(2)
-        self.doubao_burst_prob.setValue(0.4)
+        self.doubao_burst_prob.setValue(0.3)
         self.doubao_burst_decay = QDoubleSpinBox()
         self.doubao_burst_decay.setRange(0.05, 1.0)
         self.doubao_burst_decay.setSingleStep(0.05)
@@ -222,7 +222,7 @@ class VoiceMixin:
 
     def _load_voice_ui(self):
         settings = self.config.get("provider_tts_settings") or {}
-        self.voice_prob.setValue(float(settings.get("trigger_probability", 0.08)))
+        self.voice_prob.setValue(float(settings.get("trigger_probability", 0.05)))
         provider_id = str(settings.get("provider_id") or "")
         provider = next(
             (
@@ -250,7 +250,7 @@ class VoiceMixin:
             self.doubao_persona.setText(str(provider.get("seed_audio_persona") or ""))
             self.doubao_prompt.setText(str(provider.get("seed_audio_prompt_template") or ""))
             self.doubao_burst_prob.setValue(
-                float(provider.get("seed_audio_burst_probability") or 0.4)
+                float(provider.get("seed_audio_burst_probability") or 0.3)
             )
             self.doubao_burst_decay.setValue(
                 float(provider.get("seed_audio_burst_decay") or 0.5)

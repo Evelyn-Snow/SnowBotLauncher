@@ -58,6 +58,20 @@ TMPL_STATE = (
     '        "seed_audio_hourly_max": 10,\n'
 )
 
+# 补丁 4：台词校验从「逐字全等」放宽到「相似度达标即接受」。
+# 原逻辑念错一个字就整次重试，每次重试都计费（实测重试率 38%，多花约 1/3 的钱）；
+# 语音里轻微的"的/了/啊"差异听不出来，相似度 ≥ 0.9 就当作念对了。
+MATCH_OLD = "            match = _norm(heard) == target\n"
+MATCH_NEW = """            match = _norm(heard) == target
+            if not match and heard:
+                # 放宽：念错少量字也算通过，避免整次重试重复计费
+                ratio = difflib.SequenceMatcher(None, _norm(heard), target).ratio()
+                match = ratio >= 0.9
+"""
+
+DIFFLIB_LINE = "import base64\n"
+DIFFLIB_NEW = "import base64\nimport difflib\n"
+
 DICE_OLD = "\n".join([
     "        if random.random() > prov.reply_probability:",
     "            return",
@@ -199,7 +213,17 @@ def patch_seed_audio_source(text: str) -> str:
     text = text.replace(DECORATOR_MARKER, helpers_and_hint + DECORATOR_MARKER, 1)
     text = text.replace(DICE_OLD, DICE_NEW, 1)
     text = text.replace(CHAIN_LINE, CHAIN_LINE + "        self._note_voice(umo)\n", 1)
+    text = _add_match_tolerance(text)
     return _add_diagnostics(text)
+
+
+def _add_match_tolerance(text: str) -> str:
+    """台词校验放宽到相似度 ≥ 0.9，避免念错一个字就整次重试（重试也计费）。"""
+    if "SequenceMatcher" in text or MATCH_OLD not in text:
+        return text
+    if DIFFLIB_LINE in text and "\nimport difflib\n" not in text:
+        text = text.replace(DIFFLIB_LINE, DIFFLIB_NEW, 1)
+    return text.replace(MATCH_OLD, MATCH_NEW, 1)
 
 
 def _add_diagnostics(text: str) -> str:
