@@ -26,6 +26,7 @@ EXT_PLUGINS = (
     ("astrbot_plugin_snow_sleep", "机器人作息"),
     ("astrbot_plugin_snow_continuity", "连续对话接话"),
     ("astrbot_plugin_snow_messenger", "Bot 传话"),
+    ("astrbot_plugin_snow_profile", "Bot 用户画像"),
     ("astrbot_plugin_snow_imagebox", "Bot 图库"),
     ("astrbot_plugin_obsidian_notes", "Bot Obsidian 笔记"),
     ("astrbot_plugin_search_manners", "搜索礼仪"),

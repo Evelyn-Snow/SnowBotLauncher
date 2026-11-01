@@ -52,6 +52,15 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
     match_person,
     relay_text,
 )
+from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
+    clean_llm_markdown,
+    looks_like_profile,
+    merge_name_history,
+    parse_profile,
+    profile_summary,
+    render_profile,
+    should_update,
+)
 from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
     SearchRateLimiter,
     has_explicit_search_request,
@@ -812,6 +821,65 @@ class MessengerTests(unittest.TestCase):
         self.assertTrue(looks_like_contact_request("去问小明明天来不来"))
         self.assertTrue(looks_like_contact_request("帮我转告他一声"))
         self.assertFalse(looks_like_contact_request("今天天气怎么样"))
+
+
+class ProfileTests(unittest.TestCase):
+    CFG = dict(
+        min_new_messages=6, min_interval_minutes=180, max_per_day=4, quiet_hours="0-6"
+    )
+
+    def test_render_parse_roundtrip(self):
+        md = render_profile("123456", "大肥鱼", ["旧名（2026-10-01）"], "## 性格\n很憨", 1700000000.0, 7)
+        parsed = parse_profile(md)
+        self.assertEqual(parsed["qq"], "123456")
+        self.assertEqual(parsed["name"], "大肥鱼")
+        self.assertEqual(parsed["history"], ["旧名（2026-10-01）"])
+        self.assertEqual(parsed["exchanges"], 7)
+        self.assertIn("## 性格", parsed["body"])
+
+    def test_parse_without_frontmatter(self):
+        parsed = parse_profile("随手写的正文")
+        self.assertEqual(parsed["body"], "随手写的正文")
+        self.assertEqual(parsed["name"], "")
+
+    def test_merge_name_history(self):
+        history = merge_name_history([], "旧名", "新名", 1700000000.0)
+        self.assertTrue(history[0].startswith("旧名（"))
+        self.assertEqual(merge_name_history(history, "新名", "新名", 1700000000.0), history)
+        again = merge_name_history(history, "新名", "再新", 1700000000.0)
+        self.assertTrue(again[0].startswith("新名（"))
+        self.assertEqual(len(merge_name_history(["a（2026-01-01）"] * 20, "a", "b", 0)), 10)
+
+    def test_summary_strips_and_truncates(self):
+        md = render_profile("1", "小明", [], "## 性格\n安静\n\n## 兴趣\n天文", 0, 1)
+        summary = profile_summary(md, limit=400)
+        self.assertTrue(summary.startswith("[用户画像] 昵称：小明"))
+        self.assertIn("安静", summary)
+        long = profile_summary(render_profile("1", "小明", [], "啊" * 900, 0, 1), limit=100)
+        self.assertLessEqual(len(long), 105)
+
+    def test_should_update_gates(self):
+        now = time.time()
+        state = {"last_ts": now - 400 * 60, "date": time.strftime("%Y-%m-%d"), "count": 0}
+        ok, _ = should_update(state, now=now, new_count=6, **self.CFG)
+        self.assertTrue(ok)
+        ok, why = should_update(state, now=now, new_count=2, **self.CFG)
+        self.assertFalse(ok)
+        self.assertIn("新对话", why)
+        ok, why = should_update({**state, "last_ts": now - 60}, now=now, new_count=6, **self.CFG)
+        self.assertFalse(ok)
+        self.assertEqual(why, "间隔不足")
+        ok, _ = should_update({**state, "count": 4}, now=now, new_count=6, **self.CFG)
+        self.assertFalse(ok)
+        ok, why = should_update(state, now=now, new_count=6, **{**self.CFG, "quiet_hours": "0-23"})
+        self.assertFalse(ok)
+        self.assertEqual(why, "静默时段")
+
+    def test_clean_and_looks_like(self):
+        text = clean_llm_markdown("```markdown\n## 性格\n温和\n```")
+        self.assertTrue(text.startswith("## 性格"))
+        self.assertTrue(looks_like_profile(text))
+        self.assertFalse(looks_like_profile("好嘞，这就去更新！"))
 
 
 if __name__ == "__main__":

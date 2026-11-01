@@ -1,0 +1,57 @@
+{
+  "enabled": {
+    "description": "启用用户画像",
+    "type": "bool",
+    "default": true
+  },
+  "profiles_dir": {
+    "description": "画像存放目录",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 插件数据目录 profiles/ 子目录；可填任意绝对路径（如 Obsidian 仓库下的「画像」文件夹），每个用户一个 <QQ号>.md"
+  },
+  "include_groups": {
+    "description": "为群成员也建画像",
+    "type": "bool",
+    "default": true
+  },
+  "include_webchat": {
+    "description": "网页测试台的对话也计入画像",
+    "type": "bool",
+    "default": false,
+    "hint": "网页测试台没有 QQ 号，画像以会话尾段命名，一般保持关闭"
+  },
+  "min_new_messages": {
+    "description": "触发更新的最少新对话条数",
+    "type": "int",
+    "default": 6,
+    "hint": "同一用户累计这么多条新对话后才考虑更新画像"
+  },
+  "min_interval_minutes": {
+    "description": "同一用户两次更新的最小间隔",
+    "type": "int",
+    "default": 180
+  },
+  "max_per_day": {
+    "description": "每个用户每天最多更新次数",
+    "type": "int",
+    "default": 4
+  },
+  "max_buffer_per_user": {
+    "description": "每人对话缓冲条数上限",
+    "type": "int",
+    "default": 24
+  },
+  "inject_limit_chars": {
+    "description": "聊天时注入画像的最大字数",
+    "type": "int",
+    "default": 400,
+    "hint": "注入的是画像精简版，超出截断"
+  },
+  "quiet_hours": {
+    "description": "画像更新静默时段",
+    "type": "string",
+    "default": "0-6",
+    "hint": "该时段内不调用 LLM 更新画像（注入不受影响）；格式如 0-6 或 2-5,13-14"
+  }
+}
