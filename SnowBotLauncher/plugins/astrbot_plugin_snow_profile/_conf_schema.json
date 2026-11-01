@@ -53,5 +53,50 @@
     "type": "string",
     "default": "0-6",
     "hint": "该时段内不调用 LLM 更新画像（注入不受影响）；格式如 0-6 或 2-5,13-14"
+  },
+  "moral_enabled": {
+    "description": "启用道德评价",
+    "type": "bool",
+    "default": true,
+    "hint": "画像带道德评分（0-100）与佐证记录；恶劣/警戒用户触发态度、延迟与忽略策略"
+  },
+  "moral_initial": {
+    "description": "道德评分初始值",
+    "type": "int",
+    "default": 75
+  },
+  "moral_warn_threshold": {
+    "description": "警戒等级阈值",
+    "type": "int",
+    "default": 70,
+    "hint": "评分低于该值进入警戒：态度冷淡、回复延迟"
+  },
+  "moral_bad_threshold": {
+    "description": "恶劣等级阈值",
+    "type": "int",
+    "default": 40,
+    "hint": "评分低于该值进入恶劣：明显不耐烦、可指责、更高延迟、更多忽略"
+  },
+  "ignore_chance_warn": {
+    "description": "警戒用户群消息忽略概率",
+    "type": "int",
+    "default": 30,
+    "hint": "百分比；@ 机器人和命令不受影响"
+  },
+  "ignore_chance_bad": {
+    "description": "恶劣用户群消息忽略概率",
+    "type": "int",
+    "default": 60
+  },
+  "delay_warn_seconds": {
+    "description": "警戒用户回复延迟（秒）",
+    "type": "int",
+    "default": 12,
+    "hint": "0 = 不延迟；实际延迟在该值上下浮动"
+  },
+  "delay_bad_seconds": {
+    "description": "恶劣用户回复延迟（秒）",
+    "type": "int",
+    "default": 35
   }
 }

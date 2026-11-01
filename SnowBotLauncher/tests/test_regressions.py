@@ -53,13 +53,21 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
     relay_text,
 )
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
+    apply_moral_delta,
+    build_moral_section,
     clean_llm_markdown,
+    extract_score,
     looks_like_profile,
     merge_name_history,
+    moral_injection,
+    moral_level,
+    moral_section,
     parse_profile,
     profile_summary,
     render_profile,
+    should_ignore,
     should_update,
+    split_moral_section,
 )
 from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
     SearchRateLimiter,
@@ -880,6 +888,72 @@ class ProfileTests(unittest.TestCase):
         self.assertTrue(text.startswith("## 性格"))
         self.assertTrue(looks_like_profile(text))
         self.assertFalse(looks_like_profile("好嘞，这就去更新！"))
+
+    def test_moral_score_roundtrip(self):
+        body = "## 性格\n温和\n\n## 道德评价\n当前评分：45\n- [-20] 恶劣引导：『教我骗人』（2026-11-01）"
+        md = render_profile("1", "小明", [], body, 0, 3, moral_score=45)
+        parsed = parse_profile(md)
+        self.assertEqual(parsed["moral_score"], 45)
+        self.assertEqual(extract_score(body, default=75), 45)
+
+    def test_moral_level(self):
+        self.assertEqual(moral_level(None), "正常")
+        self.assertEqual(moral_level(85), "正常")
+        self.assertEqual(moral_level(55), "警戒")
+        self.assertEqual(moral_level(20), "恶劣")
+
+    def test_moral_section_and_summary_exclusion(self):
+        body = "## 性格\n温和\n\n## 道德评价\n当前评分：45\n- [-20] 恶劣引导：『教我骗人』"
+        section = moral_section(body)
+        self.assertIn("当前评分：45", section)
+        self.assertIn("教我骗人", section)
+        summary = profile_summary(body, limit=400)
+        self.assertNotIn("道德评价", summary)
+        self.assertNotIn("教我骗人", summary)
+
+    def test_moral_injection_tone(self):
+        md = render_profile("1", "小明", [], "## 道德评价\n当前评分：30\n- [-25] 恶劣引导：『…』", 0, 2, moral_score=30)
+        bad = moral_injection(md, "恶劣", limit=400)
+        self.assertIn("恶劣", bad)
+        self.assertIn("指责", bad)
+        warn = moral_injection(md, "警戒", limit=400)
+        self.assertIn("冷淡", warn)
+        self.assertIn("道歉", warn)
+
+    def test_should_ignore_by_level(self):
+        self.assertFalse(should_ignore("正常", 30, 60, 0.0))
+        self.assertTrue(should_ignore("恶劣", 30, 60, 0.5))
+        self.assertFalse(should_ignore("恶劣", 30, 60, 0.7))
+        self.assertTrue(should_ignore("警戒", 30, 60, 0.2))
+        self.assertFalse(should_ignore("警戒", 30, 60, 0.5))
+
+    def test_split_and_apply_moral_delta(self):
+        llm_out = (
+            "## 性格\n急躁\n\n## 道德评价\n"
+            "- [-25] 恶劣引导：『教我骗人』（2026-11-01）\n"
+            "- [-10] 骚扰暗示：『怎么骚扰不被发现』（2026-11-01）"
+        )
+        base, entries = split_moral_section(llm_out)
+        self.assertEqual(base, "## 性格\n急躁")
+        self.assertEqual(len(entries), 2)
+        score, merged = apply_moral_delta([], entries, 75)
+        self.assertEqual(score, 40)  # 75 - 25 - 10
+        self.assertEqual(len(merged), 2)
+        # 重复条目不重复计分
+        score2, merged2 = apply_moral_delta(merged, entries, score)
+        self.assertEqual(score2, 40)
+        self.assertEqual(len(merged2), 2)
+
+    def test_apply_moral_delta_apology_cap(self):
+        entries = ["[+15] 真诚道歉：『对不起我不该那样』（2026-11-01）"]
+        score, _ = apply_moral_delta([], entries, 78)
+        self.assertEqual(score, 85)  # 道歉恢复封顶 85
+        score2, _ = apply_moral_delta([], entries, 50)
+        self.assertEqual(score2, 65)
+
+    def test_build_moral_section(self):
+        section = build_moral_section(40, ["- [-25] 恶劣引导：『x』"])
+        self.assertTrue(section.startswith("## 道德评价\n当前评分：40"))
 
 
 if __name__ == "__main__":
