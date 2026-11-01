@@ -38,6 +38,8 @@ from plugins.astrbot_plugin_snow_sleep.library import (  # noqa: E402
     is_recently_active,
     minutes_until,
     parse_hhmm,
+    pick_plan,
+    sleep_start_from_plan,
 )
 from plugins.astrbot_plugin_snow_continuity.library import (  # noqa: E402
     contains_marker,
@@ -882,7 +884,14 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(why, "间隔不足")
         ok, _ = should_update({**state, "count": 4}, now=now, new_count=6, **self.CFG)
         self.assertFalse(ok)
-        ok, why = should_update(state, now=now, new_count=6, **{**self.CFG, "quiet_hours": "0-23"})
+        # 静默时段：用覆盖当前小时的区间（原写死 0-23 会在 23 点漏判）
+        hour = time.localtime().tm_hour
+        ok, why = should_update(
+            state,
+            now=now,
+            new_count=6,
+            **{**self.CFG, "quiet_hours": f"{hour}-{(hour + 1) % 24}"},
+        )
         self.assertFalse(ok)
         self.assertEqual(why, "静默时段")
 
@@ -983,6 +992,43 @@ class SleepGoodnightTests(unittest.TestCase):
         self.assertTrue(is_recently_active(now - 120, now, 5))
         self.assertFalse(is_recently_active(now - 360, now, 5))
         self.assertFalse(is_recently_active(None, now, 5))
+
+    def test_pick_plan_from_vlife(self):
+        plans = {
+            "schema_version": 1,
+            "plans": {
+                "2026-11-01::小雪": {"persona_id": "小雪", "timeline": []},
+                "2026-11-01::别人": {"persona_id": "别人", "timeline": []},
+                "2026-10-31::小雪": {"persona_id": "小雪", "timeline": []},
+            },
+        }
+        plan = pick_plan(plans, "2026-11-01", "小雪")
+        self.assertEqual(plan["persona_id"], "小雪")
+        self.assertIsNone(pick_plan(plans, "2026-11-02", "小雪"))
+        # 未指定人格且今天只有一个日程时采用
+        single = {"plans": {"2026-11-01::小雪": {"persona_id": "小雪"}}}
+        self.assertEqual(pick_plan(single, "2026-11-01")["persona_id"], "小雪")
+        # 多日程且无匹配人格 → 不采用
+        self.assertIsNone(pick_plan(plans, "2026-11-01", "未知"))
+
+    def test_sleep_start_from_vlife_plan(self):
+        plan = {
+            "persona_id": "小雪",
+            "timeline": [
+                {"start": "08:00", "end": "12:00", "state": "available", "activity": "上课"},
+                {"start": "23:30", "end": "23:59", "state": "social", "activity": "夜聊"},
+                {"start": "00:00", "end": "07:30", "state": "sleep", "activity": "睡觉"},
+                {"start": "13:00", "end": "14:00", "state": "sleep", "activity": "午休"},
+            ],
+        }
+        # 取最长的睡眠槽（凌晨 7.5 小时 > 午休 1 小时）
+        self.assertEqual(sleep_start_from_plan(plan, "小雪"), "00:00")
+        # 人格不匹配 → None
+        self.assertIsNone(sleep_start_from_plan(plan, "别人"))
+        # 无睡眠槽 → None
+        empty = {"persona_id": "小雪", "timeline": [{"start": "08:00", "end": "09:00", "state": "available", "activity": "x"}]}
+        self.assertIsNone(sleep_start_from_plan(empty, "小雪"))
+        self.assertIsNone(sleep_start_from_plan({}, "小雪"))
 
 
 if __name__ == "__main__":
