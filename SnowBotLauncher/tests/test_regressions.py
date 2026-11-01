@@ -74,6 +74,20 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     should_update,
     split_moral_section,
 )
+from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
+    book_chunk,
+    event_time_for_date,
+    experience_summary,
+    parse_arxiv_entries,
+    pick_arxiv_paper,
+    pick_book,
+    pick_event_type,
+    pick_gutendex_book,
+    quota_allow,
+    quota_record,
+    week_key,
+)
+
 from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
     SearchRateLimiter,
     has_explicit_search_request,
@@ -838,7 +852,7 @@ class MessengerTests(unittest.TestCase):
 
 class ProfileTests(unittest.TestCase):
     CFG = dict(
-        min_new_messages=6, min_interval_minutes=180, max_per_day=4, quiet_hours="0-6"
+        min_new_messages=6, min_interval_minutes=180, max_per_day=4, quiet_hours=""
     )
 
     def test_render_parse_roundtrip(self):
@@ -966,6 +980,126 @@ class ProfileTests(unittest.TestCase):
     def test_build_moral_section(self):
         section = build_moral_section(40, ["- [-25] 恶劣引导：『x』"])
         self.assertTrue(section.startswith("## 道德评价\n当前评分：40"))
+
+
+EXPERIENCE_ATOM = """<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <id>http://arxiv.org/abs/2401.00001v1</id>
+    <title>  A Study of Exoplanet Atmospheres </title>
+    <summary>  We analyse exoplanet atmospheres using JWST data.  </summary>
+    <author><name>Alice Chen</name></author>
+    <author><name>Bob Li</name></author>
+    <link href="http://arxiv.org/abs/2401.00001v1" rel="alternate"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2401.00002v1</id>
+    <title>Duplicate Skip Test</title>
+    <summary>Second paper summary.</summary>
+    <author><name>Carol</name></author>
+  </entry>
+</feed>
+"""
+
+GUTENDEX_PAYLOAD = {
+    "count": 2,
+    "results": [
+        {
+            "id": 27166,
+            "title": "吶喊",
+            "formats": {
+                "text/html": "https://www.gutenberg.org/ebooks/27166.html.images",
+                "text/plain; charset=utf-8": "https://www.gutenberg.org/cache/epub/27166/pg27166.txt",
+            },
+        },
+        {
+            "id": 24042,
+            "title": "徬徨",
+            "formats": {
+                "application/epub+zip": "https://www.gutenberg.org/ebooks/24042.epub.images",
+            },
+        },
+    ],
+}
+
+
+class ExperienceTests(unittest.TestCase):
+    def test_week_key_format(self):
+        self.assertRegex(week_key(0), r"^\d{4}-W\d{2}$")
+
+    def test_event_time_window_and_chance(self):
+        self.assertIsNone(event_time_for_date("2026-11-02", "10:00-21:00", 0.0))
+        self.assertIsNone(event_time_for_date("2026-11-02", "bad-window", 1.0))
+        result = event_time_for_date("2026-11-02", "10:00-21:00", 1.0)
+        self.assertIsNotNone(result)
+        hour, minute = result
+        self.assertTrue(10 * 60 <= hour * 60 + minute <= 21 * 60)
+        # 同一天种子相同 → 触发时刻固定
+        self.assertEqual(result, event_time_for_date("2026-11-02", "10:00-21:00", 1.0))
+
+    def test_quota_and_week_reset(self):
+        limits = {"book": 2, "research": 3, "paper": 1}
+        quotas = quota_record(quota_record({}, "2026-W44", "paper"), "2026-W44", "paper")
+        allowed, remaining = quota_allow(quotas, "2026-W44", "paper", limits)
+        self.assertFalse(allowed)
+        self.assertEqual(remaining, 0)
+        allowed, _ = quota_allow(quotas, "2026-W45", "paper", limits)
+        self.assertTrue(allowed)  # 新周重置
+        quotas = quota_record(quotas, "2026-W45", "paper")
+        self.assertEqual(set(quotas), {"2026-W45"})  # 跨周旧键被清理
+
+    def test_pick_event_type_exhausted(self):
+        limits = {"book": 1, "research": 1, "paper": 1}
+        quotas = {"2026-W44": {"book": 1, "research": 1, "paper": 1}}
+        self.assertIsNone(pick_event_type(quotas, "2026-W44", limits, 0.5))
+        # book 已用完，剩余 research(1) 和 paper(1)：roll 0.9 → 落在 paper
+        quotas = {"2026-W44": {"book": 9}}
+        self.assertEqual(
+            pick_event_type(quotas, "2026-W44", limits, 0.9), "paper"
+        )
+
+    def test_pick_book_prefers_unread_then_partial(self):
+        files = [{"name": "a.txt", "path": "a"}, {"name": "b.txt", "path": "b"}]
+        self.assertEqual(pick_book(files, {})["name"], "a.txt")  # 全没读过：按名字序
+        partial = {"b.txt": {"offset": 100, "finished": False, "last_ts": 5}}
+        self.assertEqual(pick_book([files[1]], partial)["name"], "b.txt")  # 只剩读了一半的 → 续读
+        done = {"a.txt": {"finished": True}, "b.txt": {"finished": True}}
+        self.assertIsNone(pick_book(files, done))
+
+    def test_book_chunk_offset_and_finish(self):
+        text = "字" * 100
+        chunk, offset = book_chunk(text, 0, chunk=60)
+        self.assertEqual(len(chunk), 60)
+        self.assertEqual(offset, 60)
+        chunk, offset = book_chunk(text, offset, chunk=60)
+        self.assertEqual(len(chunk), 40)
+        self.assertEqual(offset, 100)
+
+    def test_parse_arxiv_and_pick(self):
+        entries = parse_arxiv_entries(EXPERIENCE_ATOM)
+        self.assertEqual(len(entries), 2)
+        self.assertEqual(entries[0]["title"], "A Study of Exoplanet Atmospheres")
+        self.assertIn("Alice Chen", entries[0]["authors"])
+        first = pick_arxiv_paper(entries, set())
+        self.assertEqual(pick_arxiv_paper(entries, {first["title"]})["title"], "Duplicate Skip Test")
+        self.assertEqual(parse_arxiv_entries("not xml"), [])
+
+    def test_pick_gutendex_txt_only(self):
+        picked = pick_gutendex_book(GUTENDEX_PAYLOAD, set())
+        self.assertEqual(picked, ("27166", "吶喊"))  # 只选有 text/plain 的
+        self.assertIsNone(pick_gutendex_book(GUTENDEX_PAYLOAD, {"27166"}))
+
+    def test_experience_summary_truncates(self):
+        records = [
+            {"title": "吶喊", "type": "book", "gist": "读到闰土"},
+            {"title": "论文《X》", "type": "paper", "gist": "讲了系外行星"},
+        ]
+        summary = experience_summary(records, limit=400)
+        self.assertTrue(summary.startswith("[真实经历]"))
+        self.assertIn("吶喊", summary)
+        long = experience_summary(records, limit=30)
+        self.assertLessEqual(len(long), 33)
+        self.assertEqual(experience_summary([], 400), "")
 
 
 class SleepGoodnightTests(unittest.TestCase):
