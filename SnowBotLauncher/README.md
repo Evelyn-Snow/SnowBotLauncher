@@ -41,20 +41,20 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 
 ### 本机扩展插件
 
-以下插件源码在 `plugins/`，安装到 AstrBot 后生效（不随启动器安装包分发）：
+以下插件源码在 `plugins/`，**随启动器安装包分发**，可在「增强配置 → 扩展插件」一键安装（优先从插件市场拉取，失败自动改用内置版本）；也已作为独立仓库发布到 AstrBot 插件市场，可直接在 AstrBot 插件市场搜索安装：
 
-| 插件 | 作用 |
-|---|---|
-| `snow_sleep` | 作息：默认 00:00–07:00 休息，不回复、不被动读群消息 |
-| `snow_continuity` | 连续对话接话：互动后“你……”和图片确定性回复，不受读空气概率影响 |
-| `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 |
-| `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 |
-| `bili_vision` | B站视频画面理解：缩略图抽帧 + 视觉模型，不下载完整视频 |
-| `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 |
-| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 |
-| `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 |
+| 插件 | 作用 | 仓库 |
+|---|---|---|
+| `snow_sleep` | 作息：默认 00:00–07:00 休息，不回复、不被动读群消息 | [astrbot_plugin_snow_sleep](https://github.com/Evelyn-Snow/astrbot_plugin_snow_sleep) |
+| `snow_continuity` | 连续对话接话：互动后“你……”和图片确定性回复，不受读空气概率影响 | [astrbot_plugin_snow_continuity](https://github.com/Evelyn-Snow/astrbot_plugin_snow_continuity) |
+| `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 | [astrbot_plugin_search_manners](https://github.com/Evelyn-Snow/astrbot_plugin_search_manners) |
+| `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 | [astrbot_plugin_share_card](https://github.com/Evelyn-Snow/astrbot_plugin_share_card) |
+| `bili_vision` | B站视频画面理解：缩略图抽帧 + 视觉模型，不下载完整视频 | [astrbot_plugin_bili_vision](https://github.com/Evelyn-Snow/astrbot_plugin_bili_vision) |
+| `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 | [astrbot_plugin_snow_imagebox](https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox) |
+| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
+| `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
 
-格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
+插件发布流程见 [docs/publishing.md](docs/publishing.md)；配置包格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
 ## 项目结构
 
@@ -177,7 +177,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.5.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.6.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -186,7 +186,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.5.exe
+installer\output\SnowBotLauncher-Setup-1.5.6.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式

@@ -8,8 +8,8 @@
   "library_path": {
     "description": "图库目录",
     "type": "string",
-    "default": "~/Documents/BotMemory/表情包",
-    "hint": "图片存放在该目录的 images 子目录，index.json 记录描述、标签和使用次数"
+    "default": "",
+    "hint": "留空 = 插件自己的数据目录（data/plugin_data/astrbot_plugin_snow_imagebox）；填任意绝对路径则存到那里。images 子目录放图片，index.json 记录描述、标签和使用次数"
   },
   "owner_session": {
     "description": "所有者私聊会话",

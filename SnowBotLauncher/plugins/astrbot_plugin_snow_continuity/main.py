@@ -9,14 +9,17 @@
 - 发送者注意力分达标（GCP 注意力档案兜底）
 - 发送者在最近窗口内戳过机器人（戳一戳不登记注意力，这里补上）
 
-依赖 GCP 内部的 ProbabilityManager / AttentionManager；GCP 未安装时静默停用。
+依赖 group_chat_plus（astrbot_plugin_group_chat_plus）内部的
+ProbabilityManager / AttentionManager，经插件注册表动态定位；
+GCP 未安装时静默停用。
 """
 
 from __future__ import annotations
 
+import importlib
 import time
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -25,6 +28,7 @@ from astrbot.core.message.components import Image, Poke
 from .library import should_boost
 
 NAME = "astrbot_plugin_snow_continuity"
+GCP_PLUGIN = "astrbot_plugin_group_chat_plus"
 
 
 class SnowContinuity(Star):
@@ -49,14 +53,16 @@ class SnowContinuity(Star):
 
     # ---------------- GCP 内部接口 ----------------
     def _gcp(self):
-        """按需导入 GCP 的概率/注意力管理器；未安装或重载后自动恢复。"""
+        """经插件注册表定位 GCP 的概率/注意力管理器；未安装或重载后自动恢复。"""
         try:
-            from data.plugins.astrbot_plugin_group_chat_plus.utils import (  # noqa: PLC0415
-                attention_manager,
-                probability_manager,
-            )
-
-            return probability_manager, attention_manager
+            meta = self.context.get_registered_star(GCP_PLUGIN)
+            plugin = getattr(meta, "star_cls", None) if meta else None
+            module = getattr(meta, "module", None) or type(plugin).__module__
+            if plugin is None or not module:
+                raise RuntimeError("group_chat_plus 未注册")
+            package = str(module).rsplit(".", 1)[0]
+            utils = importlib.import_module(f"{package}.utils")
+            return utils.probability_manager, utils.attention_manager
         except Exception as exc:
             if not self._gcp_warned:
                 self._gcp_warned = True
@@ -75,7 +81,11 @@ class SnowContinuity(Star):
         now = time.time()
         poke_window = max(60, int(self.conf.get("poke_window_seconds") or 120))
         interaction_window = self._interaction_window()
-        for store, window in ((self._pokes, poke_window), (self._interactions, interaction_window)):
+        stores = (
+            (self._pokes, poke_window),
+            (self._interactions, interaction_window),
+        )
+        for store, window in stores:
             for key, ts in list(store.items()):
                 if now - ts > window * 4:
                     store.pop(key, None)

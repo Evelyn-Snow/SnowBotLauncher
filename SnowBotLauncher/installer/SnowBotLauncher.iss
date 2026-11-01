@@ -1,5 +1,5 @@
 #define MyAppName "SnowBotLauncher"
-#define MyAppVersion "1.5.5"
+#define MyAppVersion "1.5.6"
 #define MyAppExeName "SnowBotLauncher.exe"
 #define MyAppId "{{3F6D2A9B-1C4E-4D7A-8B2F-5E9C7D1A6B30}"
 
@@ -30,6 +30,7 @@ Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 Source: "..\dist\SnowBotLauncher\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs createallsubdirs
+Source: "..\plugins\*"; DestDir: "{app}\plugins"; Excludes: "__pycache__,*.pyc"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -41,3 +42,4 @@ Filename: "{app}\{#MyAppExeName}"; Description: "启动 {#MyAppName}"; Flags: no
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\__pycache__"
+Type: filesandordirs; Name: "{app}\plugins"

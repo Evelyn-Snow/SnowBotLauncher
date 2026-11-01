@@ -26,11 +26,6 @@
     "type": "int",
     "default": 6000
   },
-  "max_search_results": {
-    "description": "笔记搜索最多返回条数",
-    "type": "int",
-    "default": 5
-  },
   "auto_diary_enabled": {
     "description": "自动写日记",
     "type": "bool",

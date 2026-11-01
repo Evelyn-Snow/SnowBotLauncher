@@ -14,7 +14,7 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -271,7 +271,8 @@ class ObsidianNotes(Star):
                 score = sum(lowered.count(term.lower()) for term in terms)
                 if score <= 0:
                     continue
-                pos = min((lowered.find(term.lower()) for term in terms if term.lower() in lowered), default=0)
+                hits = [lowered.find(term.lower()) for term in terms if term.lower() in lowered]
+                pos = min(hits, default=0)
                 snippet = text[max(0, pos - 80): pos + 220].replace("\n", " ")
                 scored.append((score, path, snippet))
             scored.sort(key=lambda item: item[0], reverse=True)

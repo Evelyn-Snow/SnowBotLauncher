@@ -29,6 +29,7 @@ from .group import GroupMixin
 from .behavior import BehaviorMixin
 from .vision import VisionMixin
 from .storage import StorageMixin
+from .extend import ExtendMixin
 
 
 class EnhanceTab(
@@ -41,6 +42,7 @@ class EnhanceTab(
     VisionMixin,
     SearchMixin,
     StorageMixin,
+    ExtendMixin,
     QWidget,
 ):
     def __init__(self, cfg: dict, dashboard: dict | None = None):
@@ -131,7 +133,7 @@ class EnhanceTab(
         if busy:
             self._set_status("处理中，请稍候…")
 
-    def _run_task(self, fn, on_done, text: str):
+    def _run_task(self, fn, on_done, text: str, on_failed=None):
         if self.worker and self.worker.isRunning():
             self._set_status("已有操作正在进行，请稍候…", False)
             return
@@ -139,7 +141,7 @@ class EnhanceTab(
         self._set_status(text)
         worker = Worker(fn)
         worker.done.connect(lambda result: self._task_done(result, on_done))
-        worker.failed.connect(self._task_failed)
+        worker.failed.connect(lambda message: self._task_failed(message, on_failed))
         worker.finished.connect(lambda: setattr(self, "worker", None))
         self.worker = worker
         worker.start()
@@ -152,9 +154,14 @@ class EnhanceTab(
             self._set_status(f"失败：{exc}", False)
             QMessageBox.warning(self, "操作失败", str(exc))
 
-    def _task_failed(self, message: str):
+    def _task_failed(self, message: str, on_failed=None):
         self._set_busy(False)
         self._set_status(f"失败：{message}", False)
+        if on_failed is not None:
+            try:
+                on_failed(message)
+            except Exception:
+                pass
         QMessageBox.warning(self, "操作失败", message)
 
     # ---------------- 界面 ----------------
@@ -196,6 +203,7 @@ class EnhanceTab(
         self.tabs.addTab(scroll_page(self._build_vision_tab(), 520), "视觉")
         self.tabs.addTab(scroll_page(self._build_search_tab(), 440), "搜索")
         self.tabs.addTab(scroll_page(self._build_storage_tab(), 500), "存储")
+        self.tabs.addTab(scroll_page(self._build_extend_tab(), 420), "扩展插件")
         outer.addWidget(self.tabs, 1)
 
         self.status = QLabel("填写密码并连接 AstrBot 后使用；密码不会保存。")
@@ -275,6 +283,7 @@ class EnhanceTab(
             self._load_vision_ui()
             self._load_search_ui()
             self._load_storage_ui()
+            self._load_extend_ui()
             self._set_status(
                 "已连接 AstrBot，平台：" + (platforms[0] if platforms else "未找到"), True
             )

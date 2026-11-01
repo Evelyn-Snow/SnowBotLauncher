@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 
 from ....astrbot.client import ApiError, AstrBotClient, get_path, set_path, zip_folder
 from ....core.config import save_config
-from ....core.paths import DATA_DIR, PERSONAS_DIR
+from ....core.paths import APP_DIR, DATA_DIR, PERSONAS_DIR
 from ....core.persona_files import (
     import_persona_file,
     list_persona_files,
@@ -57,6 +57,7 @@ from ...widgets import scroll_page
 __all__ = [
     "ApiError",
     "AstrBotClient",
+    "APP_DIR",
     "DATA_DIR",
     "EDGE_VOICES",
     "MEME_EXT",

@@ -15,7 +15,7 @@ from typing import Any
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
-from astrbot.api.star import Context, Star
+from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.message.components import Image, Reply
 from astrbot.core.message.message_event_result import MessageChain
@@ -57,11 +57,18 @@ class SnowImageBox(Star):
         return bool(self.conf.get("enabled", True))
 
     def _library(self) -> ImageLibrary:
-        raw = str(self.conf.get("library_path") or DEFAULT_LIBRARY).strip()
-        path = Path(os.path.expandvars(raw)).expanduser()
-        if not path.is_absolute():
-            path = Path.home() / "Documents" / "BotMemory" / path
-        root = str(path.resolve())
+        # 未配置 library_path 时落到插件自己的数据目录；填了则以用户为准。
+        raw = str(self.conf.get("library_path") or "").strip()
+        if raw:
+            path = Path(os.path.expandvars(raw)).expanduser()
+            if not path.is_absolute():
+                path = Path.home() / "Documents" / "BotMemory" / path
+        else:
+            try:
+                path = Path(StarTools.get_data_dir(NAME))
+            except Exception:
+                path = Path(os.path.expandvars(DEFAULT_LIBRARY)).expanduser()
+        root = str(Path(path).resolve())
         if self._lib is None or self._lib_root != root:
             self._lib = ImageLibrary(
                 root,
@@ -214,7 +221,8 @@ class SnowImageBox(Star):
             "- 调用工具拿到结果后，基于结果继续往下聊；"
             "不要原样重复工具调用前已经说过的话。"
         )
-        if has_image and bool(self.conf.get("auto_save_owner_only", True)) and not self._is_owner(event):
+        owner_only = bool(self.conf.get("auto_save_owner_only", True))
+        if has_image and owner_only and not self._is_owner(event):
             lines.append(
                 "- 这个会话不是所有者，你自己不要主动收藏这里的图片；"
                 "只有所有者明确让你保存时才调用保存工具。"

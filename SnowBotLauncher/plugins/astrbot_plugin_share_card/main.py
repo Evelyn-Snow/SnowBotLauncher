@@ -7,7 +7,7 @@ QQ 里分享链接时消息是 Json 卡片（没有纯文本），模型完全�
 
 from __future__ import annotations
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig

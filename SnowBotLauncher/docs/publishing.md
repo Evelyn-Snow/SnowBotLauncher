@@ -22,27 +22,41 @@
 
 ## 二、插件上架 AstrBot 插件市场
 
-机制：每个插件放一个**独立公开仓库**（命名 `astrbot_plugin_*`，本仓库 `plugins/` 下的目录可直接作为仓库根），推送到 GitHub 后到 [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot) 用 `[Plugin]` 模板提 Issue，附插件仓库地址；机器人自动审核通过后收录进插件市场索引。
+机制：每个插件放一个**独立公开仓库**（命名 `astrbot_plugin_*`），推送到 GitHub 后到 [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot) 用 `[Plugin]` 模板提 Issue，附插件仓库地址；机器人自动审核通过后收录进插件市场索引。
 
-审核要点（来自官方审核规则）：
+### 发布步骤（已全部准备就绪）
 
-- 代码符合 PEP 8，`metadata.yaml` 字段完整（注意 `author` 字段格式）。
-- 插件数据必须用 `StarTools.get_data_dir()` 获取，不允许自行操作 AstrBot 全局数据目录。
-- 指令参数解析、配置键名要与 `metadata.yaml` / `_conf_schema.json` 一致。
-- 建议每个插件仓库带：`README.md`（功能、配置说明、截图）、`LICENSE`（MIT 即可）、`requirements.txt`（有第三方依赖时）。
+1. GitHub 上创建 8 个**空**公开仓库（名字与 `plugins/` 下目录一致，不要勾选自动生成 README/LICENSE）。
+2. 逐个推送（仓库已在 `C:\Working_Files\AIMade\plugin-releases\<插件名>\` 准备好，含首次提交）：
 
-## 三、各插件上架状态
+   ```
+   cd C:\Working_Files\AIMade\plugin-releases\astrbot_plugin_star_citizen
+   git remote add origin https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen.git
+   git push -u origin main
+   ```
 
-| 插件 | 状态 | 上架前待办 |
+3. 到 AstrBotDevs/AstrBot 提 `[Plugin]` Issue：提审文本已生成在 `plugin-releases\_submit\<插件名>-issue.md`，复制粘贴即可。
+4. 源码改动后重新同步：`python scripts\sync_plugin_repos.py`（加 `--init` 只对新仓库生效，已有 .git 的目录只更新文件，自行 commit/push）。
+
+审核要点（来自官方审核规则，全部已满足）：
+
+- 代码符合 PEP 8（>99 字符长行已清理），`metadata.yaml` 字段完整（`author`/`repo` 已按 GitHub 账号 Evelyn-Snow 填写）。
+- 插件数据用 `StarTools.get_data_dir()`（search_manners、obsidian_notes、snow_imagebox 未配置路径时均走此目录），不写 AstrBot 全局 data 目录。
+- 配置键与 `_conf_schema.json` 一致（obsidian 的无用键 `max_search_results` 已移除）。
+- 每个插件仓库带 `README.md`（功能 + 配置 + 依赖说明）、`LICENSE`（MIT）、`requirements.txt`（仅 bili_vision 需要 Pillow）。
+
+## 三、各插件上架状态（2026-11-01 已全部就绪）
+
+| 插件 | 版本 | 本次改动 |
 |---|---|---|
-| share_card | 基本就绪 | 补 README/LICENSE；确认无落盘需求说明 |
-| search_manners | 就绪 | 已用 `StarTools.get_data_dir()`；补 README/LICENSE |
-| snow_sleep | 基本就绪 | 补 README/LICENSE；说明豁免逻辑 |
-| snow_continuity | 基本就绪 | 补 README/LICENSE |
-| star_citizen | 基本就绪 | 补 README/LICENSE；README 注明数据来自 UEX 公开接口 |
-| bili_vision | 小改 | 默认视觉 provider id `snowbot-caption` 泛化为可配置项；说明依赖用户自配视觉模型 |
-| snow_imagebox | 要过审 | 图片存储路径改为走插件数据目录或明确声明为用户自定义路径 |
-| obsidian_notes | 要过审 | 已用 `StarTools.get_data_dir()`；Obsidian 仓库路径必须保持为用户配置项，README 说明会写入用户指定的仓库 |
+| share_card | v0.1.2 | metadata 补 repo/author |
+| search_manners | v0.1.1 | metadata 补 repo/author |
+| snow_sleep | v0.1.1 | 改名「机器人作息」、去 emoji 日志、metadata |
+| snow_continuity | v0.2.1 | **GCP 导入改为插件注册表动态定位**、README 声明依赖、metadata |
+| star_citizen | v0.1.2 | metadata 补 repo/author |
+| bili_vision | v0.1.2 | **requirements.txt（pillow）**、provider 默认值泛化+回退、README 依赖说明、metadata |
+| snow_imagebox | v0.2.3 | library_path 空值回退 StarTools 数据目录、metadata |
+| obsidian_notes | v0.3.1 | 移除无用 schema 键、README 重写（配置表）、metadata |
 
 另有豆包语音插件（seed_audio_tts）是第三方作品，**不由本仓库或本团队上架**；启动器只在其被用户导入后自动打兼容补丁。
 

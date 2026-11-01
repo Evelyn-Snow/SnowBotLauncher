@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 

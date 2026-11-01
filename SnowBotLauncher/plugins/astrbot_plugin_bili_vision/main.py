@@ -10,7 +10,7 @@ import asyncio
 import shutil
 import tempfile
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -26,9 +26,17 @@ class BiliVision(Star):
         self.conf = config
 
     def _vision_provider(self):
-        pid = str(self.conf.get("vision_provider_id") or "snowbot-caption").strip()
+        pid = str(self.conf.get("vision_provider_id") or "").strip()
+        if pid:
+            try:
+                provider = self.context.get_provider_by_id(pid)
+                if provider is not None:
+                    return provider
+            except Exception:
+                pass
+        # 未配置或配置的 id 不存在时，回退到当前使用中的聊天提供商。
         try:
-            provider = self.context.get_provider_by_id(pid)
+            provider = self.context.get_using_provider()
             if provider is not None:
                 return provider
         except Exception:
@@ -95,7 +103,9 @@ class BiliVision(Star):
                 workdir,
                 cols=max(2, min(5, int(self.conf.get("grid_cols") or 3))),
                 rows=max(2, min(5, int(self.conf.get("grid_rows") or 3))),
-                min_brightness=max(0.0, min(100.0, float(self.conf.get("min_brightness") or 20.0))),
+                min_brightness=max(
+                    0.0, min(100.0, float(self.conf.get("min_brightness") or 20.0))
+                ),
             )
             description = await self._describe(info, sheet)
             if not description:

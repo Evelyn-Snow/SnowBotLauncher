@@ -2,8 +2,8 @@
   "vision_provider_id": {
     "description": "视觉模型提供商 ID",
     "type": "string",
-    "default": "snowbot-caption",
-    "hint": "用来描述视频画面的视觉模型；默认 snowbot-caption（GLM-4V-Flash，免费）"
+    "default": "",
+    "hint": "用来描述视频画面的视觉模型；留空时自动使用当前对话使用中的模型（推荐配置 GLM-4V 等免费视觉模型省 token）"
   },
   "grid_cols": {
     "description": "画面拼图列数",

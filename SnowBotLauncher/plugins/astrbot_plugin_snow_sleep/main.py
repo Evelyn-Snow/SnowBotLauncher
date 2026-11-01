@@ -1,4 +1,4 @@
-"""小雪的作息：00:00-07:00 进入休息，不回复、不处理、不被动读群消息。
+"""机器人作息：00:00-07:00 进入休息，不回复、不处理、不被动读群消息。
 
 实现为两层：
 1. 事件守卫（最高优先级）：休息窗口内对非命令消息直接 stop_event，
@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 
-from astrbot import logger
+from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
@@ -73,7 +73,7 @@ class SnowSleep(Star):
         ok = self._set_lm_capture(not sleeping)
         self._sleep_applied = sleeping
         logger.info(
-            f"[{NAME}] {'🌙 进入休息' if sleeping else '☀️ 苏醒'}"
+            f"[{NAME}] {'进入休息' if sleeping else '苏醒'}"
             f"（LivingMemory 被动捕获{'已暂停' if sleeping else '已恢复'}{'' if ok else '，同步失败'}）"
         )
 
@@ -115,7 +115,7 @@ class SnowSleep(Star):
             return
         event.stop_event()
         logger.info(
-            f"[{NAME}] 🌙 休息时间，已拦截 {platform} 消息"
+            f"[{NAME}] 休息时间，已拦截 {platform} 消息"
             f"（发送者：{event.get_sender_name()}）"
         )
 
