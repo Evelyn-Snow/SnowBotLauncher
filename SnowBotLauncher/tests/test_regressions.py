@@ -32,8 +32,11 @@ from plugins.astrbot_plugin_star_citizen.library import (  # noqa: E402
     _match,
 )
 from plugins.astrbot_plugin_snow_sleep.library import (  # noqa: E402
+    in_goodnight_window,
     in_sleep_window,
     is_command_text,
+    is_recently_active,
+    minutes_until,
     parse_hhmm,
 )
 from plugins.astrbot_plugin_snow_continuity.library import (  # noqa: E402
@@ -954,6 +957,32 @@ class ProfileTests(unittest.TestCase):
     def test_build_moral_section(self):
         section = build_moral_section(40, ["- [-25] 恶劣引导：『x』"])
         self.assertTrue(section.startswith("## 道德评价\n当前评分：40"))
+
+
+class SleepGoodnightTests(unittest.TestCase):
+    def test_minutes_until_cross_midnight(self):
+        # 23:57 到次日 00:00 还差 3 分钟
+        self.assertEqual(minutes_until("00:00", 23 * 60 + 57), 3)
+        # 同日 22:58 到 23:00 还差 2 分钟
+        self.assertEqual(minutes_until("23:00", 22 * 60 + 58), 2)
+        # 恰好在休息点 = 0
+        self.assertEqual(minutes_until("00:00", 0), 0)
+
+    def test_goodnight_window(self):
+        # 23:56，休息 00:00，窗口 5 分钟 → 在窗口内
+        self.assertTrue(in_goodnight_window(23 * 60 + 56, "00:00", 5))
+        # 23:50 → 还差 10 分钟，不在窗口
+        self.assertFalse(in_goodnight_window(23 * 60 + 50, "00:00", 5))
+        # 已过休息点（00:01，until=1439）不在窗口
+        self.assertFalse(in_goodnight_window(1, "00:00", 5))
+        # 窗口恰好为 0 之前的最后一分钟
+        self.assertTrue(in_goodnight_window(23 * 60 + 59, "00:00", 5))
+
+    def test_recently_active(self):
+        now = time.time()
+        self.assertTrue(is_recently_active(now - 120, now, 5))
+        self.assertFalse(is_recently_active(now - 360, now, 5))
+        self.assertFalse(is_recently_active(None, now, 5))
 
 
 if __name__ == "__main__":
