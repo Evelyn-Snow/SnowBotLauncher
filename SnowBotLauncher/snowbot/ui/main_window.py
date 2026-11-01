@@ -1,5 +1,7 @@
 """主窗口：组装各页面、托盘与全局状态。"""
 
+from pathlib import Path
+
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
@@ -18,8 +20,8 @@ from PySide6.QtWidgets import (
 )
 
 from snowbot.core.config import astrbot_dashboard_info, is_admin, load_config, save_config
-from snowbot.core.paths import APP_NAME, APP_VERSION, CONFIG_PATH, LOG_DIR
-from snowbot.core.services import ServiceManager
+from snowbot.core.paths import APP_NAME, APP_VERSION, CONFIG_PATH, DATA_DIR, LOG_DIR
+from snowbot.core.services import QqHealthMonitor, ServiceManager
 from snowbot.ui.pages.about import AboutMixin
 from snowbot.ui.pages.console import ConsoleMixin
 from snowbot.ui.pages.enhance import EnhanceTab
@@ -38,6 +40,9 @@ class LauncherWindow(
         if not CONFIG_PATH.exists():
             save_config(self.cfg)
         self.manager = ServiceManager(self.cfg)
+        self.health = QqHealthMonitor(
+            DATA_DIR, Path(str(self.cfg.get("napcat_dir") or "")) / "logs"
+        )
         self.tray = None
         self.last_logs = {}
         self.token_visible = False

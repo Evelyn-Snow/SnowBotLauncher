@@ -114,6 +114,198 @@ def tail_text(path: Path, max_bytes: int = 80000, max_lines: int = 700) -> str:
         return ""
 
 
+class QqHealthMonitor:
+    """QQ/NapCat 掉线监控：区分「WS 抖动」与「QQ 真掉线」。
+
+    - 主动停止 NapCat 不算掉线；
+    - NapCat 日志里出现 `KickedOffLine` / `账号状态变更为离线` 是确凿的登录失效（需重新扫码）；
+    - 仅 6199 连接断开多半是反向 WS 抖动，NapCat 会 30 秒自动重连，不算掉线；
+    - 掉线/恢复/QQ 版本变化都写进 qq_health.json，便于统计频率。
+    """
+
+    CONFIRM_TICKS = 2
+    OFFLINE_MARK_RE = re.compile(r"KickedOffLine|账号状态变更为离线")
+    LOG_TIME_RE = re.compile(r"(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})")
+
+    def __init__(self, data_dir: Path, napcat_log_dir: Path | None = None):
+        self.data_dir = Path(data_dir)
+        self.napcat_log_dir = Path(napcat_log_dir) if napcat_log_dir else None
+        self.events_path = self.data_dir / "qq_health.json"
+        self._online: bool | None = None
+        self._down_ticks = 0
+        self._offline_since: float | None = None
+        self._last_version = ""
+        self._last_marker_ts = 0.0
+        self._events: list[dict] = []
+        self._load()
+
+    def _load(self) -> None:
+        try:
+            data = json.loads(self.events_path.read_text(encoding="utf-8"))
+            self._events = data.get("events", [])[-200:]
+            self._last_version = str(data.get("qq_version") or "")
+        except Exception:
+            self._events = []
+
+    def _save(self) -> None:
+        try:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            self.events_path.write_text(
+                json.dumps(
+                    {"qq_version": self._last_version, "events": self._events[-200:]},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    def napcat_offline_marker(self) -> float:
+        """读最新 NapCat 日志尾部，返回最后一次「登录失效」的时间戳（0 表示没有）。
+
+        只读文件尾部 64KB，开销很小；`反向WebSocket 连接意外关闭` 不算（那是抖动，会自动重连）。
+        """
+        if self.napcat_log_dir is None or not self.napcat_log_dir.is_dir():
+            return 0.0
+        try:
+            logs = sorted(
+                self.napcat_log_dir.glob("*.log"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if not logs:
+                return 0.0
+            newest = logs[0]
+            size = newest.stat().st_size
+            with open(newest, "rb") as f:
+                f.seek(max(0, size - 65536))
+                tail = f.read().decode("utf-8", "ignore")
+        except Exception:
+            return 0.0
+        year = time.localtime().tm_year
+        for line in reversed(tail.splitlines()):
+            if not self.OFFLINE_MARK_RE.search(line):
+                continue
+            match = self.LOG_TIME_RE.search(line)
+            if not match:
+                continue
+            month, day, hour, minute, sec = (int(g) for g in match.groups())
+            try:
+                return time.mktime((year, month, day, hour, minute, sec, 0, 0, -1))
+            except Exception:
+                return 0.0
+        return 0.0
+
+    def qrcode_waiting(self, within_minutes: int = 30) -> bool:
+        """NapCat 正在等扫码：cache/qrcode.png 在最近 N 分钟内被刷新过。
+
+        未登录时 NapCat 会周期性重写这个二维码文件；登录后就不再更新。
+        """
+        if self.napcat_log_dir is None:
+            return False
+        try:
+            qr = self.napcat_log_dir.parent / "cache" / "qrcode.png"
+            if not qr.exists():
+                return False
+            age = time.time() - qr.stat().st_mtime
+            return 0 <= age <= max(1, int(within_minutes)) * 60
+        except Exception:
+            return False
+
+    def update(
+        self,
+        *,
+        connected: bool,
+        napcat_running: bool,
+        qq_version: str = "",
+        offline_marker: float = 0.0,
+        now: float | None = None,
+    ) -> list[dict]:
+        """喂入一次状态采样，返回本次需要通知的事件（可能为空）。"""
+        now = time.time() if now is None else now
+        events: list[dict] = []
+
+        # QQ 版本变化（多半是自动更新，会引发设备指纹变化）
+        if qq_version and self._last_version and qq_version != self._last_version:
+            rec = {
+                "type": "version_change",
+                "time": now,
+                "detail": f"QQ 版本由 {self._last_version} 变为 {qq_version}",
+            }
+            events.append(rec)
+            self._events.append(rec)
+        if qq_version:
+            self._last_version = qq_version
+
+        if not napcat_running:
+            # 进程没了（用户主动停止或崩溃）：清状态，不告警
+            self._online = None
+            self._down_ticks = 0
+            self._offline_since = None
+            self._last_marker_ts = 0.0
+            self._save()
+            return events
+
+        # 日志里有新的「登录失效」标记 → 确凿掉线（不用防抖）
+        new_marker = offline_marker and offline_marker > self._last_marker_ts
+        if new_marker:
+            self._last_marker_ts = offline_marker
+
+        self._down_ticks = 0 if (connected and not new_marker) else self._down_ticks + 1
+        confirmed_offline = new_marker or (
+            self._down_ticks >= self.CONFIRM_TICKS and not connected
+        )
+
+        if confirmed_offline:
+            if self._online is not False:
+                rec = {
+                    "type": "offline",
+                    "time": now,
+                    "detail": (
+                        "QQ 登录失效，需要重新扫码"
+                        if new_marker
+                        else "QQ 掉线：NapCat 在运行但连接中断"
+                    ),
+                }
+                events.append(rec)
+                self._events.append(rec)
+                self._online = False
+                self._offline_since = now
+        elif connected:
+            if self._online is False and self._offline_since is not None:
+                minutes = max(0, int((now - self._offline_since) / 60))
+                rec = {
+                    "type": "online",
+                    "time": now,
+                    "detail": f"QQ 恢复在线（掉线约 {minutes} 分钟）",
+                    "offline_minutes": minutes,
+                }
+                events.append(rec)
+                self._events.append(rec)
+            self._online = True
+            self._offline_since = None
+        self._save()
+        return events
+
+    @property
+    def last_offline(self) -> dict | None:
+        for rec in reversed(self._events):
+            if rec.get("type") == "offline":
+                return rec
+        return None
+
+    def offline_count_today(self, now: float | None = None) -> int:
+        now = time.time() if now is None else now
+        day = time.strftime("%Y-%m-%d", time.localtime(now))
+        return sum(
+            1
+            for r in self._events
+            if r.get("type") == "offline"
+            and time.strftime("%Y-%m-%d", time.localtime(float(r.get("time", 0)))) == day
+        )
+
+
 class ServiceManager:
     def __init__(self, cfg: dict):
         self.cfg = cfg

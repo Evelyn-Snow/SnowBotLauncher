@@ -1,9 +1,11 @@
 """控制台页：服务卡片、状态、日志与启停操作。"""
 import time
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QSystemTrayIcon,
     QApplication,
     QSizePolicy,
     QSplitter,
@@ -217,6 +219,8 @@ class ConsoleMixin:
         qq_running = st["qq_running"]
         conn = st["onebot_connected"]
 
+        self._check_qq_health(st, conn, napcat_up)
+
         # AstrBot
         if astrbot_up:
             self.astrbot_card.set_status("on", "运行中")
@@ -252,6 +256,12 @@ class ConsoleMixin:
             self.btn_napcat_stop.setEnabled(False)
 
         self.qq_lbl.setText(st["qq"] or ("QQ 运行中" if qq_running else "未登录"))
+        if health_qr := getattr(self, "health", None):
+            try:
+                if qq_running and health_qr.qrcode_waiting():
+                    self.qq_lbl.setText("等待扫码登录（NapCat WebUI 或 cache\\qrcode.png）")
+            except Exception:
+                pass
         if conn:
             self.conn_lbl.setText("已连接 AstrBot")
             self.conn_lbl.setStyleSheet("color:#4ade80;")
@@ -265,7 +275,6 @@ class ConsoleMixin:
         token = st["token"] or "—"
         self._token = st["token"]
         self.token_lbl.setText(token if self.token_visible else self._mask(token))
-
         # 运行时长
         self.astrbot_runtime.setText(self._runtime_text(st["astrbot_started_at"], astrbot_up))
         # 地址同步设置（只影响显示）
@@ -308,6 +317,74 @@ class ConsoleMixin:
                 f"NapCat：{'运行中' if napcat_up else '已停止'}\n"
                 f"OneBot：{'已连接' if conn else '未连接'}"
             )
+
+    def _check_qq_health(self, st: dict, conn: bool, napcat_up: bool) -> None:
+        """QQ 掉线监控：进程还在但连接断了才告警，并记录事件时间线。"""
+        health = getattr(self, "health", None)
+        if health is None:
+            return
+        # NapCat 在跑，或 QQ 进程在跑，都算"应当在线"
+        process_alive = bool(napcat_up or st.get("qq_running"))
+        events = health.update(
+            connected=conn,
+            napcat_running=process_alive,
+            qq_version=self._qq_version(),
+            offline_marker=health.napcat_offline_marker(),
+        )
+        for event in events:
+            etype = event.get("type")
+            detail = str(event.get("detail") or "")
+            if etype == "offline":
+                count = health.offline_count_today()
+                self._notify(
+                    f"QQ 掉线{('（今日第 %d 次）' % count) if count else ''}",
+                    detail + "\n需要到 NapCat WebUI 重新扫码登录。",
+                    warning=True,
+                )
+            elif etype == "online":
+                self._notify("QQ 已恢复在线", detail, warning=False)
+            elif etype == "version_change":
+                self._notify(
+                    "QQ 版本变化（可能自动更新）",
+                    detail + "\nQQ 更新后 NapCat 可能需要同步升级，否则容易掉线。",
+                    warning=True,
+                )
+        # 状态行显示今日掉线次数
+        last = health.last_offline
+        if last and hasattr(self, "conn_lbl"):
+            count = health.offline_count_today()
+            if count and not conn:
+                stamp = time.strftime("%H:%M", time.localtime(float(last.get("time", 0))))
+                self.conn_lbl.setText(f"QQ 已离线（今日 {count} 次，上次 {stamp}）")
+
+    def _qq_version(self) -> str:
+        """读 QQ 主程序版本号；读不到返回空串。"""
+        try:
+            exe = Path(str(self.cfg.get("qq_exe") or r"C:\Program Files\Tencent\QQNT\QQ.exe"))
+            if not exe.exists():
+                return ""
+            return str(exe.stat().st_size)
+        except Exception:
+            return ""
+
+    def _notify(self, title: str, body: str, warning: bool = True) -> None:
+        """托盘气泡 + 状态提示（窗口隐藏时也能看到）。"""
+        try:
+            if self.tray:
+                icon = (
+                    QSystemTrayIcon.MessageIcon.Warning
+                    if warning
+                    else QSystemTrayIcon.MessageIcon.Information
+                )
+                self.tray.showMessage(f"{APP_NAME} · {title}", body, icon, 8000)
+        except Exception:
+            pass
+        try:
+            toast = getattr(self, "_toast", None)
+            if callable(toast):
+                toast(f"{title}：{body.splitlines()[0]}", not warning)
+        except Exception:
+            pass
 
     def _runtime_text(self, started_at, up: bool) -> str:
         if not up or not started_at:
