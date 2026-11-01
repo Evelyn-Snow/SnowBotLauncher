@@ -26,6 +26,7 @@ from .meme import MemeMixin
 from .voice import VoiceMixin
 from .memory import MemoryMixin
 from .group import GroupMixin
+from .behavior import BehaviorMixin
 from .vision import VisionMixin
 from .storage import StorageMixin
 
@@ -36,6 +37,7 @@ class EnhanceTab(
     VoiceMixin,
     MemoryMixin,
     GroupMixin,
+    BehaviorMixin,
     VisionMixin,
     SearchMixin,
     StorageMixin,
@@ -190,6 +192,7 @@ class EnhanceTab(
         self.tabs.addTab(scroll_page(self._build_voice_tab(), 460), "语音")
         self.tabs.addTab(scroll_page(self._build_memory_tab(), 400), "记忆")
         self.tabs.addTab(scroll_page(self._build_group_tab(), 460), "群聊")
+        self.tabs.addTab(scroll_page(self._build_behavior_tab(), 460), "作息与接话")
         self.tabs.addTab(scroll_page(self._build_vision_tab(), 520), "视觉")
         self.tabs.addTab(scroll_page(self._build_search_tab(), 440), "搜索")
         self.tabs.addTab(scroll_page(self._build_storage_tab(), 500), "存储")
@@ -268,6 +271,7 @@ class EnhanceTab(
             self._load_voice_ui()
             self._load_memory_ui()
             self._load_group_ui()
+            self._load_behavior_ui()
             self._load_vision_ui()
             self._load_search_ui()
             self._load_storage_ui()

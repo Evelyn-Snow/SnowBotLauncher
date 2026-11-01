@@ -166,7 +166,15 @@ def build_contact_sheet(
     return out_path
 
 
-def extract_frames(videoshot: dict, duration: float, workdir: str | None = None) -> str:
+def extract_frames(
+    videoshot: dict,
+    duration: float,
+    workdir: str | None = None,
+    *,
+    cols: int = 3,
+    rows: int = 3,
+    min_brightness: float = 20.0,
+) -> str:
     """下载雪碧图并生成拼图，返回拼图路径。"""
     images = videoshot.get("image") or []
     if not images:
@@ -183,7 +191,10 @@ def extract_frames(videoshot: dict, duration: float, workdir: str | None = None)
     return build_contact_sheet(
         sprite_paths,
         out,
+        cols=cols,
+        rows=rows,
         duration=duration,
         grid=grid,
         timestamps=videoshot.get("index"),
+        min_brightness=min_brightness,
     )

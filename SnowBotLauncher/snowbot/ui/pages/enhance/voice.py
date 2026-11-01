@@ -13,12 +13,14 @@ from .common import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -106,7 +108,9 @@ class VoiceMixin:
         self.voice_stack.addWidget(mimo_page)
 
         doubao_page = QWidget()
-        doubao_form = QFormLayout(doubao_page)
+        doubao_layout = QVBoxLayout(doubao_page)
+        doubao_layout.setContentsMargins(0, 0, 0, 0)
+        doubao_form = QFormLayout()
         self.doubao_appid = QLineEdit()
         self.doubao_token = QLineEdit()
         self.doubao_token.setEchoMode(QLineEdit.EchoMode.Password)
@@ -124,13 +128,54 @@ class VoiceMixin:
         doubao_form.addRow("模型", self.doubao_model)
         doubao_form.addRow("声音描述", self.doubao_persona)
         doubao_form.addRow("提示词模板", self.doubao_prompt)
+        doubao_layout.addLayout(doubao_form)
+
+        burst_group = QGroupBox("自发语音惯性调度（明确说“语音”仍必发）")
+        burst_form = QFormLayout(burst_group)
+        burst_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        self.doubao_burst_prob = QDoubleSpinBox()
+        self.doubao_burst_prob.setRange(0.0, 1.0)
+        self.doubao_burst_prob.setSingleStep(0.05)
+        self.doubao_burst_prob.setDecimals(2)
+        self.doubao_burst_prob.setValue(0.4)
+        self.doubao_burst_decay = QDoubleSpinBox()
+        self.doubao_burst_decay.setRange(0.05, 1.0)
+        self.doubao_burst_decay.setSingleStep(0.05)
+        self.doubao_burst_decay.setDecimals(2)
+        self.doubao_burst_decay.setValue(0.5)
+        self.doubao_hourly_max = QSpinBox()
+        self.doubao_hourly_max.setRange(0, 999)
+        self.doubao_hourly_max.setValue(10)
+        self.doubao_hourly_max.setSpecialValueText("不限")
+        self.doubao_burst_reset = QSpinBox()
+        self.doubao_burst_reset.setRange(60, 3600)
+        self.doubao_burst_reset.setValue(600)
+        self.doubao_burst_reset.setSuffix(" 秒")
+        self.doubao_attempts = QSpinBox()
+        self.doubao_attempts.setRange(1, 3)
+        self.doubao_attempts.setValue(2)
+        burst_form.addRow("刚发过语音后继续语音的概率", self.doubao_burst_prob)
+        burst_form.addRow("连发逐条衰减系数", self.doubao_burst_decay)
+        burst_form.addRow("每会话每小时语音上限", self.doubao_hourly_max)
+        burst_form.addRow("隔多久没语音就清零惯性", self.doubao_burst_reset)
+        burst_form.addRow("台词念错时的重试次数（计费）", self.doubao_attempts)
+        burst_hint = QLabel(
+            "平时按上方“触发概率”掷骰子；刚发过一条语音后改用“连发概率”，"
+            "每多连一条再乘一次衰减系数；中间夹一条文字或隔满重置时长就回到触发概率。"
+        )
+        burst_hint.setWordWrap(True)
+        burst_hint.setObjectName("muted")
+        doubao_layout.addWidget(burst_group)
+        doubao_layout.addWidget(burst_hint)
+
         self.doubao_plugin_label = QLabel("插件状态：未连接")
         self.doubao_plugin_label.setObjectName("muted")
         install_doubao = QPushButton("从大肥鱼配置包安装豆包语音插件")
         install_doubao.setObjectName("ghost")
         install_doubao.clicked.connect(self.install_doubao_plugin)
-        doubao_form.addRow("", self.doubao_plugin_label)
-        doubao_form.addRow("", install_doubao)
+        doubao_layout.addWidget(self.doubao_plugin_label)
+        doubao_layout.addWidget(install_doubao)
+        doubao_layout.addStretch(1)
         self.voice_stack.addWidget(doubao_page)
         layout.addWidget(self.voice_stack)
 
@@ -204,6 +249,19 @@ class VoiceMixin:
             self.doubao_model.setText(str(provider.get("model") or ""))
             self.doubao_persona.setText(str(provider.get("seed_audio_persona") or ""))
             self.doubao_prompt.setText(str(provider.get("seed_audio_prompt_template") or ""))
+            self.doubao_burst_prob.setValue(
+                float(provider.get("seed_audio_burst_probability") or 0.4)
+            )
+            self.doubao_burst_decay.setValue(
+                float(provider.get("seed_audio_burst_decay") or 0.5)
+            )
+            self.doubao_hourly_max.setValue(
+                int(provider.get("seed_audio_hourly_max") or 0)
+            )
+            self.doubao_burst_reset.setValue(
+                int(float(provider.get("seed_audio_burst_reset_seconds") or 600))
+            )
+            self.doubao_attempts.setValue(int(provider.get("seed_audio_max_attempts") or 2))
             self.doubao_plugin_label.setText(
                 "插件状态：已安装"
                 if "astrbot_plugin_seed_audio_tts" in self._plugin_names()
@@ -290,12 +348,13 @@ class VoiceMixin:
                     "seed_audio_prompt_template": self.doubao_prompt.text().strip(),
                     "seed_audio_format": "mp3",
                     "seed_audio_sample_rate": 24000,
-                    "seed_audio_max_attempts": 2,
                     "seed_audio_whole_reply": True,
                     "seed_audio_reply_probability": prob,
-                    "seed_audio_burst_probability": 0.4,
-                    "seed_audio_burst_decay": 0.5,
-                    "seed_audio_hourly_max": 10,
+                    "seed_audio_burst_probability": float(self.doubao_burst_prob.value()),
+                    "seed_audio_burst_decay": float(self.doubao_burst_decay.value()),
+                    "seed_audio_burst_reset_seconds": int(self.doubao_burst_reset.value()),
+                    "seed_audio_hourly_max": int(self.doubao_hourly_max.value()),
+                    "seed_audio_max_attempts": int(self.doubao_attempts.value()),
                     "timeout": 60,
                 },
                 False,

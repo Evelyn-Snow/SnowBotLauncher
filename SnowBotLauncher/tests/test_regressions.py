@@ -666,8 +666,10 @@ class SeedAudioPatchTests(unittest.TestCase):
         self.assertIn("_voice_blocked_reason", out)
         self.assertIn("_note_voice(umo)", out)
         self.assertIn('self.burst_probability = float(0.4 if burst in (None, "") else burst)', out)
+        self.assertIn('self.burst_reset_seconds = float(600 if reset in (None, "") else reset)', out)
         self.assertIn('self.hourly_max = 10 if hmax in (None, "") else max(0, int(hmax))', out)
         self.assertIn('"seed_audio_burst_probability": 0.4,', out)
+        self.assertIn('"seed_audio_burst_reset_seconds": 600,', out)
         self.assertNotIn("VOICE_COOLDOWN_SECONDS", out)
 
     def test_burst_scheduling_logic(self):
@@ -708,6 +710,17 @@ class SeedAudioPatchTests(unittest.TestCase):
         self_obj._voice_log["a"] = [now - 700]
         with patch.object(random_mod, "random", return_value=0.5):
             self.assertEqual(blocked(self_obj, prov, "a"), "骰子未中")
+
+        # provider 自带更短的重置时长（300s）：隔 400 秒就算旧惯性
+        prov.reset_prov = SimpleNamespace(
+            reply_probability=0.08, burst_probability=0.4, burst_decay=0.5,
+            hourly_max=10, burst_reset_seconds=300,
+        )
+        self_obj._streak["a"] = 1
+        self_obj._voice_log["a"] = [now - 400]
+        with patch.object(random_mod, "random", return_value=0.5):
+            self.assertEqual(blocked(self_obj, prov.reset_prov, "a"), "骰子未中")
+        del prov.reset_prov
 
         # 一小时已达上限：不再掷骰子，直接保持文字
         prov.hourly_max = 2

@@ -89,7 +89,13 @@ class BiliVision(Star):
                     f"只能看到标题和简介：{(info.get('desc') or '无')[:300]}。不要编造画面内容。"
                 )
             sheet = await asyncio.to_thread(
-                extract_frames, shot, float(info.get("duration") or 0), workdir
+                extract_frames,
+                shot,
+                float(info.get("duration") or 0),
+                workdir,
+                cols=max(2, min(5, int(self.conf.get("grid_cols") or 3))),
+                rows=max(2, min(5, int(self.conf.get("grid_rows") or 3))),
+                min_brightness=max(0.0, min(100.0, float(self.conf.get("min_brightness") or 20.0))),
             )
             description = await self._describe(info, sheet)
             if not description:

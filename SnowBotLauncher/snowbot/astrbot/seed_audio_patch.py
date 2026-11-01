@@ -44,6 +44,8 @@ PROB_STATE = """        burst = c.get("seed_audio_burst_probability")
         self.burst_probability = float(0.4 if burst in (None, "") else burst)
         decay = c.get("seed_audio_burst_decay")
         self.burst_decay = float(0.5 if decay in (None, "") else decay)
+        reset = c.get("seed_audio_burst_reset_seconds")
+        self.burst_reset_seconds = float(600 if reset in (None, "") else reset)
         hmax = c.get("seed_audio_hourly_max")
         self.hourly_max = 10 if hmax in (None, "") else max(0, int(hmax))
 """
@@ -52,6 +54,7 @@ TMPL_LINE = '        "seed_audio_reply_probability": 0.33,\n'
 TMPL_STATE = (
     '        "seed_audio_burst_probability": 0.4,\n'
     '        "seed_audio_burst_decay": 0.5,\n'
+    '        "seed_audio_burst_reset_seconds": 600,\n'
     '        "seed_audio_hourly_max": 10,\n'
 )
 
@@ -82,7 +85,8 @@ HELPERS = [
     "        if prov.hourly_max and len(times) >= prov.hourly_max:",
     '            return f"一小时内自发语音已到 {prov.hourly_max} 条上限"',
     "        streak = self._streak.get(umo, 0)",
-    "        if streak and now - (times[-1] if times else 0.0) < self.BURST_RESET_SECONDS:",
+    "        reset = getattr(prov, \"burst_reset_seconds\", self.BURST_RESET_SECONDS)",
+    "        if streak and now - (times[-1] if times else 0.0) < reset:",
     "            p = prov.burst_probability * (prov.burst_decay ** (streak - 1))",
     "            if random.random() > p:",
     "                self._streak[umo] = 0",

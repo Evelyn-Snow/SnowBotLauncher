@@ -80,9 +80,9 @@ class SnowImageBox(Star):
             self._limiter = SaveRateLimiter(
                 root,
                 min_interval_minutes=max(
-                    0, _to_int(self.conf.get("auto_save_min_interval_minutes"), 30)
+                    0, _to_int(self.conf.get("auto_save_min_interval_minutes"), 45)
                 ),
-                max_per_day=max(1, _to_int(self.conf.get("auto_save_max_per_day"), 10)),
+                max_per_day=max(1, _to_int(self.conf.get("auto_save_max_per_day"), 8)),
             )
             self._limiter_root = root
         return self._limiter
