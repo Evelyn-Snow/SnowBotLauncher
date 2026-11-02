@@ -188,14 +188,25 @@ class SnowBalance(Star):
             logger.debug(f"[{NAME}] 视觉余额查询失败：{exc}")
 
         # 探活：免费模型余额 0 也能用，所以**探活结果优先于余额**
-        alive = await self._vision_probe(session, key)
+        alive, kind = await self._vision_probe(session, key)
+        if not alive and kind == "rate_limited":
+            # 429 / 1305「访问量过大」是免费模型的临时限流，不代表不可用，
+            # 短暂重试一次，仍被限流就保持上一次状态，不报警。
+            await asyncio.sleep(3)
+            alive, kind = await self._vision_probe(session, key)
+            if not alive and kind == "rate_limited":
+                logger.info(f"[{NAME}] 视觉探活被限流（429），本次跳过判定")
+                return self._states.get(CAP_VISION, STATE_OK), detail
         if not alive:
             return ("down" if balance is None else "empty"), detail
         # 探活成功 = 视觉真的可用。余额再低也不报（否则免费模型会天天误报"看不清"）
         return STATE_OK, detail
 
-    async def _vision_probe(self, session, key: str) -> bool:
-        """用免费视觉模型发一个最小请求，判断视觉链路是否真的可用。"""
+    async def _vision_probe(self, session, key: str) -> tuple[bool, str]:
+        """用免费视觉模型发一个最小请求，判断视觉链路是否真的可用。
+
+        返回 (是否可用, 失败类型)；失败类型 "rate_limited" 表示临时限流（不是真故障）。
+        """
         try:
             async with session.post(
                 "https://open.bigmodel.cn/api/paas/v4/chat/completions",
@@ -208,13 +219,17 @@ class SnowBalance(Star):
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
                 if resp.status == 200:
-                    return True
+                    return True, ""
                 body = (await resp.text())[:200]
                 logger.info(f"[{NAME}] 视觉探活失败 HTTP {resp.status}: {body}")
-                return False
+                if resp.status == 429 or "1305" in body or "访问量过大" in body:
+                    return False, "rate_limited"
+                if resp.status in (401, 403):
+                    return False, "auth"
+                return False, "error"
         except Exception as exc:
             logger.info(f"[{NAME}] 视觉探活异常：{exc}")
-            return False
+            return False, "error"
 
     def _check_voice(self) -> tuple[str, str]:
         if not bool(self._cfg("voice_enabled", True)):

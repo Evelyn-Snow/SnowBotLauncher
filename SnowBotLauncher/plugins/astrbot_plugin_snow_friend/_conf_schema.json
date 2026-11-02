@@ -1,0 +1,66 @@
+{
+  "enabled": {
+    "description": "启用好友申请处理",
+    "type": "bool",
+    "default": true
+  },
+  "min_qq_level": {
+    "description": "直接同意的 QQ 等级下限",
+    "type": "int",
+    "default": 16,
+    "hint": "QQ 等级（16 级≈一个太阳）达到这个数就通过；越高越严，0 表示不看等级"
+  },
+  "accept_vip": {
+    "description": "会员账号直接同意",
+    "type": "bool",
+    "default": true,
+    "hint": "开过 VIP/SVIP 的账号也算可靠"
+  },
+  "max_qq_len": {
+    "description": "老号判定：QQ 号不超过几位直接同意",
+    "type": "int",
+    "default": 9,
+    "hint": "QQ 号越短注册越早。9 位及以下视为老号；0 表示不看这项"
+  },
+  "whitelist": {
+    "description": "必定同意的 QQ 号",
+    "type": "string",
+    "default": "",
+    "hint": "逗号或空格分隔，例如 123456,234567"
+  },
+  "blacklist": {
+    "description": "必定拒绝的 QQ 号",
+    "type": "string",
+    "default": "",
+    "hint": "逗号或空格分隔；命中的申请会被直接拒绝"
+  },
+  "reject_blacklisted": {
+    "description": "黑名单申请直接拒绝",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭则黑名单也只挂起，不主动拒绝"
+  },
+  "max_accept_per_day": {
+    "description": "每天最多自动通过几个",
+    "type": "int",
+    "default": 5,
+    "hint": "防止被批量小号刷；超出后当天剩余申请一律挂起"
+  },
+  "notify_owner": {
+    "description": "通过后私聊通知主人",
+    "type": "bool",
+    "default": true
+  },
+  "owner_session": {
+    "description": "通知发给谁",
+    "type": "string",
+    "default": "",
+    "hint": "例如 napcat:FriendMessage:123456789；留空取 AstrBot 管理员"
+  },
+  "reject_comment": {
+    "description": "拒绝时附言",
+    "type": "string",
+    "default": "暂时不方便加好友哦",
+    "hint": "主动拒绝时给对方看的一句话"
+  }
+}

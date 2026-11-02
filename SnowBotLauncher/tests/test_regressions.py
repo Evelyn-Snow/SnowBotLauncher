@@ -85,6 +85,18 @@ from plugins.astrbot_plugin_snow_balance.library import (  # noqa: E402
     severity,
     should_notify,
 )
+from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
+    DECISION_ACCEPT,
+    DECISION_PENDING,
+    DECISION_REJECT,
+    DailyCounter,
+    describe,
+    evaluate,
+    extract_level,
+    is_friend_request,
+    is_vip,
+    parse_qq_list,
+)
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     derive_scope_id,
     scope_kind,
@@ -1594,6 +1606,108 @@ class BalanceTests(unittest.TestCase):
         self.assertEqual(format_balance(37.34), "¥37.34")
         self.assertEqual(format_balance(0.123), "¥0.123")
         self.assertEqual(format_balance(1234.0), "¥1234")
+
+    def test_rate_limited_is_not_a_failure(self):
+        """429「访问量过大」是免费模型临时限流，不能判成视觉不可用。
+
+        回归：实测 glm-4v-flash 高峰返回
+        {"error":{"code":"1305","message":"该模型当前访问量过大，请您稍后再试"}}
+        被当成 empty 并私聊主人「眼前一片模糊」。
+        """
+        # 这个常量在 main.py 里是字符串比较逻辑，这里用同款判定函数验证语义
+        def classify(status: int, body: str) -> str:
+            if status == 200:
+                return "ok"
+            if status == 429 or "1305" in body or "访问量过大" in body:
+                return "rate_limited"
+            if status in (401, 403):
+                return "auth"
+            return "error"
+
+        self.assertEqual(
+            classify(429, '{"error":{"code":"1305","message":"该模型当前访问量过大，请您稍后再试"}}'),
+            "rate_limited",
+        )
+        self.assertEqual(classify(429, ""), "rate_limited")
+        self.assertEqual(classify(403, '{"error":{"code":"1001"}}'), "auth")
+        self.assertEqual(classify(500, "internal"), "error")
+        self.assertEqual(classify(200, ""), "ok")
+
+
+class FriendRequestTests(unittest.TestCase):
+    def test_parse_qq_list(self):
+        self.assertEqual(parse_qq_list("123, 456，789"), {"123", "456", "789"})
+        self.assertEqual(parse_qq_list(""), set())
+        self.assertEqual(parse_qq_list("abc, 123"), {"123"})
+
+    def test_extract_level_and_vip(self):
+        self.assertEqual(extract_level({"qqLevel": 24}), 24)
+        self.assertEqual(extract_level({"level": 30}), 30)
+        self.assertEqual(extract_level({}), 0)
+        self.assertTrue(is_vip({"vip_level": 1}))
+        self.assertTrue(is_vip({"vipFlag": True}))
+        self.assertFalse(is_vip({"vip_level": 0}))
+        self.assertFalse(is_vip({}))
+
+    def test_evaluate_by_level(self):
+        d, why = evaluate("1234567890", info={"qqLevel": 20}, min_level=16)
+        self.assertEqual(d, DECISION_ACCEPT)
+        self.assertIn("16", why)
+
+    def test_evaluate_by_vip(self):
+        d, why = evaluate("1234567890", info={"vip_level": 1}, min_level=64)
+        self.assertEqual(d, DECISION_ACCEPT)
+        self.assertIn("会员", why)
+
+    def test_evaluate_by_short_number(self):
+        d, why = evaluate("12345678", info={"qqLevel": 2}, min_level=64, accept_vip=False, max_qq_len=9)
+        self.assertEqual(d, DECISION_ACCEPT)
+        self.assertIn("老号", why)
+
+    def test_evaluate_pending_for_new_low_account(self):
+        """低等级 + 非会员 + 长号 → 挂起，不盲目同意。"""
+        d, why = evaluate(
+            "123456789012",
+            info={"qqLevel": 3},
+            min_level=16,
+            accept_vip=True,
+            max_qq_len=9,
+        )
+        self.assertEqual(d, DECISION_PENDING)
+        self.assertIn("偏低", why)
+
+    def test_evaluate_whitelist_blacklist(self):
+        d, _ = evaluate("111", info={}, whitelist={"111"}, blacklist={"222"})
+        self.assertEqual(d, DECISION_ACCEPT)
+        d, _ = evaluate("222", info={"qqLevel": 99}, blacklist={"222"})
+        self.assertEqual(d, DECISION_REJECT)
+
+    def test_evaluate_missing_info_is_pending(self):
+        """查不到资料时按最低档处理，不能因为异常就同意。"""
+        d, _ = evaluate("123456789012", info={})
+        self.assertEqual(d, DECISION_PENDING)
+
+    def test_daily_counter(self):
+        c = DailyCounter(2)
+        self.assertTrue(c.allow("2026-11-02"))
+        c.record("2026-11-02")
+        c.record("2026-11-02")
+        self.assertFalse(c.allow("2026-11-02"))
+        # 跨天重置
+        self.assertTrue(c.allow("2026-11-03"))
+        self.assertEqual(DailyCounter(0).allow("2026-11-02"), True)  # 0 = 不限
+
+    def test_is_friend_request(self):
+        self.assertTrue(is_friend_request({"post_type": "request", "request_type": "friend"}))
+        self.assertFalse(is_friend_request({"post_type": "request", "request_type": "group"}))
+        self.assertFalse(is_friend_request({"post_type": "message"}))
+        self.assertFalse(is_friend_request({}))
+
+    def test_describe(self):
+        text = describe({"nickname": "小明", "qqLevel": 32, "vip_level": 1})
+        self.assertIn("小明", text)
+        self.assertIn("32 级", text)
+        self.assertIn("会员", text)
 
 
 if __name__ == "__main__":

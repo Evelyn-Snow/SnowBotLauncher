@@ -57,6 +57,7 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 | `snow_knowledge` | 知识库：把真实读过的书/资料/论文切片向量化，聊天时按话题检索引用 | [astrbot_plugin_snow_knowledge](https://github.com/Evelyn-Snow/astrbot_plugin_snow_knowledge) |
 | `snow_guard` | 安全守卫：出网白名单、内网/元数据/短链拦截、外部内容注入防护 | [astrbot_plugin_snow_guard](https://github.com/Evelyn-Snow/astrbot_plugin_snow_guard) |
 | `snow_balance` | 余额感知：对话/语音/视觉额度不足时用自己的口吻私聊主人（饿了/嗓子哑了/看不清） | [astrbot_plugin_snow_balance](https://github.com/Evelyn-Snow/astrbot_plugin_snow_balance) |
+| `snow_friend` | 好友申请：等级够高/有会员/老号才自动通过，其余挂起并通知主人 | [astrbot_plugin_snow_friend](https://github.com/Evelyn-Snow/astrbot_plugin_snow_friend) |
 
 插件发布流程见 [docs/publishing.md](docs/publishing.md)；配置包格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
@@ -181,7 +182,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.26.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.27.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -190,7 +191,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.26.exe
+installer\output\SnowBotLauncher-Setup-1.5.27.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式

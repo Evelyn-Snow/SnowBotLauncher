@@ -1,0 +1,9 @@
+name: astrbot_plugin_snow_friend
+display_name: Bot 好友申请
+desc: 自动处理好友申请，但只同意等级够高、有会员或老号（短 QQ 号）的申请者，其余留待人工处理
+help: 无需指令；符合条件的好友申请会自动通过，并私聊告知主人，其余保持待处理
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_friend
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
