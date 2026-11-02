@@ -80,6 +80,21 @@ def relay_text(name: str, text: str, limit: int = 200) -> str:
     return f"（传话回复）{name or '对方'} 回你了：{body}"
 
 
+def platform_id_from_umo(umo: str, fallback: str = "") -> str:
+    """从 unified_msg_origin 取平台 ID（如 napcat），不是平台类型（如 aiocqhttp）。
+
+    AstrBot 的 umo 形如 `napcat:FriendMessage:123456`，第一段是平台实例 ID。
+    `event.get_platform_name()` 返回的是**类型**，用它拼 umo 会导致
+    「cannot find platform for session aiocqhttp:FriendMessage:xxx」发不出去。
+    """
+    text = str(umo or "")
+    if ":" in text:
+        pid = text.split(":", 1)[0].strip()
+        if pid:
+            return pid
+    return str(fallback or "")
+
+
 class RateLimiter:
     """滑动窗口限频：window 秒内最多 max_count 次（0 = 不限）。"""
 

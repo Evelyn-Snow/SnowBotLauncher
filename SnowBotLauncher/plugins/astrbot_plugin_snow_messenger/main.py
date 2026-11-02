@@ -24,6 +24,7 @@ from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 from .library import (
+    platform_id_from_umo,
     RateLimiter,
     decide_channel,
     looks_like_contact_request,
@@ -73,6 +74,21 @@ class SnowMessenger(Star):
         return False
 
     # ---------------- 协议端与缓存 ----------------
+    @staticmethod
+    def _platform_id(event: AstrMessageEvent) -> str:
+        """umo 需要的平台 ID（如 napcat），不是平台类型（如 aiocqhttp）。"""
+        umo = str(getattr(event, "unified_msg_origin", "") or "")
+        pid = platform_id_from_umo(umo, str(event.get_platform_name() or ""))
+        if pid and pid != "aiocqhttp":
+            return pid
+        try:
+            inst = getattr(event, "platform", None)
+            meta = inst.meta() if inst is not None and hasattr(inst, "meta") else None
+            if meta is not None and getattr(meta, "id", ""):
+                return str(meta.id)
+        except Exception:
+            pass
+        return pid
     def _clients(self, event: AstrMessageEvent | None = None) -> list:
         bots: list = []
         bot = getattr(event, "bot", None) if event is not None else None
@@ -229,7 +245,7 @@ class SnowMessenger(Star):
         if not message:
             return "还没有要带的话，需要用户说明想让我说什么。"
 
-        platform = event.get_platform_name()
+        platform = self._platform_id(event)
         group_id = str(event.get_group_id() or "")
         in_group = bool(group_id) and not event.is_private_chat()
         self_id = str(event.get_self_id() or "") or self._self_id

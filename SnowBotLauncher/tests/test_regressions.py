@@ -95,6 +95,7 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
     decide_channel,
     looks_like_contact_request,
     match_person,
+    platform_id_from_umo,
     relay_text,
 )
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
@@ -888,6 +889,26 @@ class MessengerTests(unittest.TestCase):
         self.assertTrue(looks_like_contact_request("去问小明明天来不来"))
         self.assertTrue(looks_like_contact_request("帮我转告他一声"))
         self.assertFalse(looks_like_contact_request("今天天气怎么样"))
+
+    def test_platform_id_from_umo(self):
+        """umo 前缀必须是平台 ID（napcat），不是类型（aiocqhttp）。
+
+        回归：传话时用 get_platform_name() 拼出 aiocqhttp:FriendMessage:xxx，
+        AstrBot 报 cannot find platform，消息发不出去。
+        """
+        self.assertEqual(
+            platform_id_from_umo("napcat:FriendMessage:1282164886"), "napcat"
+        )
+        self.assertEqual(
+            platform_id_from_umo("napcat:GroupMessage:1134086134"), "napcat"
+        )
+        # 无冒号时回退
+        self.assertEqual(platform_id_from_umo("weird", "webchat"), "webchat")
+        self.assertEqual(platform_id_from_umo("", "webchat"), "webchat")
+        # 关键断言：绝不能把类型当 ID
+        self.assertNotEqual(
+            platform_id_from_umo("napcat:FriendMessage:1", "aiocqhttp"), "aiocqhttp"
+        )
 
 
 class ProfileTests(unittest.TestCase):
