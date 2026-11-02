@@ -90,6 +90,7 @@ from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
     DECISION_PENDING,
     DECISION_REJECT,
     DailyCounter,
+    PendingRequests,
     describe,
     evaluate,
     extract_level,
@@ -97,6 +98,7 @@ from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
     is_friend_request,
     is_friend_request_notice,
     is_vip,
+    parse_owner_reply,
     parse_qq_list,
 )
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
@@ -1850,6 +1852,39 @@ class FriendRequestTests(unittest.TestCase):
         self.assertEqual(find_doubt_request(items, "456")["flag"], "uid-b")
         self.assertIsNone(find_doubt_request(items, "789"))
         self.assertIsNone(find_doubt_request([], "456"))
+
+    def test_parse_owner_reply(self):
+        self.assertEqual(parse_owner_reply("同意 123456"), ("accept", "123456"))
+        self.assertEqual(parse_owner_reply("同意123456"), ("accept", "123456"))
+        self.assertEqual(parse_owner_reply("拒绝 123456。"), ("reject", "123456"))
+        self.assertEqual(parse_owner_reply("通过 123456"), ("accept", "123456"))
+        self.assertEqual(parse_owner_reply("同意"), ("accept", None))
+        self.assertEqual(parse_owner_reply("不加 123456"), ("reject", "123456"))
+        # 不是整句命令就不算裁决
+        self.assertIsNone(parse_owner_reply("我同意你的看法"))
+        self.assertIsNone(parse_owner_reply("同意一下下"))
+        self.assertIsNone(parse_owner_reply("你好"))
+
+    def test_pending_requests(self):
+        from unittest.mock import patch as _patch
+
+        pending = PendingRequests(ttl_hours=1)
+        pending.add("111", "flag-a", "normal")
+        pending.add("222", "flag-b", "doubt")
+        qq, item = pending.get()
+        self.assertEqual(qq, "222")  # 最新
+        qq, item = pending.get("111")
+        self.assertEqual((qq, item["flag"], item["kind"]), ("111", "flag-a", "normal"))
+        self.assertEqual(pending.pop("111")["flag"], "flag-a")
+        self.assertIsNone(pending.pop("111"))
+        self.assertIsNone(pending.get("111"))
+        # 过期清理
+        pending.add("333", "flag-c", "normal")
+        future = __import__("time").time() + 7200
+        with _patch("plugins.astrbot_plugin_snow_friend.library.time") as mock_time:
+            mock_time.time.return_value = future
+            self.assertIsNone(pending.get("333"))
+            self.assertEqual(len(pending), 0)
 
     def test_evaluate_by_level(self):
         d, why = evaluate("1234567890", info={"qqLevel": 20}, min_level=16)

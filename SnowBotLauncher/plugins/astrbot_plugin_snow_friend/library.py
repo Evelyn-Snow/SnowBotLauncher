@@ -1,12 +1,14 @@
-"""好友申请处理纯逻辑：资格判定、名单、每日限额（不依赖 AstrBot，可单测）。
+"""好友申请处理纯逻辑：资格判定、名单、每日限额、主人裁决（不依赖 AstrBot，可单测）。
 
 只同意"看起来是真人的"申请：QQ 等级够高、开过会员、或是老号（QQ 号位数少）。
-等级低又没会员的新号先挂着，交给主人人工处理——这是防批量小号加好友的主要手段。
+等级低又没会员的新号先挂着，把对方信息发给主人裁决——主人回复「同意 QQ号」
+或「拒绝 QQ号」后再真正处理申请。这是防批量小号加好友的主要手段。
 """
 
 from __future__ import annotations
 
 import re
+import time
 
 DECISION_ACCEPT = "accept"
 DECISION_REJECT = "reject"
@@ -145,6 +147,77 @@ def find_doubt_request(items, qq: str) -> dict | None:
         if isinstance(item, dict) and str(item.get("user_id") or "") == str(qq):
             return item
     return None
+
+
+# ---------------- 主人裁决 ----------------
+
+_APPROVE_WORDS = ("同意", "通过", "接受", "加上", "同意通过")
+_REJECT_WORDS = ("拒绝", "驳回", "不加")
+_OWNER_REPLY_RE = re.compile(r"^(" + "|".join(_APPROVE_WORDS + _REJECT_WORDS) + r")(\d{5,12})?$")
+
+
+def parse_owner_reply(text: str) -> tuple[str, str | None] | None:
+    """解析主人的裁决回复。
+
+    「同意 123456」「拒绝456789」「同意」都行；不是裁决命令返回 None。
+    返回 (动作, QQ号或 None)；QQ 号缺省时由调用方取最新一条挂起申请。
+    """
+    line = re.sub(r"[\s，。,、！!？?～～]+", "", str(text or ""))
+    match = _OWNER_REPLY_RE.match(line)
+    if not match:
+        return None
+    action = "accept" if match.group(1) in _APPROVE_WORDS else "reject"
+    return action, match.group(2)
+
+
+class PendingRequests:
+    """等待主人裁决的好友申请：QQ → {flag, kind, ts}。
+
+    flag 会过期（QQ 申请约 7 天失效），所以带 TTL 自动清理；容量封顶防刷。
+    """
+
+    def __init__(self, ttl_hours: int = 168, cap: int = 50):
+        self.ttl_seconds = max(1, int(ttl_hours)) * 3600
+        self.cap = max(1, int(cap))
+        self._items: dict[str, dict] = {}
+        self._seq = 0
+
+    def _prune(self) -> None:
+        now = time.time()
+        self._items = {
+            k: v for k, v in self._items.items() if now - v["ts"] < self.ttl_seconds
+        }
+
+    def add(self, qq: str, flag: str, kind: str) -> None:
+        self._prune()
+        while len(self._items) >= self.cap:
+            self._items.pop(min(self._items, key=lambda k: self._items[k]["seq"]))
+        self._seq += 1
+        self._items[str(qq)] = {
+            "flag": str(flag),
+            "kind": kind,
+            "ts": time.time(),
+            "seq": self._seq,
+        }
+
+    def get(self, qq: str | None = None) -> tuple[str, dict] | None:
+        """按 QQ 号取；qq 为空时取最新的一条。返回 (qq, item) 或 None。"""
+        self._prune()
+        if qq:
+            qq = str(qq)
+            return (qq, self._items[qq]) if qq in self._items else None
+        if not self._items:
+            return None
+        latest = max(self._items, key=lambda k: self._items[k]["seq"])
+        return latest, self._items[latest]
+
+    def pop(self, qq: str) -> dict | None:
+        self._prune()
+        return self._items.pop(str(qq), None)
+
+    def __len__(self) -> int:
+        self._prune()
+        return len(self._items)
 
 
 def describe(info: dict) -> str:

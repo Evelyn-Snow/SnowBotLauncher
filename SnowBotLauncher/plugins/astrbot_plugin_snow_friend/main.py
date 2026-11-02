@@ -1,11 +1,16 @@
-"""Bot 好友申请：自动通过「看起来是真人的」好友申请，其余留待人工。
+"""Bot 好友申请：自动通过「看起来是真人的」好友申请，其余交主人裁决。
 
 判定在 library.evaluate 里：等级够高 / 有会员 / 是老号（短 QQ 号）三者之一就通过，
-黑名单拒绝，其余挂起（不处理，保留在 QQ 的待处理列表里）。
-每天有自动通过上限，防止被批量小号刷；通过后会私聊告知主人。
+黑名单拒绝，其余挂起并把对方信息发给主人——主人回复「同意 QQ号」或
+「拒绝 QQ号」后再真正处理申请（主人只回「同意/拒绝」则取最新一条）。
+每天有自动通过上限，防止被批量小号刷；无论自动还是手动，处理后都会私聊告知主人。
 
 实现注意：AstrBot 会把 OneBot 的 request 事件转成 FRIEND_MESSAGE 交给插件，
 原始事件在 event.message_obj.raw_message 里，靠 post_type/request_type 区分。
+QQ 还会把一部分申请降级成「可疑好友申请」：没有 request 事件，只有一句
+私聊系统消息，靠 NapCat 扩展接口 get/set_doubt_friends_add_request 处理
+（该接口只能同意、不能拒绝）。没有加好友前 cautiously 聊几句是允许的，
+所以识别不出的系统消息会放行给 LLM。
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from .library import (
     DECISION_ACCEPT,
     DECISION_REJECT,
     DailyCounter,
+    PendingRequests,
     describe,
     evaluate,
     extract_level,
@@ -29,6 +35,7 @@ from .library import (
     is_friend_request,
     is_friend_request_notice,
     is_vip,
+    parse_owner_reply,
     parse_qq_list,
 )
 
@@ -40,6 +47,9 @@ class SnowFriend(Star):
         super().__init__(context)
         self.conf = config
         self._counter = DailyCounter(int(config.get("max_accept_per_day", 5) or 5))
+        self._pending = PendingRequests(
+            ttl_hours=int(config.get("review_ttl_hours", 168) or 168)
+        )
 
     # ---------------- 配置 ----------------
     def _enabled(self) -> bool:
@@ -170,7 +180,8 @@ class SnowFriend(Star):
             logger.info(f"[{NAME}] 已拒绝好友申请 {qq}（{reason}）" + ("" if ok else "（拒绝失败）"))
             return
 
-        logger.info(f"[{NAME}] 好友申请 {qq} 保持待处理：{reason}（{describe(info)}）")
+        await self._hold_for_review(qq, flag, "normal", info, reason, comment)
+        logger.info(f"[{NAME}] 好友申请 {qq} 等主人裁决：{reason}（{describe(info)}）")
 
     def _evaluate(self, qq: str, info: dict):
         return evaluate(
@@ -191,7 +202,8 @@ class SnowFriend(Star):
 
         这类申请没有 OneBot request 事件和 flag，只会以私聊系统消息
         「请求添加你为好友」出现；NapCat 提供了可疑申请列表和专用处理接口，
-        但该接口只能同意、不能拒绝，所以黑名单/不达标的只能通知主人手动处理。
+        但该接口只能同意、不能拒绝，所以拒绝只能在 QQ 里手动做。
+        处理完不拦截这条消息——跟还没加上好友的人警惕地聊几句是允许的。
         """
         if not self._enabled():
             return
@@ -208,17 +220,11 @@ class SnowFriend(Star):
             items = await client.call_action("get_doubt_friends_add_request", count=50)
         except Exception as exc:
             logger.info(f"[{NAME}] 读取可疑好友申请失败：{exc}")
-            if text in ("请求添加你为好友", "请求加你为好友"):
-                event.stop_event()
             return
         item = find_doubt_request(items, qq)
         if not item:
-            # 普通 request 事件会走另一个 handler；这句系统原话本身不该进 LLM
-            if text in ("请求添加你为好友", "请求加你为好友"):
-                event.stop_event()
+            # 列表里没有 TA：可能是普通申请事件（另一条 handler 处理），或已处理。
             return
-        # 这是申请系统消息，不能让它进 LLM 闲聊
-        event.stop_event()
         flag = str(item.get("flag") or "")
         if not flag:
             logger.warning(f"[{NAME}] 可疑好友申请 {qq} 缺少 flag，无法处理")
@@ -226,33 +232,126 @@ class SnowFriend(Star):
         info = await self._stranger_info(client, qq)
         decision, reason = self._evaluate(qq, info)
         today = date.today().isoformat()
-        if decision != DECISION_ACCEPT:
-            hint = "建议手动拒绝" if decision == DECISION_REJECT else "只能手动在 QQ 里同意"
-            logger.info(
-                f"[{NAME}] 可疑好友申请 {qq} 保持待处理：{reason}（{describe(info)}）"
-            )
+        if decision == DECISION_ACCEPT and self._counter.allow(today):
+            try:
+                await client.call_action(
+                    "set_doubt_friends_add_request", flag=flag, approve=True
+                )
+            except Exception as exc:
+                logger.warning(f"[{NAME}] 同意可疑好友申请 {qq} 失败：{exc}")
+                reason = "自动同意失败（flag 可能已过期）"
+                await self._hold_for_review(qq, flag, "doubt", info, reason)
+                return
+            self._counter.record(today)
+            logger.info(f"[{NAME}] 已同意可疑好友申请 {qq}（{reason}）")
             await self._notify_owner(
-                f"可疑好友申请：{qq}（{describe(info)}）没有自动通过：{reason}；{hint}"
+                f"同意了好友申请：{qq}（{describe(info)}，{reason}）"
             )
             return
-        if not self._counter.allow(today):
-            logger.info(
-                f"[{NAME}] 今日自动通过已达上限（{self._counter.limit}），"
-                f"可疑申请 {qq} 转人工"
-            )
+        if decision == DECISION_ACCEPT:
+            reason = "今日自动通过额度已用完"
+        await self._hold_for_review(qq, flag, "doubt", info, reason)
+
+    async def _hold_for_review(
+        self, qq: str, flag: str, kind: str, info: dict, reason: str, comment: str = ""
+    ) -> None:
+        """自动判定未通过：把对方信息发给主人，等「同意/拒绝 QQ号」的裁决。"""
+        if not bool(self._cfg("review_enabled", True)):
+            logger.info(f"[{NAME}] 好友申请 {qq} 保持待处理（未开转发）：{reason}")
             return
-        try:
-            await client.call_action(
-                "set_doubt_friends_add_request", flag=flag, approve=True
-            )
-        except Exception as exc:
-            logger.warning(f"[{NAME}] 同意可疑好友申请 {qq} 失败：{exc}")
-            return
-        self._counter.record(today)
-        logger.info(f"[{NAME}] 已同意可疑好友申请 {qq}（{reason}）")
-        await self._notify_owner(
-            f"同意了好友申请：{qq}（{describe(info)}，{reason}）"
+        self._pending.add(qq, flag, kind)
+        how = (
+            f"回复「同意 {qq}」通过（拒绝要在 QQ 里手动处理，7 天内有效）。"
+            if kind == "doubt"
+            else f"回复「同意 {qq}」通过，或「拒绝 {qq}」拒绝（7 天内有效）。"
         )
+        await self._notify_owner(
+            f"收到好友申请：{qq}（{describe(info)}）\n"
+            f"没有自动通过：{reason}"
+            + (f"\n附言：{comment}" if comment else "")
+            + f"\n{how}"
+        )
+
+    def _is_admin(self, event: AstrMessageEvent) -> bool:
+        """裁决人必须是主人/管理员（网页测试台视为主人自己）。"""
+        if str(event.get_platform_name() or "") == "webchat":
+            return True
+        owner = str(self._cfg("owner_session", "") or "").strip()
+        if owner and str(event.unified_msg_origin or "") == owner:
+            return True
+        qq = str(event.get_sender_id() or "")
+        try:
+            admins = self.context.get_config().get("admins_id") or []
+            if qq and str(qq) in {str(a) for a in admins}:
+                return True
+        except Exception:
+            pass
+        try:
+            if callable(getattr(event, "is_admin", None)) and event.is_admin():
+                return True
+        except Exception:
+            pass
+        return False
+
+    @filter.event_message_type(
+        filter.EventMessageType.PRIVATE_MESSAGE, priority=(1 << 31) - 2
+    )
+    async def on_owner_review(self, event: AstrMessageEvent):
+        """主人回复「同意/拒绝 [QQ号]」裁决挂起的好友申请。"""
+        parsed = parse_owner_reply(str(event.message_str or ""))
+        if not parsed:
+            return
+        if not self._is_admin(event):
+            return
+        action, qq_arg = parsed
+        if not qq_arg:
+            # 只回「同意/拒绝」不带号码时不当命令，避免和正常聊天混淆
+            return
+        event.stop_event()
+        client = self._client(event)
+        if client is None:
+            return
+        hit = self._pending.get(qq_arg)
+        if not hit:
+            await self._notify_owner("没有找到对应的好友申请，可能已过期或已处理。")
+            return
+        qq, item = hit
+        flag, kind = item["flag"], item["kind"]
+        approve = action == "accept"
+
+        if kind == "doubt" and not approve:
+            # NapCat 的可疑申请接口强制同意，拒绝做不了
+            self._pending.pop(qq)
+            await self._notify_owner(
+                f"可疑申请 {qq} 只能通过接口同意；拒绝请在 QQ 里手动处理。"
+            )
+            return
+        if kind == "normal":
+            ok = await self._set_request(
+                client, flag, approve,
+                "" if approve else str(self._cfg("reject_comment", "") or ""),
+            )
+        else:
+            try:
+                await client.call_action(
+                    "set_doubt_friends_add_request", flag=flag, approve=True
+                )
+                ok = True
+            except Exception as exc:
+                logger.warning(f"[{NAME}] 同意可疑申请 {qq} 失败：{exc}")
+                ok = False
+        self._pending.pop(qq)
+        if not ok:
+            await self._notify_owner(
+                f"处理 {qq} 失败：申请的 flag 可能已过期，让对方重新申请一次。"
+            )
+            return
+        if approve:
+            logger.info(f"[{NAME}] 主人裁决通过好友申请 {qq}")
+            await self._notify_owner(f"已同意 {qq} 的好友申请。")
+        else:
+            logger.info(f"[{NAME}] 主人裁决拒绝好友申请 {qq}")
+            await self._notify_owner(f"已拒绝 {qq} 的好友申请。")
 
     async def _notify_owner(self, text: str) -> None:
         if not bool(self._cfg("notify_owner", True)):
