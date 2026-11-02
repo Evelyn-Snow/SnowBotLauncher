@@ -8,7 +8,13 @@
     "description": "电子书库目录",
     "type": "string",
     "default": "",
-    "hint": "留空 = 插件数据目录 books/；可填任意绝对路径，往里丢 .txt/.epub 她就会优先读"
+    "hint": "留空 = 插件数据目录 books/；可填任意绝对路径，往里丢 .txt/.md/.epub/.pdf/.docx 她就会优先读"
+  },
+  "papers_dir": {
+    "description": "论文 PDF 存放目录",
+    "type": "string",
+    "default": "",
+    "hint": "她自己找到论文后把 PDF 下到这里；留空 = 插件数据目录 papers/"
   },
   "events_dir": {
     "description": "经历记录目录",

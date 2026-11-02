@@ -1,6 +1,6 @@
 """Bot 真实经历插件的纯逻辑（不依赖 AstrBot，可单独测试）。
 
-覆盖：每周配额、触发时刻（按日期种子确定）、书架选书、epub/txt 文本抽取、
+覆盖：每周配额、触发时刻（按日期种子确定）、书架选书、txt/epub/pdf/docx 文本抽取、
 Gutendex/arXiv 结果解析、事件记录渲染与聊天注入摘要。
 """
 
@@ -8,9 +8,15 @@ from __future__ import annotations
 
 import datetime as _dt
 import hashlib
+import html as _html
 import re
 import zipfile
 from xml.etree import ElementTree
+
+SUPPORTED_DOC_SUFFIXES = (".txt", ".epub", ".pdf", ".docx", ".md", ".html", ".htm")
+PRIVATE_DOC_SUFFIXES = (".caj", ".kdh", ".nh")
+MAX_DOC_CHARS = 4_000_000
+PDF_MAX_PAGES = 400
 
 # ---------------- 基础工具 ----------------
 
@@ -153,26 +159,112 @@ def pick_book(files: list[dict], index: dict) -> dict | None:
     return None
 
 
+def _limit_text(text: str | None) -> str | None:
+    text = str(text or "").strip()
+    return text[:MAX_DOC_CHARS] if text else None
+
+
+def _html_text(raw: str) -> str:
+    raw = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", raw)
+    raw = re.sub(r"(?is)<br\s*/?>|</p>|</div>|</li>|</h[1-6]>", "\n", raw)
+    raw = re.sub(r"(?s)<[^>]+>", " ", raw)
+    return re.sub(r"[ \t]+", " ", _html.unescape(raw))
+
+
+def _pdf_text(path: str) -> str:
+    """PDF 正文；没装 pypdf 或加密/扫描件无文字层时返回空串。"""
+    try:
+        from pypdf import PdfReader  # 可选依赖，缺了就退回摘要
+    except Exception:
+        return ""
+    reader = PdfReader(path)
+    if getattr(reader, "is_encrypted", False):
+        try:
+            reader.decrypt("")
+        except Exception:
+            return ""
+    parts, total = [], 0
+    for page in list(reader.pages)[:PDF_MAX_PAGES]:
+        try:
+            piece = page.extract_text() or ""
+        except Exception:
+            continue
+        if piece.strip():
+            parts.append(piece)
+            total += len(piece)
+        if total >= MAX_DOC_CHARS:
+            break
+    return "\n".join(parts)
+
+
+def _docx_text_stdlib(path: str) -> str:
+    """不依赖 python-docx 的兜底：直接读 word/document.xml 里的段落文字。"""
+    with zipfile.ZipFile(path) as zf:
+        xml = zf.read("word/document.xml")
+    root = ElementTree.fromstring(xml)
+    w = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    parts = []
+    for para in root.iter(f"{w}p"):
+        line = "".join(t.text or "" for t in para.iter(f"{w}t")).strip()
+        if line:
+            parts.append(line)
+    return "\n".join(parts)
+
+
+def _docx_text(path: str) -> str:
+    try:
+        from docx import Document  # 可选依赖：有它就能把表格也读出来
+    except Exception:
+        return _docx_text_stdlib(path)
+    doc = Document(path)
+    parts = [p.text.strip() for p in doc.paragraphs if p.text and p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells if c.text and c.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+    return "\n".join(parts)
+
+
 def extract_book_text(path: str, size_limit: int = 16 * 1024 * 1024) -> str | None:
-    """读取电子书文本：.txt 直接解码；.epub 用 zipfile 抽取 XHTML 文本。"""
+    """读取文档正文：txt/md/epub/pdf/docx/html；私有格式（caj 等）返回 None。"""
     try:
         lower = str(path).lower()
-        if lower.endswith(".txt"):
+        if lower.endswith((".txt", ".md")):
             with open(path, "rb") as f:
                 raw = f.read(size_limit)
-            return raw.decode("utf-8", errors="ignore")
+            return _limit_text(raw.decode("utf-8", errors="ignore"))
+        if lower.endswith((".html", ".htm")):
+            with open(path, "rb") as f:
+                raw = f.read(size_limit)
+            return _limit_text(_html_text(raw.decode("utf-8", errors="ignore")))
         if lower.endswith(".epub"):
             with zipfile.ZipFile(path) as zf:
                 parts = []
                 for name in sorted(zf.namelist()):
                     if name.lower().endswith((".xhtml", ".html", ".htm")):
                         raw = zf.read(name).decode("utf-8", errors="ignore")
-                        text = re.sub(r"<[^>]+>", " ", raw)
-                        parts.append(re.sub(r"\s+", " ", text))
-                return "\n".join(p for p in parts if p.strip())
+                        parts.append(_html_text(raw))
+                return _limit_text("\n".join(p for p in parts if p.strip()))
+        if lower.endswith(".pdf"):
+            return _limit_text(_pdf_text(path))
+        if lower.endswith(".docx"):
+            return _limit_text(_docx_text(path))
     except Exception:
         return None
     return None
+
+
+def document_format_hint(path: str) -> str:
+    """读不出正文时给一句人话原因，方便日志和聊天里解释。"""
+    lower = str(path or "").lower()
+    if lower.endswith(PRIVATE_DOC_SUFFIXES):
+        return "知网 CAJ/KDH/NH 是私有格式，先用 CAJViewer 另存为 PDF"
+    if lower.endswith(".doc"):
+        return "老式 .doc 先另存为 .docx 或 PDF"
+    if lower.endswith(SUPPORTED_DOC_SUFFIXES):
+        return "文件可能损坏、加密，或是扫描件没有文字层"
+    return "支持 txt/md/epub/pdf/docx/html"
 
 
 def book_chunk(text: str, offset: int, chunk: int = READ_CHUNK) -> tuple[str, int]:
@@ -224,7 +316,7 @@ def pick_gutendex_book(payload: dict, used_ids: set[str]) -> tuple[str, str] | N
 
 
 def parse_arxiv_entries(atom_xml: str, limit: int = 5) -> list[dict]:
-    """解析 arXiv Atom XML，返回 [{title, authors, summary, link}]。"""
+    """解析 arXiv Atom XML，返回 [{title, authors, summary, link, pdf_url}]。"""
     try:
         root = ElementTree.fromstring(str(atom_xml or ""))
     except ElementTree.ParseError:
@@ -242,9 +334,24 @@ def parse_arxiv_entries(atom_xml: str, limit: int = 5) -> list[dict]:
         link_el = entry.find("a:link", ns)
         if link_el is not None:
             link = link_el.get("href", "")
+        pdf_url = ""
+        for el in entry.findall("a:link", ns):
+            if el.get("type") == "application/pdf" or el.get("title") == "pdf":
+                pdf_url = el.get("href", "")
+                break
+        if not pdf_url:
+            raw_id = entry.findtext("a:id", "", ns)
+            if "/abs/" in raw_id:
+                pdf_url = raw_id.replace("/abs/", "/pdf/") + ".pdf"
         if title and summary:
             out.append(
-                {"title": title, "authors": authors, "summary": summary, "link": link}
+                {
+                    "title": title,
+                    "authors": authors,
+                    "summary": summary,
+                    "link": link,
+                    "pdf_url": pdf_url,
+                }
             )
     return out
 

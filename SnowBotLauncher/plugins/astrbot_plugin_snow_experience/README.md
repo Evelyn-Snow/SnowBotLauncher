@@ -10,7 +10,21 @@
 |---|---|---|
 | 读书 | 优先读电子书库里没读完的书（续读到上次位置）；书库空了才从古腾堡公版书自动下载（**仅限 txt 格式**、中文优先、≤8MB，失败不耗次数） | 2 次/周 |
 | 查资料 | 按兴趣关键词池用 DeepSeek 搜索并整理成笔记 | 3 次/周 |
-| 读论文 | arXiv 按关键词检索，读摘要后写中文笔记 | 1 次/周 |
+| 读论文 | arXiv 按关键词检索，下载 **PDF 正文**阅读（失败退回摘要）后写中文笔记，PDF 存进 `papers_dir` | 1 次/周 |
+
+## 支持阅读的文件
+
+书库（`books_dir`）里放以下格式，她会按「没读过 → 读到一半」的顺序自动读：
+
+| 格式 | 说明 |
+|---|---|
+| `.txt` / `.md` | 直接读 |
+| `.epub` | zipfile 抽 XHTML 正文 |
+| `.pdf` | 用 `pypdf` 抽文字层；扫描件/加密 PDF 读不出文字 |
+| `.docx` | 用 `python-docx` 读段落和表格；没装时用 zipfile 兜底读段落 |
+| `.html` / `.htm` | 去标签后读 |
+
+**知网格式**：`.caj` / `.kdh` / `.nh` 是知网的私有容器格式，不内置解析。知网大多数文献也能下 PDF，优先下 PDF；只有 CAJ 时，用 CAJViewer 打开后「另存为 PDF」放进书库即可。老式 `.doc` 也建议先另存为 `.docx` 或 PDF。
 
 - 每天最多 1 个事件，触发时刻按日期种子固定在 `event_window` 时段内（重启不重排）
 - 触发时虚拟人设若在睡觉，事件推迟（不在梦里查论文）
@@ -28,7 +42,8 @@
 | 键 | 默认 | 说明 |
 |---|---|---|
 | enabled | true | 总开关 |
-| books_dir | 空 | 电子书库目录；留空用插件数据目录 books/，可手动放 .txt/.epub |
+| books_dir | 空 | 电子书库目录；留空用插件数据目录 books/，可手动放 txt/md/epub/pdf/docx |
+| papers_dir | 空 | 她下载的论文 PDF 存放目录；留空用插件数据目录 papers/ |
 | topics | 空 | 兴趣关键词池（逗号分隔） |
 | event_window | 10:00-21:00 | 事件触发时段 |
 | event_chance | 0.7 | 每天触发概率 |
@@ -37,5 +52,7 @@
 
 ## 依赖
 
-- 无第三方依赖（arXiv XML 用标准库解析，epub 用 zipfile）。
+- **pypdf**（必装，读 PDF 正文）；**python-docx**（可选，读 docx 表格更完整，没装时用标准库兜底读段落）。
+- AstrBot 会按 `requirements.txt` 自动安装；也可以手动 `pip install pypdf python-docx`。
 - 需要已配置 DeepSeek 搜索（查资料事件用，与 AstrBot 内置 web_search 同一份 Key）。
+- arXiv XML 用标准库解析，epub/html 用标准库，不依赖第三方。

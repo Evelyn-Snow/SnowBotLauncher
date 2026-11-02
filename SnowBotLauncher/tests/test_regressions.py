@@ -130,9 +130,12 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     split_moral_section,
 )
 from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
+    SUPPORTED_DOC_SUFFIXES,
     book_chunk,
+    document_format_hint,
     event_time_for_date,
     experience_summary,
+    extract_book_text,
     parse_arxiv_entries,
     pick_arxiv_paper,
     pick_book,
@@ -1302,9 +1305,55 @@ class ExperienceTests(unittest.TestCase):
         self.assertEqual(len(entries), 2)
         self.assertEqual(entries[0]["title"], "A Study of Exoplanet Atmospheres")
         self.assertIn("Alice Chen", entries[0]["authors"])
+        self.assertTrue(entries[0]["pdf_url"].endswith("2401.00001v1.pdf"))
         first = pick_arxiv_paper(entries, set())
         self.assertEqual(pick_arxiv_paper(entries, {first["title"]})["title"], "Duplicate Skip Test")
         self.assertEqual(parse_arxiv_entries("not xml"), [])
+
+    def test_extract_documents(self):
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            txt = tmp_path / "a.txt"
+            txt.write_text("纯文本正文", encoding="utf-8")
+            self.assertEqual(extract_book_text(str(txt)), "纯文本正文")
+
+            md = tmp_path / "b.md"
+            md.write_text("# 标题\n正文", encoding="utf-8")
+            self.assertIn("正文", extract_book_text(str(md)))
+
+            docx = tmp_path / "c.docx"
+            from docx import Document
+
+            doc = Document()
+            doc.add_paragraph("第一段正文")
+            table = doc.add_table(rows=1, cols=2)
+            table.cell(0, 0).text = "甲"
+            table.cell(0, 1).text = "乙"
+            doc.save(str(docx))
+            text = extract_book_text(str(docx))
+            self.assertIn("第一段正文", text)
+            self.assertIn("甲 | 乙", text)
+
+        class FakePage:
+            def extract_text(self):
+                return "PDF 正文"
+
+        class FakeReader:
+            is_encrypted = False
+            pages = [FakePage()]
+
+        fake = SimpleNamespace(PdfReader=lambda _path: FakeReader())
+        with patch.dict(sys.modules, {"pypdf": fake}):
+            self.assertIn("PDF 正文", extract_book_text("x.pdf"))
+
+    def test_document_hints_and_suffixes(self):
+        self.assertIn(".pdf", SUPPORTED_DOC_SUFFIXES)
+        self.assertIn(".docx", SUPPORTED_DOC_SUFFIXES)
+        self.assertIn("CAJViewer", document_format_hint("x.caj"))
+        self.assertIn("另存为", document_format_hint("x.doc"))
+        self.assertIn("扫描件", document_format_hint("x.pdf"))
 
     def test_pick_gutendex_txt_only(self):
         picked = pick_gutendex_book(GUTENDEX_PAYLOAD, set())
