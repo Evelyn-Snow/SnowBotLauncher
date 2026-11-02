@@ -724,6 +724,31 @@ class ProviderSeedAudioTTS(TTSProvider):
         c = provider_config
         prob = c.get("seed_audio_reply_probability", 0.33)
         self.reply_probability = float(0.33 if prob in (None, "") else prob)
+        self.template = c.get("seed_audio_prompt_template") or "{persona}，说：{text}"
+        self.persona = c.get("seed_audio_persona") or "一个声音"
+        self.fmt = "mp3"
+        self.sample_rate = 24000
+        self.model = "seed-audio-1.0"
+
+    def _prompt(self, text: str) -> str:
+        line = text.replace("“", "「").replace("”", "」").replace('"', "")
+        return self.template.format(persona=self.persona, text=line)
+
+    async def _request(self, text: str) -> tuple[dict, dict]:
+        body = {
+            "model": self.model,
+            "text_prompt": self._prompt(text),
+            "audio_config": {
+                "format": self.fmt,
+                "sample_rate": self.sample_rate,
+                "enable_subtitle": True,
+            },
+        }
+        headers = {
+            "X-Api-App-Id": self.app_id,
+            "Content-Type": "application/json",
+        }
+        return body, headers
 
 
 class SeedAudioTTSPlugin(Star):
@@ -835,8 +860,35 @@ class SeedAudioPatchTests(unittest.TestCase):
         once = patch_seed_audio_source(SEED_AUDIO_SOURCE)
         self.assertEqual(patch_seed_audio_source(once), once)
 
+    def test_speed_and_reference_patch(self):
+        """语速参数与参考音频：audio_config.speech_rate + references[].audio_data + @Audio1。"""
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        self.assertIn('"speech_rate": max(-50, min(100', out)
+        self.assertIn("self.speech_rate", out)
+        self.assertIn("self.reference_path", out)
+        self.assertIn('body["references"] = [', out)
+        self.assertIn('{"audio_data": base64.b64encode', out)
+        self.assertIn("@Audio1", out)
+
     def test_unknown_source_untouched(self):
         self.assertEqual(patch_seed_audio_source("x = 1\n"), "x = 1\n")
+
+    def test_speed_patch_applies_to_already_patched_source(self):
+        """旧版本已打过主补丁的 main.py 也要能补上语速/参考音频。"""
+        from snowbot.astrbot import seed_audio_patch as sp
+
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        old = out.replace(sp.SPEED_STATE, "")
+        old = old.replace(sp.AUDIO_CONFIG_NEW, sp.AUDIO_CONFIG_OLD)
+        old = old.replace(sp.REFERENCE_BLOCK, "")
+        old = old.replace(sp.PROMPT_NEW, sp.PROMPT_OLD)
+        self.assertIn("_voice_blocked_reason", old)
+        self.assertNotIn("self.speech_rate", old)
+
+        new = patch_seed_audio_source(old)
+        self.assertIn('"speech_rate": max(-50, min(100', new)
+        self.assertIn('body["references"] = [', new)
+        self.assertIn("@Audio1", new)
 
 
 class MessengerTests(unittest.TestCase):

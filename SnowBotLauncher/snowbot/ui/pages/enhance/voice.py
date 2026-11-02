@@ -117,17 +117,41 @@ class VoiceMixin:
         self.doubao_base = QLineEdit("https://openspeech.bytedance.com/api/v3/tts/create")
         self.doubao_model = QLineEdit("seed-audio-1.0")
         self.doubao_persona = QLineEdit(
-            "一个憨萌软糯的小女生，声音甜甜的、有点奶，十几岁的感觉"
+            "一个二十岁在读大学的女生，声音清亮自然、带点软，说话有笑意，"
+            "普通话标准，不装甜、不夹嗓子、不拖长音"
         )
         self.doubao_prompt = QLineEdit(
-            "{persona}，在QQ上给好朋友发语音，语气轻快自然，只说引号里的这句话，一字不差：“{text}”"
+            "{persona}。正在 QQ 上给哥哥发语音，就像平时在家随口聊天："
+            "语气轻快、语速自然略快，有轻有重，该连的字连起来说，"
+            "不要一字一顿、不要留大段空白、不要匀速念稿、不要播报腔；"
+            "只说引号里的这句话，一字不差：“{text}”"
         )
+        self.doubao_speed = QSpinBox()
+        self.doubao_speed.setRange(-50, 100)
+        self.doubao_speed.setValue(0)
+        self.doubao_speed.setToolTip("0 = 原速；100 ≈ 2 倍速；-50 ≈ 0.5 倍速。语速在合成时生效，不是后期变速")
+        ref_row = QWidget()
+        ref_layout = QHBoxLayout(ref_row)
+        ref_layout.setContentsMargins(0, 0, 0, 0)
+        self.doubao_ref = QLineEdit()
+        self.doubao_ref.setPlaceholderText("可选：一段 10~30 秒的自然说话录音，用来模仿音色和语气")
+        doubao_ref_browse = QPushButton("浏览…")
+        doubao_ref_browse.setObjectName("ghost")
+        doubao_ref_browse.clicked.connect(self.browse_doubao_ref)
+        doubao_ref_clear = QPushButton("清除")
+        doubao_ref_clear.setObjectName("ghost")
+        doubao_ref_clear.clicked.connect(lambda: self.doubao_ref.clear())
+        ref_layout.addWidget(self.doubao_ref, 1)
+        ref_layout.addWidget(doubao_ref_browse)
+        ref_layout.addWidget(doubao_ref_clear)
         doubao_form.addRow("APP ID", self.doubao_appid)
         doubao_form.addRow("Access Token", self.doubao_token)
         doubao_form.addRow("API 地址", self.doubao_base)
         doubao_form.addRow("模型", self.doubao_model)
         doubao_form.addRow("声音描述", self.doubao_persona)
         doubao_form.addRow("提示词模板", self.doubao_prompt)
+        doubao_form.addRow("语速（-50~100）", self.doubao_speed)
+        doubao_form.addRow("参考音频", ref_row)
         doubao_layout.addLayout(doubao_form)
 
         burst_group = QGroupBox("自发语音惯性调度（明确说“语音”仍必发）")
@@ -220,6 +244,16 @@ class VoiceMixin:
         if path:
             self.mimo_ref.setText(path)
 
+    def browse_doubao_ref(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择参考音频（10~30 秒、只有一个人说话）",
+            str(Path.home()),
+            "音频 (*.mp3 *.wav *.m4a *.ogg)",
+        )
+        if path:
+            self.doubao_ref.setText(path)
+
     def _load_voice_ui(self):
         settings = self.config.get("provider_tts_settings") or {}
         self.voice_prob.setValue(float(settings.get("trigger_probability", 0.05)))
@@ -249,6 +283,8 @@ class VoiceMixin:
             self.doubao_model.setText(str(provider.get("model") or ""))
             self.doubao_persona.setText(str(provider.get("seed_audio_persona") or ""))
             self.doubao_prompt.setText(str(provider.get("seed_audio_prompt_template") or ""))
+            self.doubao_speed.setValue(int(provider.get("seed_audio_speech_rate") or 0))
+            self.doubao_ref.setText(str(provider.get("seed_audio_reference_audio") or ""))
             self.doubao_burst_prob.setValue(
                 float(provider.get("seed_audio_burst_probability") or 0.3)
             )
@@ -355,6 +391,8 @@ class VoiceMixin:
                     "seed_audio_burst_reset_seconds": int(self.doubao_burst_reset.value()),
                     "seed_audio_hourly_max": int(self.doubao_hourly_max.value()),
                     "seed_audio_max_attempts": int(self.doubao_attempts.value()),
+                    "seed_audio_speech_rate": int(self.doubao_speed.value()),
+                    "seed_audio_reference_audio": self.doubao_ref.text().strip(),
                     "timeout": 60,
                 },
                 False,

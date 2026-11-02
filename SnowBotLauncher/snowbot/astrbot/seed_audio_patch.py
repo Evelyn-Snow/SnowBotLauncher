@@ -56,7 +56,46 @@ TMPL_STATE = (
     '        "seed_audio_burst_decay": 0.5,\n'
     '        "seed_audio_burst_reset_seconds": 600,\n'
     '        "seed_audio_hourly_max": 10,\n'
+    '        "seed_audio_speech_rate": 0,\n'
+    '        "seed_audio_reference_audio": "",\n'
 )
+
+# 补丁 5：语速与参考音频。
+# audio_config 支持 speech_rate（-50~100，100≈2.0x，0=原速）；
+# references 用纯 base64 的 audio_data，并在 text_prompt 里用 @Audio1 引用。
+# 参考音频在配置里存「本地路径」，插件读取时才转 base64，避免配置被撑爆。
+SPEED_STATE = """        rate = c.get("seed_audio_speech_rate")
+        self.speech_rate = int(0 if rate in (None, "") else rate)
+        self.reference_path = str(c.get("seed_audio_reference_audio") or "").strip()
+"""
+
+AUDIO_CONFIG_OLD = """            "audio_config": {
+                "format": self.fmt,
+                "sample_rate": self.sample_rate,
+                "enable_subtitle": True,
+            },
+"""
+AUDIO_CONFIG_NEW = """            "audio_config": {
+                "format": self.fmt,
+                "sample_rate": self.sample_rate,
+                "enable_subtitle": True,
+                "speech_rate": max(-50, min(100, int(getattr(self, "speech_rate", 0) or 0))),
+            },
+"""
+
+REFERENCE_BLOCK = """        ref_path = str(getattr(self, "reference_path", "") or "").strip()
+        if ref_path:
+            try:
+                if os.path.isfile(ref_path) and os.path.getsize(ref_path) <= 10 * 1024 * 1024:
+                    with open(ref_path, "rb") as _f:
+                        body["references"] = [
+                            {"audio_data": base64.b64encode(_f.read()).decode()}
+                        ]
+            except Exception as _exc:
+                logger.info(f"[SeedAudio] 参考音频读取失败，按纯文本合成：{_exc}")
+"""
+
+PROMPT_REF_NOTE = "用 @Audio1 的音色、语速和说话风格模仿；"
 
 # 补丁 4：台词校验从「逐字全等」放宽到「相似度达标即接受」。
 # 原逻辑念错一个字就整次重试，每次重试都计费（实测重试率 38%，多花约 1/3 的钱）；
@@ -200,21 +239,56 @@ _ANCHORS = (DECORATOR_MARKER, DICE_OLD, CLASS_LINE, INIT_LINE, PROB_LINE, TMPL_L
 def patch_seed_audio_source(text: str) -> str:
     """返回打完全部补丁的 main.py 源码；版本对不上时自动跳过对应补丁。"""
     text = text.replace(TEMP_PATH_OLD, TEMP_PATH_NEW)
-    if "_voice_blocked_reason" in text:
-        return text
-    # 任一锚点缺失都说明插件版本不匹配，宁可不打也不留半截补丁。
-    if any(anchor not in text for anchor in _ANCHORS):
-        return text
-    text = text.replace(CLASS_LINE, CLASS_LINE + CLASS_STATE, 1)
-    text = text.replace(INIT_LINE, INIT_LINE + INIT_STATE, 1)
-    text = text.replace(PROB_LINE, PROB_LINE + PROB_STATE, 1)
-    text = text.replace(TMPL_LINE, TMPL_LINE + TMPL_STATE, 1)
-    helpers_and_hint = "\n".join(HELPERS) + "\n" + "\n".join(FORCE_VOICE_LINES) + "\n"
-    text = text.replace(DECORATOR_MARKER, helpers_and_hint + DECORATOR_MARKER, 1)
-    text = text.replace(DICE_OLD, DICE_NEW, 1)
-    text = text.replace(CHAIN_LINE, CHAIN_LINE + "        self._note_voice(umo)\n", 1)
+    # 各补丁自己判断是否已打过：老版本打过的文件也还能补上新功能。
+    if "_voice_blocked_reason" not in text:
+        # 任一锚点缺失都说明插件版本不匹配，宁可不打也不留半截补丁。
+        if any(anchor not in text for anchor in _ANCHORS):
+            return text
+        text = text.replace(CLASS_LINE, CLASS_LINE + CLASS_STATE, 1)
+        text = text.replace(INIT_LINE, INIT_LINE + INIT_STATE, 1)
+        text = text.replace(PROB_LINE, PROB_LINE + PROB_STATE, 1)
+        text = text.replace(TMPL_LINE, TMPL_LINE + TMPL_STATE, 1)
+        helpers_and_hint = "\n".join(HELPERS) + "\n" + "\n".join(FORCE_VOICE_LINES) + "\n"
+        text = text.replace(DECORATOR_MARKER, helpers_and_hint + DECORATOR_MARKER, 1)
+        text = text.replace(DICE_OLD, DICE_NEW, 1)
+        text = text.replace(CHAIN_LINE, CHAIN_LINE + "        self._note_voice(umo)\n", 1)
+    text = _add_speed_and_reference(text)
     text = _add_match_tolerance(text)
     return _add_diagnostics(text)
+
+
+PROMPT_OLD = """    def _prompt(self, text: str) -> str:
+        line = text.replace("“", "「").replace("”", "」").replace('"', "")
+        return self.template.format(persona=self.persona, text=line)
+"""
+PROMPT_NEW = """    def _prompt(self, text: str) -> str:
+        line = text.replace("“", "「").replace("”", "」").replace('"', "")
+        note = ""
+        if str(getattr(self, "reference_path", "") or "").strip():
+            note = "用 @Audio1 的音色、语速和说话风格模仿；"
+        return note + self.template.format(persona=self.persona, text=line)
+"""
+
+HEADERS_OLD = "        headers = {\n"
+
+
+def _add_speed_and_reference(text: str) -> str:
+    """语速参数 + 参考音频（两项都改不动就整体跳过，保持插件可用）。"""
+    # 用类属性判断，避免被 default_config_tmpl 里的配置键名误判成「已打过」
+    if "self.speech_rate" in text:
+        return text
+    if AUDIO_CONFIG_OLD not in text:
+        return text
+    text = text.replace(AUDIO_CONFIG_OLD, AUDIO_CONFIG_NEW, 1)
+    # __init__ 里补 speech_rate / reference_path
+    text = text.replace(PROB_STATE, PROB_STATE + SPEED_STATE, 1)
+    # references 塞在 headers 之前
+    if HEADERS_OLD in text:
+        text = text.replace(HEADERS_OLD, REFERENCE_BLOCK + HEADERS_OLD, 1)
+    # prompt 里加 @Audio1 引用说明
+    if PROMPT_OLD in text:
+        text = text.replace(PROMPT_OLD, PROMPT_NEW, 1)
+    return text
 
 
 def _add_match_tolerance(text: str) -> str:
