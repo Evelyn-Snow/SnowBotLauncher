@@ -10,6 +10,7 @@ from .common import (
     EDGE_VOICES,
     Path,
     QComboBox,
+    QCheckBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -121,15 +122,23 @@ class VoiceMixin:
             "普通话标准，不装甜、不夹嗓子、不拖长音、不播报腔"
         )
         self.doubao_prompt = QLineEdit(
-            "{persona}。正在 QQ 上给哥哥发语音，就像平时在家随口聊天："
-            "语气轻快、语速比平时稍快一点，有轻有重，该连的字连起来说，"
-            "句尾干脆、别拖尾音，不要一字一顿、不要留大段空白、"
-            "不要匀速念稿、不要播报腔；只说引号里的这句话，一字不差：“{text}”"
+            "{persona}。正在 QQ 上给哥哥发语音，就像平时在家随口聊天：{style}；"
+            "只说引号里的这句话，一字不差：“{text}”"
         )
         self.doubao_speed = QSpinBox()
         self.doubao_speed.setRange(-50, 100)
         self.doubao_speed.setValue(30)
         self.doubao_speed.setToolTip("0 = 原速；100 ≈ 2 倍速；-50 ≈ 0.5 倍速。语速在合成时生效，不是后期变速")
+        self.doubao_dynamic = QCheckBox("每条由对话模型决定语气和语速")
+        self.doubao_dynamic.setChecked(True)
+        self.doubao_dynamic.setToolTip(
+            "每条语音合成前多一次很小的模型调用（约 1~3 秒、不到一分钱），"
+            "由它结合对方的话和这句回复决定情绪、语速；失败自动用「默认表演」"
+        )
+        self.doubao_style_default = QLineEdit(
+            "语气轻快、语速稍快，有轻有重，句尾干脆、别拖尾音"
+        )
+        self.doubao_style_default.setToolTip("动态语气关闭或生成失败时使用")
         ref_row = QWidget()
         ref_layout = QHBoxLayout(ref_row)
         ref_layout.setContentsMargins(0, 0, 0, 0)
@@ -151,6 +160,8 @@ class VoiceMixin:
         doubao_form.addRow("声音描述", self.doubao_persona)
         doubao_form.addRow("提示词模板", self.doubao_prompt)
         doubao_form.addRow("语速（-50~100）", self.doubao_speed)
+        doubao_form.addRow("动态语气", self.doubao_dynamic)
+        doubao_form.addRow("默认表演", self.doubao_style_default)
         doubao_form.addRow("参考音频", ref_row)
         doubao_layout.addLayout(doubao_form)
 
@@ -284,6 +295,10 @@ class VoiceMixin:
             self.doubao_persona.setText(str(provider.get("seed_audio_persona") or ""))
             self.doubao_prompt.setText(str(provider.get("seed_audio_prompt_template") or ""))
             self.doubao_speed.setValue(int(provider.get("seed_audio_speech_rate") or 0))
+            self.doubao_dynamic.setChecked(bool(provider.get("seed_audio_dynamic_prompt", True)))
+            self.doubao_style_default.setText(
+                str(provider.get("seed_audio_style_default") or "语气轻快、语速稍快，有轻有重，句尾干脆、别拖尾音")
+            )
             self.doubao_ref.setText(str(provider.get("seed_audio_reference_audio") or ""))
             self.doubao_burst_prob.setValue(
                 float(provider.get("seed_audio_burst_probability") or 0.3)
@@ -392,6 +407,8 @@ class VoiceMixin:
                     "seed_audio_hourly_max": int(self.doubao_hourly_max.value()),
                     "seed_audio_max_attempts": int(self.doubao_attempts.value()),
                     "seed_audio_speech_rate": int(self.doubao_speed.value()),
+                    "seed_audio_dynamic_prompt": bool(self.doubao_dynamic.isChecked()),
+                    "seed_audio_style_default": self.doubao_style_default.text().strip(),
                     "seed_audio_reference_audio": self.doubao_ref.text().strip(),
                     "timeout": 60,
                 },

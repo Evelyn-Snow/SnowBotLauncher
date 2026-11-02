@@ -703,8 +703,10 @@ class ShareTextMergeTests(unittest.TestCase):
         self.assertEqual(merge_share_text("帮我看看", ""), "帮我看看")
 
 
-SEED_AUDIO_SOURCE = '''import os
+SEED_AUDIO_SOURCE = '''import base64
+import os
 import random
+import re
 import time
 
 from astrbot import logger
@@ -736,7 +738,7 @@ class ProviderSeedAudioTTS(TTSProvider):
         line = text.replace("“", "「").replace("”", "」").replace('"', "")
         return self.template.format(persona=self.persona, text=line)
 
-    async def _request(self, text: str) -> tuple[dict, dict]:
+    async def _request(self, text: str) -> tuple[dict, float]:
         body = {
             "model": self.model,
             "text_prompt": self._prompt(text),
@@ -751,6 +753,10 @@ class ProviderSeedAudioTTS(TTSProvider):
             "Content-Type": "application/json",
         }
         return body, headers
+
+    async def get_audio(self, text: str) -> str:
+        data, dt = await self._request(text)
+        return ""
 
 
 class SeedAudioTTSPlugin(Star):
@@ -769,7 +775,11 @@ class SeedAudioTTSPlugin(Star):
             return
         texts = [c.text for c in result.chain if isinstance(c, Plain)]
         full = "\\n".join(texts)
-        path = await prov.get_audio(full)
+        t0 = time.monotonic()
+        try:
+            path = await prov.get_audio(full)
+        except Exception:
+            return
         new_chain = [Record(file=path, url=path, text=full)]
         result.chain = new_chain
 '''
@@ -879,8 +889,10 @@ class SeedAudioPatchTests(unittest.TestCase):
         """旧版本已打过主补丁的 main.py 也要能补上语速/参考音频。"""
         from snowbot.astrbot import seed_audio_patch as sp
 
-        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
-        old = out.replace(sp.SPEED_STATE, "")
+        # 先造一份「只有旧补丁、没有动态语气」的产物
+        with patch.object(sp, "_add_dynamic_style", lambda t: t):
+            base = sp.patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        old = base.replace(sp.SPEED_STATE, "")
         old = old.replace(sp.AUDIO_CONFIG_NEW, sp.AUDIO_CONFIG_OLD)
         old = old.replace(sp.REFERENCE_BLOCK, "")
         old = old.replace(sp.PROMPT_NEW, sp.PROMPT_OLD)
@@ -891,6 +903,42 @@ class SeedAudioPatchTests(unittest.TestCase):
         self.assertIn('"speech_rate": max(-50, min(100', new)
         self.assertIn('body["references"] = [', new)
         self.assertIn("@Audio1", new)
+        self.assertIn("self.dynamic_prompt", new)
+
+    def test_dynamic_style_patch(self):
+        """动态语气：对话模型生成表演提示 + 语速增量，接进整条语音流程。"""
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        ast.parse(out)
+        self.assertIn("self.dynamic_prompt", out)
+        self.assertIn("self.base_speech_rate", out)
+        self.assertIn("async def _style_hint", out)
+        self.assertIn("def _parse_style", out)
+        self.assertIn("rate_delta", out)
+        self.assertIn("await prov.get_audio(full, style=style, rate_delta=rate_delta)", out)
+        self.assertIn('"text_prompt": self._prompt(text, style)', out)
+        self.assertIn("import asyncio", out)
+        # 模板没有 {style} 时，提示会前置到 note 里而不是丢掉
+        self.assertIn("这句这样念：", out)
+
+    def test_parse_style(self):
+        import textwrap
+
+        out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
+        funcs = {}
+        for node in ast.walk(ast.parse(out)):
+            if isinstance(node, ast.FunctionDef) and node.name == "_parse_style":
+                funcs[node.name] = textwrap.dedent(ast.get_source_segment(out, node))
+        mod: dict = {}
+        exec("import re\n" + funcs["_parse_style"], mod)
+        parse = mod["_parse_style"]
+
+        style, delta = parse("情绪=撒娇；语速=稍快；句尾=软；力度=轻")
+        self.assertIn("撒娇", style)
+        self.assertIn("语速稍快", style)
+        self.assertEqual(delta, 15)
+        self.assertEqual(parse("语速=稍慢")[1], -15)
+        self.assertEqual(parse("胡说八道")[1], 0)
+        self.assertEqual(parse("")[0], "")
 
 
 class MessengerTests(unittest.TestCase):
