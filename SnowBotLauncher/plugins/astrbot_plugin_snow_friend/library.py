@@ -120,6 +120,33 @@ def is_friend_request(raw: dict) -> bool:
     ) == "friend"
 
 
+REQUEST_NOTICE_WORDS = (
+    "请求添加你为好友",
+    "请求加你为好友",
+    "申请添加你为好友",
+    "加好友请求",
+    "好友申请",
+)
+
+
+def is_friend_request_notice(text: str) -> bool:
+    """QQ 会把一部分好友申请降级成「可疑好友申请」，以私聊系统消息出现。
+
+    这类申请没有 OneBot request 事件，只能从消息文本识别，再用 NapCat 的
+    get_doubt_friends_add_request / set_doubt_friends_add_request 处理。
+    """
+    line = str(text or "").strip()
+    return bool(line) and any(word in line for word in REQUEST_NOTICE_WORDS)
+
+
+def find_doubt_request(items, qq: str) -> dict | None:
+    """在可疑好友申请列表里按 QQ 号找对应条目（带 flag 才能同意）。"""
+    for item in items or []:
+        if isinstance(item, dict) and str(item.get("user_id") or "") == str(qq):
+            return item
+    return None
+
+
 def describe(info: dict) -> str:
     """给主人看的一句话摘要。"""
     if not isinstance(info, dict):

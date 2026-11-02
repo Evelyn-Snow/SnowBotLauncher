@@ -25,7 +25,9 @@ from .library import (
     describe,
     evaluate,
     extract_level,
+    find_doubt_request,
     is_friend_request,
+    is_friend_request_notice,
     is_vip,
     parse_qq_list,
 )
@@ -138,15 +140,7 @@ class SnowFriend(Star):
             return
 
         info = await self._stranger_info(client, qq)
-        decision, reason = evaluate(
-            qq,
-            info=info,
-            min_level=int(self._cfg("min_qq_level", 16)),
-            accept_vip=bool(self._cfg("accept_vip", True)),
-            max_qq_len=int(self._cfg("max_qq_len", 9)),
-            whitelist=parse_qq_list(self._cfg("whitelist", "")),
-            blacklist=parse_qq_list(self._cfg("blacklist", "")),
-        )
+        decision, reason = self._evaluate(qq, info)
         today = date.today().isoformat()
 
         if decision == DECISION_ACCEPT:
@@ -177,6 +171,86 @@ class SnowFriend(Star):
             return
 
         logger.info(f"[{NAME}] 好友申请 {qq} 保持待处理：{reason}（{describe(info)}）")
+
+    def _evaluate(self, qq: str, info: dict):
+        return evaluate(
+            qq,
+            info=info,
+            min_level=int(self._cfg("min_qq_level", 16)),
+            accept_vip=bool(self._cfg("accept_vip", True)),
+            max_qq_len=int(self._cfg("max_qq_len", 9)),
+            whitelist=parse_qq_list(self._cfg("whitelist", "")),
+            blacklist=parse_qq_list(self._cfg("blacklist", "")),
+        )
+
+    @filter.event_message_type(
+        filter.EventMessageType.PRIVATE_MESSAGE, priority=(1 << 31) - 1
+    )
+    async def on_doubt_friend_request(self, event: AstrMessageEvent):
+        """处理 QQ 降级成「可疑好友申请」的请求。
+
+        这类申请没有 OneBot request 事件和 flag，只会以私聊系统消息
+        「请求添加你为好友」出现；NapCat 提供了可疑申请列表和专用处理接口，
+        但该接口只能同意、不能拒绝，所以黑名单/不达标的只能通知主人手动处理。
+        """
+        if not self._enabled():
+            return
+        text = str(event.message_str or "").strip()
+        if not is_friend_request_notice(text):
+            return
+        qq = str(event.get_sender_id() or "").strip()
+        if not qq:
+            return
+        client = self._client(event)
+        if client is None:
+            return
+        try:
+            items = await client.call_action("get_doubt_friends_add_request", count=50)
+        except Exception as exc:
+            logger.info(f"[{NAME}] 读取可疑好友申请失败：{exc}")
+            return
+        item = find_doubt_request(items, qq)
+        if not item:
+            # 普通 request 事件会走另一个 handler；这句系统原话本身不该进 LLM
+            if text in ("请求添加你为好友", "请求加你为好友"):
+                event.stop_event()
+            return
+        # 这是申请系统消息，不能让它进 LLM 闲聊
+        event.stop_event()
+        flag = str(item.get("flag") or "")
+        if not flag:
+            logger.warning(f"[{NAME}] 可疑好友申请 {qq} 缺少 flag，无法处理")
+            return
+        info = await self._stranger_info(client, qq)
+        decision, reason = self._evaluate(qq, info)
+        today = date.today().isoformat()
+        if decision != DECISION_ACCEPT:
+            hint = "建议手动拒绝" if decision == DECISION_REJECT else "只能手动在 QQ 里同意"
+            logger.info(
+                f"[{NAME}] 可疑好友申请 {qq} 保持待处理：{reason}（{describe(info)}）"
+            )
+            await self._notify_owner(
+                f"可疑好友申请：{qq}（{describe(info)}）没有自动通过：{reason}；{hint}"
+            )
+            return
+        if not self._counter.allow(today):
+            logger.info(
+                f"[{NAME}] 今日自动通过已达上限（{self._counter.limit}），"
+                f"可疑申请 {qq} 转人工"
+            )
+            return
+        try:
+            await client.call_action(
+                "set_doubt_friends_add_request", flag=flag, approve=True
+            )
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 同意可疑好友申请 {qq} 失败：{exc}")
+            return
+        self._counter.record(today)
+        logger.info(f"[{NAME}] 已同意可疑好友申请 {qq}（{reason}）")
+        await self._notify_owner(
+            f"同意了好友申请：{qq}（{describe(info)}，{reason}）"
+        )
 
     async def _notify_owner(self, text: str) -> None:
         if not bool(self._cfg("notify_owner", True)):

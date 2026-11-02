@@ -93,7 +93,9 @@ from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
     describe,
     evaluate,
     extract_level,
+    find_doubt_request,
     is_friend_request,
+    is_friend_request_notice,
     is_vip,
     parse_qq_list,
 )
@@ -1836,6 +1838,18 @@ class FriendRequestTests(unittest.TestCase):
         self.assertTrue(is_vip({"vipFlag": True}))
         self.assertFalse(is_vip({"vip_level": 0}))
         self.assertFalse(is_vip({}))
+
+    def test_friend_request_notice_and_doubt_list(self):
+        self.assertTrue(is_friend_request_notice("请求添加你为好友"))
+        self.assertTrue(is_friend_request_notice("好友申请"))
+        self.assertFalse(is_friend_request_notice("你好呀"))
+        items = [
+            {"user_id": 123, "nickname": "甲", "flag": "uid-a"},
+            {"user_id": "456", "nickname": "乙", "flag": "uid-b"},
+        ]
+        self.assertEqual(find_doubt_request(items, "456")["flag"], "uid-b")
+        self.assertIsNone(find_doubt_request(items, "789"))
+        self.assertIsNone(find_doubt_request([], "456"))
 
     def test_evaluate_by_level(self):
         d, why = evaluate("1234567890", info={"qqLevel": 20}, min_level=16)

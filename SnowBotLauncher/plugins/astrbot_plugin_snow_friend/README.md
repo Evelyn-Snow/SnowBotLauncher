@@ -25,6 +25,17 @@ QQ 号 ≤ N 位   → 同意（老号）
 
 低等级 + 非会员 + 长号，绝大多数是临时注册的号，不适合直接放进好友列表。
 
+## 可疑好友申请（NapCat 扩展）
+
+QQ 会把一部分申请降级成**可疑好友申请**：不会再发 OneBot 的 `request` 事件，而是以一句私聊系统消息「请求添加你为好友」出现。只监听 `request` 事件会漏掉这类申请，机器人甚至会把这句系统消息当普通聊天来回复。
+
+v0.1.1 起同时处理两种：
+
+- 普通申请：`set_friend_add_request`（可同意/拒绝）
+- 可疑申请：收到系统消息后查 NapCat 的 `get_doubt_friends_add_request`，按 QQ 号找到对应 `flag`，再调 `set_doubt_friends_add_request` 同意
+
+注意：`set_doubt_friends_add_request` **只能同意、不能拒绝**。遇到黑名单或不达标的可疑申请，插件不会动手，只私聊告知主人「建议手动拒绝 / 只能手动同意」，并拦下这条系统消息，避免机器人跟陌生人闲聊。
+
 ## 其他保护
 
 - **每日自动通过上限**（默认 5 个），超出后当天剩余申请一律挂起，防批量刷号
@@ -50,7 +61,8 @@ QQ 号 ≤ N 位   → 同意（老号）
 ## 依赖
 
 - 纯标准库，无第三方依赖。
-- 需要 NapCat 支持 `get_stranger_info`（查等级/会员）与 `set_friend_add_request`（处理申请），当前 NapCat 4.18.x 均支持。
+- 需要 NapCat 支持 `get_stranger_info`（查等级/会员）、`set_friend_add_request`（普通申请），以及 `get_doubt_friends_add_request` / `set_doubt_friends_add_request`（可疑申请，NapCat 扩展接口）。当前 NapCat 4.18.x 均支持。
+- 其他 OneBot 实现没有可疑申请接口时，普通 `request` 事件仍照常处理，可疑申请会被跳过。
 
 ## 注意
 
