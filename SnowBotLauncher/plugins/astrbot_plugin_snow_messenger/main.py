@@ -363,10 +363,16 @@ class SnowMessenger(Star):
         rec = self._pending.get(sender)
         if rec is None:
             return
-        self._pending.pop(sender, None)
         if time.time() > rec["expire_at"]:
+            self._pending.pop(sender, None)
             return
-        text = str(event.message_str or "").strip() or "（发来了一张图或其他内容）"
+        text = str(event.message_str or "").strip()
+        if not text:
+            # 纯图片/表情不消费转告机会：对方常常先甩个表情再打字，
+            # 若这里就转告「（发来了一张图）」，真正想说的话反而漏掉了。
+            logger.info(f"[{NAME}] {rec['name']} 发来非文字消息，等文字回复再转告")
+            return
+        self._pending.pop(sender, None)
         try:
             await self.context.send_message(
                 rec["asker_umo"],
