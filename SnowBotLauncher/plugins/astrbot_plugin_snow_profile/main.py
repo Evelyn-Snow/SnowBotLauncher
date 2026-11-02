@@ -316,11 +316,13 @@ class SnowProfile(Star):
         self._score_cache[qq] = (now, score)
         return score
 
-    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE, priority=(1 << 31) - 3)
+    @filter.event_message_type(filter.EventMessageType.ALL, priority=(1 << 31) - 3)
     async def ignore_gate(self, event: AstrMessageEvent):
-        """恶劣/警戒用户的普通群消息按概率直接忽略（等价于降低回复触发阈值）。
+        """恶劣/警戒用户的消息按概率直接忽略（等价于降低回复触发阈值）。
 
-        @ 机器人和命令不拦——当面指责需要她能回话。
+        - 群聊：@ 机器人和命令不拦（当面指责需要她能回话）；
+        - 私聊：默认也降频（概率更低），但**所有者和管理员永不忽略**；
+        - 命令一律放行。
         """
         if not self._enabled() or not bool(self._cfg("moral_enabled", True)):
             return
@@ -329,10 +331,16 @@ class SnowProfile(Star):
             return
         comps = getattr(event.message_obj, "message", None) or []
         self_id = str(event.get_self_id() or "")
-        if any(isinstance(c, At) and str(getattr(c, "qq", "")) == self_id for c in comps):
+        is_private = bool(getattr(event, "is_private_chat", lambda: False)())
+        if not is_private and any(
+            isinstance(c, At) and str(getattr(c, "qq", "")) == self_id for c in comps
+        ):
             return
         qq = str(getattr(event, "get_sender_id", lambda: "")() or "")
         if not qq:
+            return
+        # 所有者 / 管理员永不忽略（哪怕评分再低，也要能跟他说话）
+        if self._is_privileged(event, qq):
             return
         level = moral_level(
             self._cached_score(qq),
@@ -341,14 +349,40 @@ class SnowProfile(Star):
         )
         if level == "正常":
             return
-        if should_ignore(
-            level,
-            int(self._cfg("ignore_chance_warn", 30)),
-            int(self._cfg("ignore_chance_bad", 60)),
-            random.random(),
-        ):
+        if is_private:
+            if not bool(self._cfg("ignore_private_enabled", True)):
+                return
+            chance_warn = int(self._cfg("ignore_chance_private_warn", 20))
+            chance_bad = int(self._cfg("ignore_chance_private_bad", 40))
+            where = "私聊"
+        else:
+            chance_warn = int(self._cfg("ignore_chance_warn", 30))
+            chance_bad = int(self._cfg("ignore_chance_bad", 60))
+            where = "群"
+        if should_ignore(level, chance_warn, chance_bad, random.random()):
             event.stop_event()
-            logger.info(f"[{NAME}] 已忽略 {level} 用户 {qq} 的群消息（回复阈值降低）")
+            logger.info(f"[{NAME}] 已忽略 {level} 用户 {qq} 的{where}消息（回复阈值降低）")
+
+    def _is_privileged(self, event: AstrMessageEvent, qq: str) -> bool:
+        """所有者 / 管理员 / 网页测试台：不受道德评分降频影响。"""
+        # 网页测试台是所有者自己调试用的，一律豁免（其用户名不是 QQ 号，无法与 admins_id 匹配）
+        if str(event.get_platform_name() or "") == "webchat":
+            return True
+        owner = str(self._cfg("owner_session", "") or "").strip()
+        if owner and str(event.unified_msg_origin or "") == owner:
+            return True
+        try:
+            admins = self.context.get_config().get("admins_id") or []
+            if str(qq) in {str(a) for a in admins}:
+                return True
+        except Exception:
+            pass
+        try:
+            if callable(getattr(event, "is_admin", None)) and event.is_admin():
+                return True
+        except Exception:
+            pass
+        return False
 
     async def _attitude_delay(self, level: str) -> None:
         base = (

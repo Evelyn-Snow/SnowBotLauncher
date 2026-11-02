@@ -2,7 +2,7 @@ name: astrbot_plugin_snow_profile
 display_name: Bot 用户画像
 desc: 为每个聊天对象维护一份画像档案（QQ 号命名、记录昵称及改名史），持续用对话更新，聊天时自动注入参考
 help: 不需要指令：正常聊天即可，画像会持续更新；对它说「你对我了解多少」它会基于画像回答
-version: v0.2.0
+version: v0.2.1
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile
 author: Evelyn-Snow
 support_platforms:

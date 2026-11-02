@@ -98,5 +98,27 @@
     "description": "恶劣用户回复延迟（秒）",
     "type": "int",
     "default": 35
+  },
+  "ignore_private_enabled": {
+    "description": "私聊也降频",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，恶劣/警戒用户在私聊里也按概率不回；所有者和管理员永不忽略"
+  },
+  "ignore_chance_private_warn": {
+    "description": "警戒用户私聊忽略概率（%）",
+    "type": "int",
+    "default": 20
+  },
+  "ignore_chance_private_bad": {
+    "description": "恶劣用户私聊忽略概率（%）",
+    "type": "int",
+    "default": 40
+  },
+  "owner_session": {
+    "description": "所有者会话（永不忽略）",
+    "type": "string",
+    "default": "",
+    "hint": "例如 napcat:FriendMessage:123456789；留空时按 AstrBot 管理员判断"
   }
 }

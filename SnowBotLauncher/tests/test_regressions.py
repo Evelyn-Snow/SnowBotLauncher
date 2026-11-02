@@ -993,6 +993,16 @@ class ProfileTests(unittest.TestCase):
         self.assertTrue(should_ignore("警戒", 30, 60, 0.2))
         self.assertFalse(should_ignore("警戒", 30, 60, 0.5))
 
+    def test_private_chance_is_lower_than_group(self):
+        """私聊门槛比群聊高（更不容易被忽略），避免私聊体验过差。"""
+        level = "恶劣"
+        # 私聊 40% vs 群聊 60%：同样 roll=0.5，群里忽略、私聊放行
+        self.assertTrue(should_ignore(level, 30, 60, 0.5))   # 群聊
+        self.assertFalse(should_ignore(level, 20, 40, 0.5))  # 私聊
+        # 警戒同理：30% vs 20%
+        self.assertTrue(should_ignore("警戒", 30, 60, 0.25))
+        self.assertFalse(should_ignore("警戒", 20, 40, 0.25))
+
     def test_split_and_apply_moral_delta(self):
         llm_out = (
             "## 性格\n急躁\n\n## 道德评价\n"
