@@ -117,8 +117,11 @@ def merge_name_history(
     return result[:cap]
 
 
-def _strip_heading_marks(text: str) -> str:
-    return re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+def _drop_headings(text: str) -> str:
+    """去掉 markdown 标题行（注入时不需要「## 我们常聊什么」这种结构词）。"""
+    return "\n".join(
+        line for line in str(text or "").splitlines() if not line.lstrip().startswith("#")
+    )
 
 
 def profile_summary(md: str, limit: int = 400, include_moral: bool = False) -> str:
@@ -133,10 +136,10 @@ def profile_summary(md: str, limit: int = 400, include_moral: bool = False) -> s
         idx = body.find(MORAL_SECTION_MARK)
         if idx != -1:
             body = body[:idx]
-    # 去掉正文第一行的 H1（昵称已经由下面的 head 给出，避免重复）
-    body = re.sub(r"^#\s+[^\n]*\n*", "", body.strip(), count=1)
-    body = _strip_heading_marks(body)
+    # 标题（H1/H2）都去掉：昵称已由 head 给出，小节名对注入没有意义
+    body = _drop_headings(body)
     body = re.sub(r"\n{2,}", "\n", body).replace("\n", "；").strip("； \t")
+    body = body.replace("。；", "。").replace("；；", "；")
     head = f"昵称：{parsed['name'] or parsed['qq'] or '未知'}"
     summary = f"{SUMMARY_MARK} {head}；{body}" if body else f"{SUMMARY_MARK} {head}"
     if limit > 0 and len(summary) > limit:
