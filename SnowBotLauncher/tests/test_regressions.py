@@ -72,6 +72,19 @@ from plugins.astrbot_plugin_snow_guard.library import (  # noqa: E402
     wrap_untrusted,
     _as_ip,
 )
+from plugins.astrbot_plugin_snow_balance.library import (  # noqa: E402
+    CAP_LLM,
+    CAP_VISION,
+    CAP_VOICE,
+    compose_message,
+    format_balance,
+    grade_balance,
+    grade_voice,
+    parse_deepseek_balance,
+    parse_zhipu_balance,
+    severity,
+    should_notify,
+)
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     derive_scope_id,
     scope_kind,
@@ -1485,6 +1498,71 @@ class QqHealthTests(unittest.TestCase):
             )
             h = QqHealthMonitor(data, logs)
             self.assertEqual(h.napcat_offline_marker(), 0.0)
+
+
+class BalanceTests(unittest.TestCase):
+    def test_parse_deepseek(self):
+        ok, total, cur = parse_deepseek_balance(
+            {"is_available": True, "balance_infos": [{"currency": "CNY", "total_balance": "37.34"}]}
+        )
+        self.assertTrue(ok)
+        self.assertAlmostEqual(total, 37.34)
+        self.assertEqual(cur, "CNY")
+        ok, total, _ = parse_deepseek_balance({})
+        self.assertFalse(ok)
+        self.assertEqual(total, 0.0)
+
+    def test_parse_zhipu(self):
+        ok, value, _ = parse_zhipu_balance(
+            {"code": 200, "msg": "操作成功", "data": {"availableBalance": 0, "balance": 0}}
+        )
+        self.assertTrue(ok)
+        self.assertEqual(value, 0.0)
+        ok, _, _ = parse_zhipu_balance({"code": 1001, "msg": "鉴权失败"})
+        self.assertFalse(ok)
+
+    def test_grade_balance(self):
+        self.assertEqual(grade_balance(37.34, 5.0), "ok")
+        self.assertEqual(grade_balance(3.0, 5.0), "low")
+        self.assertEqual(grade_balance(0.0, 5.0), "empty")
+
+    def test_grade_voice(self):
+        self.assertEqual(grade_voice([]), "ok")
+        self.assertEqual(grade_voice([True, True, True]), "ok")
+        self.assertEqual(grade_voice([True, False]), "low")
+        self.assertEqual(grade_voice([False, False, True]), "empty")   # 多数失败
+        self.assertEqual(grade_voice([False] * 6), "down")             # 全失败
+        self.assertEqual(grade_voice([], down=True), "down")
+
+    def test_messages_are_personified(self):
+        self.assertIn("饿", compose_message(CAP_LLM, "low", "¥3.00"))
+        self.assertIn("嗓子", compose_message(CAP_VOICE, "empty", ""))
+        self.assertIn("看", compose_message(CAP_VISION, "down", ""))
+        self.assertIn("¥", compose_message(CAP_LLM, "low", "¥3.00"))
+        # 恢复语
+        self.assertIn("清爽", compose_message(CAP_LLM, "ok"))
+
+    def test_notify_rules(self):
+        now = 10000.0
+        # 首次异常 → 通知
+        self.assertTrue(should_notify(None, "low", 0, now, 6))
+        # 同状态 → 冷却期内不通知
+        self.assertFalse(should_notify("low", "low", now - 600, now, 6))
+        self.assertTrue(should_notify("low", "low", now - 3601 * 6, now, 6))
+        # 恶化 → 立即通知
+        self.assertTrue(should_notify("low", "empty", now - 60, now, 6))
+        # 恢复正常 → 通知一次
+        self.assertTrue(should_notify("empty", "ok", now - 3600, now, 6))
+        # 一直正常 → 不通知
+        self.assertFalse(should_notify("ok", "ok", 0, now, 6))
+
+    def test_severity_and_format(self):
+        self.assertLess(severity("ok"), severity("low"))
+        self.assertLess(severity("low"), severity("empty"))
+        self.assertLess(severity("empty"), severity("down"))
+        self.assertEqual(format_balance(37.34), "¥37.34")
+        self.assertEqual(format_balance(0.123), "¥0.123")
+        self.assertEqual(format_balance(1234.0), "¥1234")
 
 
 if __name__ == "__main__":
