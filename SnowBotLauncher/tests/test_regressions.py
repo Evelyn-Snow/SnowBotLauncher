@@ -111,8 +111,10 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
     relay_text,
 )
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
+    PROFILE_SYSTEM_PROMPT,
     apply_moral_delta,
     build_moral_section,
+    build_profile_prompt,
     clean_llm_markdown,
     extract_score,
     looks_like_profile,
@@ -1005,10 +1007,23 @@ class ProfileTests(unittest.TestCase):
     def test_summary_strips_and_truncates(self):
         md = render_profile("1", "小明", [], "## 性格\n安静\n\n## 兴趣\n天文", 0, 1)
         summary = profile_summary(md, limit=400)
-        self.assertTrue(summary.startswith("[用户画像] 昵称：小明"))
+        self.assertTrue(summary.startswith("[我记下的TA] 昵称：小明"))
         self.assertIn("安静", summary)
+        # 正文 H1 不重复出现在注入里
+        self.assertNotIn("我眼里的小明", summary)
         long = profile_summary(render_profile("1", "小明", [], "啊" * 900, 0, 1), limit=100)
         self.assertLessEqual(len(long), 105)
+
+    def test_profile_prompt_is_first_person(self):
+        prompt = build_profile_prompt("## 基本信息\n对方是学生", "小明：你好\n我：嗨", "2026-11-02")
+        self.assertIn("第一人称", prompt)
+        self.assertIn("旧档案如果是第三人称", prompt)
+        self.assertIn("不要用「该用户」「对方」「助手」", prompt)
+        self.assertIn("## 道德评价", prompt)
+        self.assertIn("2026-11-02", prompt)
+        # 系统提示也要她自己的口吻，而不是「客观档案」
+        self.assertIn("第一人称", PROFILE_SYSTEM_PROMPT)
+        self.assertNotIn("客观、简短", PROFILE_SYSTEM_PROMPT)
 
     def test_should_update_gates(self):
         now = time.time()

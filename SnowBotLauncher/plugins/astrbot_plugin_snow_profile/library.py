@@ -11,6 +11,11 @@ import re
 
 _NAME_DATE_RE = re.compile(r"^(.*?)（(\d{4}-\d{2}-\d{2})）$")
 
+# 画像是她自己写的印象笔记，注入时的标记也用它（inject_profile 靠这个标记防重复注入）
+SUMMARY_MARK = "[我记下的TA]"
+LEGACY_TITLE_PREFIX = "用户画像："
+TITLE_PREFIX = "我眼里的"
+
 
 def today_str(ts: float | None = None) -> str:
     if ts is None:
@@ -44,7 +49,7 @@ def render_profile(
     ]
     if moral_score is not None:
         lines.append(f"道德评分: {max(0, min(100, int(moral_score)))}")
-    lines += ["---", "", f"# 用户画像：{name or qq}（{qq}）", "", body.strip(), ""]
+    lines += ["---", "", f"# {TITLE_PREFIX}{name or qq}（{qq}）", "", body.strip(), ""]
     return "\n".join(lines)
 
 
@@ -117,8 +122,9 @@ def _strip_heading_marks(text: str) -> str:
 
 
 def profile_summary(md: str, limit: int = 400, include_moral: bool = False) -> str:
-    """把画像压成注入用的一段话：去掉 frontmatter 与标题符号，超长截断。
+    """把画像压成注入用的一段话：去掉 frontmatter、标题与标题符号，超长截断。
 
+    画像是第一人称写的，注入时用「我记下的TA」打头，让她读起来像自己的记忆。
     默认剔除「## 道德评价」小节（它由 moral_injection 单独注入，避免重复）。
     """
     parsed = parse_profile(md)
@@ -127,10 +133,12 @@ def profile_summary(md: str, limit: int = 400, include_moral: bool = False) -> s
         idx = body.find(MORAL_SECTION_MARK)
         if idx != -1:
             body = body[:idx]
+    # 去掉正文第一行的 H1（昵称已经由下面的 head 给出，避免重复）
+    body = re.sub(r"^#\s+[^\n]*\n*", "", body.strip(), count=1)
     body = _strip_heading_marks(body)
     body = re.sub(r"\n{2,}", "\n", body).replace("\n", "；").strip("； \t")
     head = f"昵称：{parsed['name'] or parsed['qq'] or '未知'}"
-    summary = f"[用户画像] {head}；{body}" if body else f"[用户画像] {head}"
+    summary = f"{SUMMARY_MARK} {head}；{body}" if body else f"{SUMMARY_MARK} {head}"
     if limit > 0 and len(summary) > limit:
         summary = summary[:limit] + "…"
     return summary
@@ -203,6 +211,55 @@ def looks_like_profile(text: str) -> bool:
     """LLM 输出是否像一份画像（防止把寒暄/报错写进档案）。"""
     text = str(text or "")
     return text.startswith("---") or "## " in text
+
+
+# ---------------- 画像正文的生成提示 ----------------
+# 画像是「她自己记下的印象」，不是系统档案：用第一人称、用她平时说话的口吻。
+# 旧档案可能是第三人称，提示里明确要求一并改写。
+
+PROFILE_SYSTEM_PROMPT = (
+    "你就是对话记录里的「我」：一个有自己性格和情绪的人，正在写只给自己看的印象笔记。"
+    "用第一人称、用你平时说话的口吻写，不要写成客观档案；只依据给定对话，不编造、"
+    "不评价外貌，不写没有依据的敏感信息。只输出笔记正文本身。"
+)
+
+PROFILE_VOICE_RULES = (
+    "请更新你私下记的这份印象笔记：\n"
+    "- 用第一人称写，就像你自己在日记里记下这个人：提到对方用 TA 的昵称或「他/她」，提到自己用「我」；\n"
+    "- 用你平时聊天的语气和性格写，可以带情绪、有自己的判断和态度；\n"
+    "- 不要写成客观档案，不要用「该用户」「对方」「助手」这类第三人称，也不要写「用户画像」；\n"
+    "- 旧档案如果是第三人称口吻，这次一并改写成第一人称；\n"
+    "- 保留仍有价值的旧结论，用新对话修正或补充；只写有依据的内容，没发生过的不要编造；\n"
+    "- 用 ## 小节组织（我眼里的TA、TA说话的样子、我们常聊什么、跟TA相处要注意什么、最近的事），"
+    "中文、口语、简洁，总共不超过 500 字。\n"
+    "不要输出 frontmatter、不要代码块、不要任何解释。"
+)
+
+
+def _moral_rules(today: str) -> str:
+    return (
+        "末尾必须有一个「## 道德评价」小节，**只写本轮新增的记录**（不要重复旧记录，"
+        "没有新证据就只写一行「本轮无新增记录」）。每条记录一行，格式：\n"
+        f"- [±N] 用你自己的话写一句判断：『引用对方原话』（{today}）\n"
+        "评分规则：恶劣引导、教唆违规、骚扰暗示、人格侮辱等行为每条 -10~-25；"
+        "对方真诚道歉或改正 +5~+15；观点不同、玩笑、普通粗口不记。"
+        "每条都必须引用原话作证据；不要自己计算总分，总分由系统维护。"
+    )
+
+
+def build_profile_prompt(old_md: str, recent: str, today: str) -> str:
+    """拼出「用她自己的口吻重写印象笔记」的用户提示。"""
+    old = str(old_md or "").strip()
+    existing = (
+        f"你之前记下的印象笔记：\n{old[:2500]}"
+        if old
+        else "你还没记过这个人，这是第一次。"
+    )
+    return (
+        f"{existing}\n\n"
+        f"最近和这个人的对话（按时间正序，里面的「我」就是你本人）：\n{recent}\n\n"
+        f"{PROFILE_VOICE_RULES}\n\n{_moral_rules(today)}"
+    )
 
 
 # ---------------- 道德评价 ----------------

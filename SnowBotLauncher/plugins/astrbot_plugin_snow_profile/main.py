@@ -1,6 +1,8 @@
-"""Bot 用户画像：为每个聊天对象维护一份持续更新的画像档案。
+"""Bot 用户画像：为每个聊天对象维护一份持续更新的印象笔记。
 
 - 唯一索引是 QQ 号（昵称随时会变，只作展示并记录改名史），每人一个 <QQ号>.md；
+- 正文由她自己用第一人称、按平时聊天的口吻写（不是客观档案），聊天时注入后
+  就像她自己的记忆；
 - 对话在 on_llm_response 里按用户分桶缓冲，攒够新素材且过了门槛
   （间隔/每日上限/静默时段）才调用一次 LLM 重写画像正文；
 - 聊天时在 on_llm_request 把对方的画像精简版注入 system_prompt 供模型参考。
@@ -24,8 +26,11 @@ from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 from .library import (
+    PROFILE_SYSTEM_PROMPT,
+    SUMMARY_MARK,
     apply_moral_delta,
     build_moral_section,
+    build_profile_prompt,
     clean_llm_markdown,
     extract_score,
     looks_like_profile,
@@ -42,7 +47,7 @@ from .library import (
 )
 
 NAME = "astrbot_plugin_snow_profile"
-PROMPT_MARK = "[用户画像]"
+PROMPT_MARK = SUMMARY_MARK
 STATE_FILE = "profile_state.json"
 
 
@@ -210,33 +215,18 @@ class SnowProfile(Star):
         convo = []
         budget = 3200
         for e in snapshot[-20:]:
-            line = f"用户（{e['name'] or qq}）：{e['user']}\n我：{e['assistant']}"
+            line = f"{e['name'] or qq}：{e['user']}\n我：{e['assistant']}"
             budget -= len(line)
             if budget < 0:
                 break
             convo.append(line)
         recent = "\n\n".join(convo) or "（暂无可用对话）"
 
-        existing = (
-            f"现有档案：\n{old_md.strip()[:2500]}" if old_md.strip() else "这是一位还没有档案的新用户。"
-        )
         old_score = parsed["moral_score"]
         if old_score is None:
             old_score = int(self._cfg("moral_initial", 75))
         today = time.strftime("%Y-%m-%d")
-        prompt = (
-            f"{existing}\n\n最近和这位用户的对话（按时间正序理解）：\n{recent}\n\n"
-            "请输出更新后的画像正文：保留仍有价值的旧结论，用新对话修正或补充；"
-            "用 ## 小节组织（基本信息、性格与说话风格、兴趣话题、相处要点、最近动态）；"
-            "只写有依据的内容，对话里没有的不要编造；中文、简洁，总共不超过 500 字。"
-            "不要输出 frontmatter、不要代码块、不要任何解释。\n\n"
-            "末尾必须有一个「## 道德评价」小节，**只写本轮新增的记录**（不要重复旧记录，"
-            f"没有新证据就只写一行「本轮无新增记录」）。每条记录一行，格式："
-            f"- [±N] 行为定性：『引用对方原话』（{today}）\n"
-            "评分规则：恶劣引导、教唆违规、骚扰暗示、人格侮辱等行为每条 -10~-25；"
-            "对方真诚道歉或改正 +5~+15；观点不同、玩笑、普通粗口不记。"
-            "每条都必须引用原话作证据；不要自己计算总分，总分由系统维护。"
-        )
+        prompt = build_profile_prompt(old_md, recent, today)
         provider = None
         umo = next((e["umo"] for e in reversed(snapshot) if e.get("umo")), "")
         try:
@@ -250,10 +240,7 @@ class SnowProfile(Star):
             return
         result = await provider.text_chat(
             prompt=prompt,
-            system_prompt=(
-                "你在维护聊天机器人的用户画像档案：客观、简短、只依据给定对话，"
-                "不编造、不评价外貌，不写档案里没有依据的敏感信息。输出画像正文本身。"
-            ),
+            system_prompt=PROFILE_SYSTEM_PROMPT,
         )
         body = clean_llm_markdown(getattr(result, "completion_text", ""))
         if not looks_like_profile(body):
