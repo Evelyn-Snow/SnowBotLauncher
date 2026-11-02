@@ -194,7 +194,7 @@ class SnowGuard(Star):
         if unsafe:
             block += (
                 "\n\n[本条消息含不安全链接] 以下链接未通过安全检查，"
-                "**不要调用任何抓取工具访问它们**，直接告诉用户这些链接不可信即可：\n"
+                "**不要调用任何抓取工具访问它们**，直接告诉对方这些链接不可信即可：\n"
                 + "\n".join(f"- {url}（{why}）" for url, why in unsafe[:3])
             )
         req.system_prompt = prompt + block

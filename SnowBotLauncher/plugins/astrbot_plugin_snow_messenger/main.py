@@ -209,9 +209,9 @@ class SnowMessenger(Star):
         if not looks_like_contact_request(str(event.message_str or "")):
             return
         req.system_prompt = (req.system_prompt or "") + (
-            "\n\n[传话说明] 用户想让你主动联系某个人。调用 contact_person 工具："
+            "\n\n[传话说明] 有人想让你主动联系另一个人。调用 contact_person 工具："
             "把要对对方说的话用你自己的语气完整写进 message 参数，工具会自动找人、"
-            "选择在群里@还是私聊并送达，送达结果会返回给你，再向用户自然确认。"
+            "选择在群里@还是私聊并送达，送达结果会返回给你，再自然地回一句确认。"
             "这段说明不要在回复中提到。"
         )
 
@@ -224,7 +224,7 @@ class SnowMessenger(Star):
         message: str,
         channel: str = "auto",
     ) -> str:
-        """替用户主动联系某个人并把话带到：去问、告诉、转告、提醒某人都用它。
+        """替跟你聊天的人主动联系另一个人并把话带到：去问、告诉、转告、提醒某人都用它。
 
         你要在 message 里用你自己的语气把要说的话写完整，工具只负责找到人并送达。
         对方在当前群里就先戳一下再@TA说话，否则私聊；TA私聊回复你时会把内容转告发起人。
@@ -241,9 +241,9 @@ class SnowMessenger(Star):
         person = str(person or "").strip()
         message = str(message or "").strip()
         if not person:
-            return "没说要找谁，需要用户提供联系对象的名称或QQ号。"
+            return "没说要找谁，得先问清楚联系对象的名称或 QQ 号。"
         if not message:
-            return "还没有要带的话，需要用户说明想让我说什么。"
+            return "还没有要带的话，得先问清楚想让我说什么。"
 
         platform = self._platform_id(event)
         group_id = str(event.get_group_id() or "")
@@ -277,7 +277,7 @@ class SnowMessenger(Star):
         if best is None:
             return f"没找到叫「{person}」的人（群成员和好友列表里都没有）。"
         if len(tied) > 1:
-            return f"找到好几个匹配「{person}」的人：{self._names(tied)}。问清楚用户要找哪一个再联系。"
+            return f"找到好几个匹配「{person}」的人：{self._names(tied)}。问清楚是哪一位再联系。"
 
         qq = best["qq"]
         name = best["name"] or qq

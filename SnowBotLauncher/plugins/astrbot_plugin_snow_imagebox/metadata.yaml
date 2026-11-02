@@ -2,7 +2,7 @@ name: astrbot_plugin_snow_imagebox
 display_name: Bot 图库
 desc: 让机器人保存聊天里的图片和表情包，之后按情绪或场景再发出来，并自动清理低频、远古图片
 help: 发图说「记住这个表情包」「存进图库」，或说「发一张生气的表情包」「看看图库」「清理图库」
-version: v0.2.5
+version: v0.2.6
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox
 author: Evelyn-Snow
 support_platforms:

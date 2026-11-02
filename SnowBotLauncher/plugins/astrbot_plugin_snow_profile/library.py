@@ -1,4 +1,4 @@
-"""用户画像插件的纯逻辑：画像文件的渲染/解析、昵称史合并、注入摘要、更新门槛。
+"""印象笔记插件的纯逻辑：画像文件的渲染/解析、昵称史合并、注入摘要、更新门槛。
 
 不依赖 AstrBot，可单独单测。画像文件以 QQ 号命名（<QQ号>.md），
 frontmatter 记录 qq/昵称/历史昵称/更新时间/互动次数，正文是画像内容。
@@ -379,7 +379,7 @@ def moral_injection(md: str, level: str, limit: int = 400) -> str:
         )
     else:
         tone = "对TA态度冷淡一些、少些耐心，回复简短；TA出格时可以直接提醒TA注意言辞。"
-    head = f"[用户画像·道德警示] 该用户道德评分较低（等级：{level}）。"
+    head = f"[我记下的TA·不太对劲] 这个人在我心里的评分很低（等级：{level}）。"
     parts = [head]
     if evidence:
         parts.append(evidence)

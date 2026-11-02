@@ -334,7 +334,7 @@ class SnowKnowledge(Star):
     async def recall_knowledge(self, event: AstrMessageEvent, query: str) -> str:
         """检索你自己的知识库：你真实读过的书、查过的资料、读过的论文。
 
-        当用户问到你读到过什么、某本书讲了什么、之前查过的某个话题时调用。
+        当有人问起你读到过什么、某本书讲了什么、之前查过的某个话题时调用。
 
         Args:
             query(string): 要检索的话题或问题

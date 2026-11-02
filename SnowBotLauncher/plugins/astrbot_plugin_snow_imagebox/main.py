@@ -108,7 +108,7 @@ class SnowImageBox(Star):
 
     @staticmethod
     def _deny() -> str:
-        return "只有所有者或管理员能让机器人收藏或删除图库里的图片。用你的口吻轻轻拒绝，不要提工具或路径。"
+        return "只有所有者或管理员能让我收藏或删除图库里的图片。用你的口吻轻轻拒绝，不要提工具或路径。"
 
     @staticmethod
     def _has_images(event: AstrMessageEvent) -> bool:
@@ -207,13 +207,13 @@ class SnowImageBox(Star):
             "- 你可以自己判断要不要收藏：画面情绪或梗明确、以后聊天可能复用、且不是隐私内容时，"
             "才调用 save_image_to_library，automatic 填 true，description 写画面和情绪，"
             "tags 写 2-5 个短标签。不要每张图都存，同一情绪/画面已经有的不要重复存。",
-            "- 用户明确说“记住/收藏/存下来/以后用”时，调用 save_image_to_library，"
+            "- 有人明确说“记住/收藏/存下来/以后用”时，调用 save_image_to_library，"
             "automatic 填 false；这种情况不受自动收藏频率限制。",
             "- 自动收藏有频率限制。工具说“这次不收藏”就自然跳过，不要反复调用，"
-            "也不要向用户解释限制或工具。",
+            "也不要向对方解释限制或工具。",
             "- **自动收藏是你自己私下的小动作**：存好就行，不要告诉对方，"
             "不要说“我存下来了”“记住了”“收好了”这类话，也不要道谢或确认——"
-            "照常接着聊天就好。只有用户明确让你存的时候，才可以简单回应一句。",
+            "照常接着聊天就好。只有对方明确让你存的时候，才可以简单回应一句。",
             "- 想发表情包时，调用 list_saved_images 或用 send_saved_image 按情绪/场景搜索并发送；"
             "图库里没有合适的图就不要硬发，也不要说图库里有实际不存在的图。",
             "- **发图优先用你自己的图库**（send_saved_image），而不是只用文字形容表情。"
@@ -235,8 +235,8 @@ class SnowImageBox(Star):
         owner_only = bool(self.conf.get("auto_save_owner_only", True))
         if has_image and owner_only and not self._is_owner(event):
             lines.append(
-                "- 这个会话不是所有者，你自己不要主动收藏这里的图片；"
-                "只有所有者明确让你保存时才调用保存工具。"
+                "- 这里不是所有者（哥哥或管理员），你自己不要主动收藏这里的图片；"
+                "只有对方明确让你保存时才调用保存工具。"
             )
         req.system_prompt = prompt + "\n\n" + "\n".join(lines)
 
@@ -250,8 +250,8 @@ class SnowImageBox(Star):
         source_note: str = "",
         automatic: bool = False,
     ) -> str:
-        """把当前消息或引用消息里的图片保存进机器人自己的图库，供以后聊天使用。
-        用户明确说“记住这张图”“收藏这个表情包”“存下来以后用”时调用，automatic 填 false。
+        """把当前消息或引用消息里的图片保存进我自己的图库，供以后聊天使用。
+        对方明确说“记住这张图”“收藏这个表情包”“存下来以后用”时调用，automatic 填 false。
         你也可以自己判断：画面情绪/梗明确、以后可能复用时调用，automatic 填 true。
         不要保存隐私、证件、聊天记录截图和敏感内容。
 
@@ -259,7 +259,7 @@ class SnowImageBox(Star):
             description(string): 画面内容、人物动作、文字和情绪，用一两句话描述，方便以后搜索
             tags(string): 2-5 个短标签，用逗号分隔，例如“生气,无语,表情包”
             source_note(string): 可选的来源备注，例如“所有者发的表情包”
-            automatic(boolean): 你自己判断要收藏时填 true；用户明确要求保存时填 false
+            automatic(boolean): 你自己判断要收藏时填 true；对方明确要求保存时填 false
         """
         if not self._enabled():
             return "图库功能未启用。"
@@ -271,29 +271,29 @@ class SnowImageBox(Star):
         if not self._can_save(event):
             if automatic:
                 # 自发收藏碰到权限限制时静默跳过；“用你的口吻拒绝”这类话术
-                # 只适用于用户明确要求的场景，否则模型会复读已经发过的内容。
+                # 只适用于对方明确要求的场景，否则模型会复读已经发过的内容。
                 return AUTO_SAVE_SKIPPED
             return self._deny()
         if automatic:
             if not bool(self.conf.get("auto_save_enabled", True)):
-                return "这次不自动收藏。不要向用户解释限制，也不要重试。"
+                return "这次不自动收藏。不要向对方解释限制，也不要重试。"
             if not event.is_private_chat() and not bool(
                 self.conf.get("auto_save_in_groups", False)
             ):
-                return "群聊里这次不自动收藏。不要向用户解释限制，也不要重试。"
+                return "群聊里这次不自动收藏。不要向对方解释限制，也不要重试。"
             if bool(self.conf.get("auto_save_owner_only", True)) and not self._is_owner(event):
-                return "这次不自动收藏。不要向用户解释限制，也不要重试。"
+                return "这次不自动收藏。不要向对方解释限制，也不要重试。"
             probe = f"{description} {tags} {getattr(event, 'message_str', '') or ''}"
             if any(word in probe for word in PRIVACY_WORDS):
-                return "这张图可能涉及隐私，这次不自动收藏。不要向用户解释限制。"
+                return "这张图可能涉及隐私，这次不自动收藏。不要向对方解释限制。"
             allowed, why = self._auto_limiter().allow()
             if not allowed:
-                return f"这次不自动收藏：{why}。不要向用户解释限制，也不要重试。"
+                return f"这次不自动收藏：{why}。不要向对方解释限制，也不要重试。"
             probability = max(
                 0, min(100, _to_int(self.conf.get("auto_save_probability"), 100))
             )
             if probability < 100 and random.random() * 100 >= probability:
-                return "这次先不自动收藏。不要向用户解释限制，也不要重试。"
+                return "这次先不自动收藏。不要向对方解释限制，也不要重试。"
 
         paths = await self._image_paths(event)
         if not paths:
@@ -334,10 +334,10 @@ class SnowImageBox(Star):
             # 自己判断收藏是"默默存"：只回一句极简确认，并要求不要向用户提起。
             # 返回 None 会被 AstrBot 转成字符串 "None" 进上下文，反而更奇怪，所以用这句话。
             if saved:
-                return "已默默存好。这是你自己私下做的事，不要向用户提起，不要确认、不要道谢，正常继续聊天。"
+                return "已默默存好。这是你自己私下做的事，不要向对方提起，不要确认、不要道谢，正常继续聊天。"
             if duplicates:
-                return "图库里已经有了。不要向用户提起，正常继续聊天。"
-            return "没有存成功（原因不用告诉用户），正常继续聊天。"
+                return "图库里已经有了。不要向对方提起，正常继续聊天。"
+            return "没有存成功（原因不用告诉对方），正常继续聊天。"
         return json.dumps(
             {
                 "ok": bool(saved or duplicates),
@@ -438,7 +438,7 @@ class SnowImageBox(Star):
     @filter.llm_tool(name="clean_image_library")
     async def clean_image_library(self, event: AstrMessageEvent) -> str:
         """立刻清理图库里的低频和远古图片，仅所有者/管理员可用。
-        正常情况会自动定时清理；用户明确说“清理图库”时再调用。
+        正常情况会自动定时清理；对方明确说“清理图库”时再调用。
         """
         if not self._enabled():
             return "图库功能未启用。"

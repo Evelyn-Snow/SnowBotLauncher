@@ -309,7 +309,7 @@ class SnowExperience(Star):
                 "用第一人称写一段读后感：读到/续读了什么内容、你的理解和想法。"
                 "口语、自然、带点你自己的态度，不超过 180 字。只输出正文。"
             ),
-            system_prompt="你是聊天机器人，正在坚持读书。写读后感正文本身，不要解释。",
+            system_prompt="你正在读这本书，写你自己读完的感受，像记在私人笔记本里那样。只写正文，不要解释。",
         )
         body = str(getattr(result, "completion_text", "") or "").strip()
         if not body:
@@ -414,7 +414,7 @@ class SnowExperience(Star):
                 "用第一人称写一段笔记：查了什么、学到/发现什么、你的感想。"
                 "口语、自然，不超过 180 字。只输出正文。"
             ),
-            system_prompt="你是聊天机器人，刚做完一次检索。写笔记正文本身，不要解释。",
+            system_prompt="你刚查完这个题目，写一段你自己的收获和想法，像记在私人笔记本里那样。只写正文，不要解释。",
         )
         body = str(getattr(result, "completion_text", "") or "").strip()
         if not body:
@@ -458,7 +458,7 @@ class SnowExperience(Star):
                 "用第一人称写一段笔记：这篇论文在研究什么、你的理解和想法（注明你只读了摘要）。"
                 "口语、自然，不超过 180 字。只输出正文。"
             ),
-            system_prompt="你是聊天机器人，刚做完一次论文检索。写笔记正文本身，不要解释。",
+            system_prompt="你刚读完这篇论文，写一段你自己的理解和想法，像记在私人笔记本里那样。只写正文，不要解释。",
         )
         body = str(getattr(result, "completion_text", "") or "").strip()
         if not body:

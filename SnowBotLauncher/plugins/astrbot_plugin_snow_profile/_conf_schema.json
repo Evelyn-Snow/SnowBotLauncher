@@ -1,6 +1,6 @@
 {
   "enabled": {
-    "description": "启用用户画像",
+    "description": "启用印象笔记",
     "type": "bool",
     "default": true
   },
