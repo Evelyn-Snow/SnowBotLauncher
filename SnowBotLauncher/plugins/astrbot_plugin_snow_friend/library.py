@@ -215,6 +215,26 @@ class PendingRequests:
         self._prune()
         return self._items.pop(str(qq), None)
 
+    def snapshot(self) -> dict:
+        """导出可 JSON 化的挂起记录（重启后恢复）。"""
+        self._prune()
+        return {k: dict(v) for k, v in self._items.items()}
+
+    def restore(self, data: dict) -> None:
+        self._items = {}
+        if isinstance(data, dict):
+            for qq, item in data.items():
+                if not isinstance(item, dict) or not item.get("flag"):
+                    continue
+                self._items[str(qq)] = {
+                    "flag": str(item["flag"]),
+                    "kind": str(item.get("kind") or "normal"),
+                    "ts": float(item.get("ts") or 0),
+                    "seq": int(item.get("seq") or 0),
+                }
+        self._seq = max((v["seq"] for v in self._items.values()), default=0)
+        self._prune()
+
     def __len__(self) -> int:
         self._prune()
         return len(self._items)

@@ -15,12 +15,15 @@ QQ 还会把一部分申请降级成「可疑好友申请」：没有 request �
 
 from __future__ import annotations
 
+import json
+import os
 from datetime import date
+from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import Plain
-from astrbot.api.star import Context, Star
+from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
 from .library import (
@@ -57,6 +60,35 @@ class SnowFriend(Star):
 
     def _cfg(self, key, default):
         return self.conf.get(key, default)
+
+    def _pending_path(self) -> Path:
+        try:
+            base = Path(str(StarTools.get_data_dir(NAME)))
+        except Exception:
+            base = Path("data") / "plugin_data" / NAME
+        base.mkdir(parents=True, exist_ok=True)
+        return base / "pending_reviews.json"
+
+    def _load_pending(self) -> None:
+        try:
+            data = json.loads(self._pending_path().read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        self._pending.restore(data if isinstance(data, dict) else {})
+        if len(self._pending):
+            logger.info(f"[{NAME}] 恢复了 {len(self._pending)} 条待裁决好友申请")
+
+    def _save_pending(self) -> None:
+        path = self._pending_path()
+        tmp = path.with_suffix(".json.tmp")
+        try:
+            tmp.write_text(
+                json.dumps(self._pending.snapshot(), ensure_ascii=False),
+                encoding="utf-8",
+            )
+            os.replace(tmp, path)
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 保存待裁决申请失败：{exc}")
 
     def _owner_umo(self) -> str:
         configured = str(self._cfg("owner_session", "") or "").strip()
@@ -172,6 +204,7 @@ class SnowFriend(Star):
                     )
                     return
                 logger.warning(f"[{NAME}] 同意 {qq} 失败，转人工处理")
+                reason = "自动同意失败（申请可能已过期）"
 
         if decision == DECISION_REJECT and bool(self._cfg("reject_blacklisted", True)):
             ok = await self._set_request(
@@ -260,6 +293,7 @@ class SnowFriend(Star):
             logger.info(f"[{NAME}] 好友申请 {qq} 保持待处理（未开转发）：{reason}")
             return
         self._pending.add(qq, flag, kind)
+        self._save_pending()
         how = (
             f"回复「同意 {qq}」通过（拒绝要在 QQ 里手动处理，7 天内有效）。"
             if kind == "doubt"
@@ -301,6 +335,9 @@ class SnowFriend(Star):
         parsed = parse_owner_reply(str(event.message_str or ""))
         if not parsed:
             return
+        # 只在 QQ 私聊里执行：网页测试台没有 OneBot 协议端，做不了加好友
+        if str(event.get_platform_name() or "") != "aiocqhttp":
+            return
         if not self._is_admin(event):
             return
         action, qq_arg = parsed
@@ -322,6 +359,7 @@ class SnowFriend(Star):
         if kind == "doubt" and not approve:
             # NapCat 的可疑申请接口强制同意，拒绝做不了
             self._pending.pop(qq)
+            self._save_pending()
             await self._notify_owner(
                 f"可疑申请 {qq} 只能通过接口同意；拒绝请在 QQ 里手动处理。"
             )
@@ -341,6 +379,7 @@ class SnowFriend(Star):
                 logger.warning(f"[{NAME}] 同意可疑申请 {qq} 失败：{exc}")
                 ok = False
         self._pending.pop(qq)
+        self._save_pending()
         if not ok:
             await self._notify_owner(
                 f"处理 {qq} 失败：申请的 flag 可能已过期，让对方重新申请一次。"
@@ -370,6 +409,7 @@ class SnowFriend(Star):
 
     # ---------------- 状态 ----------------
     async def initialize(self) -> None:
+        self._load_pending()
         logger.info(
             f"[{NAME}] 已启用，判定线：等级≥{self._cfg('min_qq_level', 16)}、"
             f"会员={'算' if self._cfg('accept_vip', True) else '不算'}、"

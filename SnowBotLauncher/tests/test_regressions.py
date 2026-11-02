@@ -1886,6 +1886,18 @@ class FriendRequestTests(unittest.TestCase):
             self.assertIsNone(pending.get("333"))
             self.assertEqual(len(pending), 0)
 
+    def test_pending_persist_roundtrip(self):
+        pending = PendingRequests(ttl_hours=1)
+        pending.add("111", "flag-a", "normal")
+        pending.add("222", "flag-b", "doubt")
+        restored = PendingRequests(ttl_hours=1)
+        restored.restore(pending.snapshot())
+        self.assertEqual(restored.get("111")[1]["flag"], "flag-a")
+        self.assertEqual(restored.get("222")[1]["kind"], "doubt")
+        self.assertEqual(restored.get()[0], "222")  # 顺序也恢复了
+        restored.restore({})
+        self.assertEqual(len(restored), 0)
+
     def test_evaluate_by_level(self):
         d, why = evaluate("1234567890", info={"qqLevel": 20}, min_level=16)
         self.assertEqual(d, DECISION_ACCEPT)
