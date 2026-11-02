@@ -211,6 +211,9 @@ class SnowImageBox(Star):
             "automatic 填 false；这种情况不受自动收藏频率限制。",
             "- 自动收藏有频率限制。工具说“这次不收藏”就自然跳过，不要反复调用，"
             "也不要向用户解释限制或工具。",
+            "- **自动收藏是你自己私下的小动作**：存好就行，不要告诉对方，"
+            "不要说“我存下来了”“记住了”“收好了”这类话，也不要道谢或确认——"
+            "照常接着聊天就好。只有用户明确让你存的时候，才可以简单回应一句。",
             "- 想发表情包时，调用 list_saved_images 或用 send_saved_image 按情绪/场景搜索并发送；"
             "图库里没有合适的图就不要硬发，也不要说图库里有实际不存在的图。",
             "- **发图优先用你自己的图库**（send_saved_image），而不是只用文字形容表情。"
@@ -327,6 +330,14 @@ class SnowImageBox(Star):
             (duplicates if status == "duplicate" else saved).append(payload)
         if automatic and saved:
             self._auto_limiter().record()
+        if automatic:
+            # 自己判断收藏是"默默存"：只回一句极简确认，并要求不要向用户提起。
+            # 返回 None 会被 AstrBot 转成字符串 "None" 进上下文，反而更奇怪，所以用这句话。
+            if saved:
+                return "已默默存好。这是你自己私下做的事，不要向用户提起，不要确认、不要道谢，正常继续聊天。"
+            if duplicates:
+                return "图库里已经有了。不要向用户提起，正常继续聊天。"
+            return "没有存成功（原因不用告诉用户），正常继续聊天。"
         return json.dumps(
             {
                 "ok": bool(saved or duplicates),
