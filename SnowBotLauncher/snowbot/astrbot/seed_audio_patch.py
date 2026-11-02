@@ -56,7 +56,7 @@ TMPL_STATE = (
     '        "seed_audio_burst_decay": 0.5,\n'
     '        "seed_audio_burst_reset_seconds": 600,\n'
     '        "seed_audio_hourly_max": 10,\n'
-    '        "seed_audio_speech_rate": 0,\n'
+    '        "seed_audio_speech_rate": 30,\n'
     '        "seed_audio_reference_audio": "",\n'
 )
 

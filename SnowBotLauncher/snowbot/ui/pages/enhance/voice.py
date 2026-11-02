@@ -117,18 +117,18 @@ class VoiceMixin:
         self.doubao_base = QLineEdit("https://openspeech.bytedance.com/api/v3/tts/create")
         self.doubao_model = QLineEdit("seed-audio-1.0")
         self.doubao_persona = QLineEdit(
-            "一个二十岁在读大学的女生，声音清亮自然、带点软，说话有笑意，"
-            "普通话标准，不装甜、不夹嗓子、不拖长音"
+            "一个二十岁在读大学的女生，声音清亮、说话带笑、轻快利落，"
+            "普通话标准，不装甜、不夹嗓子、不拖长音、不播报腔"
         )
         self.doubao_prompt = QLineEdit(
             "{persona}。正在 QQ 上给哥哥发语音，就像平时在家随口聊天："
-            "语气轻快、语速自然略快，有轻有重，该连的字连起来说，"
-            "不要一字一顿、不要留大段空白、不要匀速念稿、不要播报腔；"
-            "只说引号里的这句话，一字不差：“{text}”"
+            "语气轻快、语速比平时稍快一点，有轻有重，该连的字连起来说，"
+            "句尾干脆、别拖尾音，不要一字一顿、不要留大段空白、"
+            "不要匀速念稿、不要播报腔；只说引号里的这句话，一字不差：“{text}”"
         )
         self.doubao_speed = QSpinBox()
         self.doubao_speed.setRange(-50, 100)
-        self.doubao_speed.setValue(0)
+        self.doubao_speed.setValue(30)
         self.doubao_speed.setToolTip("0 = 原速；100 ≈ 2 倍速；-50 ≈ 0.5 倍速。语速在合成时生效，不是后期变速")
         ref_row = QWidget()
         ref_layout = QHBoxLayout(ref_row)
