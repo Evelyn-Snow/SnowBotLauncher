@@ -1,5 +1,5 @@
 #define MyAppName "SnowBotLauncher"
-#define MyAppVersion "1.5.33"
+#define MyAppVersion "1.5.34"
 #define MyAppExeName "SnowBotLauncher.exe"
 #define MyAppId "{{3F6D2A9B-1C4E-4D7A-8B2F-5E9C7D1A6B30}"
 

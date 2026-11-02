@@ -118,8 +118,8 @@ class VoiceMixin:
         self.doubao_base = QLineEdit("https://openspeech.bytedance.com/api/v3/tts/create")
         self.doubao_model = QLineEdit("seed-audio-1.0")
         self.doubao_persona = QLineEdit(
-            "一个二十岁在读大学的女生，声音甜美清脆、清亮干净，说话带笑、轻快利落，"
-            "普通话标准，甜而不腻、不夹嗓子、不拖长音、不播报腔"
+            "一个二十岁的女生，声音甜美清脆、清亮干净，普通话标准；"
+            "不夹嗓子、不装甜、不沙哑、不拖长音、不播报腔"
         )
         self.doubao_prompt = QLineEdit(
             "{persona}。正在 QQ 上给哥哥发语音，就像平时在家随口聊天：{style}；"
@@ -129,15 +129,15 @@ class VoiceMixin:
         self.doubao_speed.setRange(-50, 100)
         self.doubao_speed.setValue(30)
         self.doubao_speed.setToolTip("0 = 原速；100 ≈ 2 倍速；-50 ≈ 0.5 倍速。语速在合成时生效，不是后期变速")
-        self.doubao_dynamic = QCheckBox("每条由对话模型决定腔调、语速和顿挫")
+        self.doubao_dynamic = QCheckBox("每条由对话模型决定情绪、语速和顿挫")
         self.doubao_dynamic.setChecked(True)
         self.doubao_dynamic.setToolTip(
             "每条语音合成前多一次很小的模型调用（约 1~3 秒、不到一分钱），"
-            "由它结合对方的话和这句回复决定腔调、语速、顿挫；音色始终跟人设走，"
+            "由它结合对方的话和这句回复决定情绪、语速、顿挫；音色始终跟人设走，"
             "失败自动用「默认表演」"
         )
         self.doubao_style_default = QLineEdit(
-            "腔调自然、语速稍快、顿挫自然、句尾干脆"
+            "情绪自然、语速稍快、顿挫自然、句尾干脆"
         )
         self.doubao_style_default.setToolTip("动态语气关闭或生成失败时使用（同样不改音色）")
         ref_row = QWidget()
@@ -298,7 +298,7 @@ class VoiceMixin:
             self.doubao_speed.setValue(int(provider.get("seed_audio_speech_rate") or 0))
             self.doubao_dynamic.setChecked(bool(provider.get("seed_audio_dynamic_prompt", True)))
             self.doubao_style_default.setText(
-                str(provider.get("seed_audio_style_default") or "腔调自然、语速稍快、顿挫自然、句尾干脆")
+                str(provider.get("seed_audio_style_default") or "情绪自然、语速稍快、顿挫自然、句尾干脆")
             )
             self.doubao_ref.setText(str(provider.get("seed_audio_reference_audio") or ""))
             self.doubao_burst_prob.setValue(

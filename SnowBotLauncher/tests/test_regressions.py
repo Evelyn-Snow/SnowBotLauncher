@@ -919,21 +919,21 @@ class SeedAudioPatchTests(unittest.TestCase):
         self.assertIn("import asyncio", out)
         # 模板没有 {style} 时，提示会前置到 note 里而不是丢掉
         self.assertIn("这句这样念：", out)
-        # 动态提示只改腔调/语速/顿挫，音色锁在人设上
-        self.assertIn("腔调=<自然/轻快/温柔/俏皮/认真/无奈/困倦/黏人>", out)
+        # 动态提示只改情绪/语速/顿挫，音色锁在人设上
+        self.assertIn("情绪=<平静/开心/心疼/委屈/无奈/认真/困倦/俏皮/黏人>", out)
         self.assertIn("音色保持前面描述的音色，不要变", out)
         self.assertIn("只参考 @Audio1 的说话节奏和语气", out)
 
     def test_dynamic_style_upgrades_old_helpers(self):
-        """已经打过旧版动态语气补丁的 main.py，也要升级成腔调/顿挫版本。"""
+        """已经打过旧版动态语气补丁的 main.py，也要升级成情绪/顿挫版本。"""
         out = patch_seed_audio_source(SEED_AUDIO_SOURCE)
         old = out.replace(
+            "情绪=<平静/开心/心疼/委屈/无奈/认真/困倦/俏皮/黏人>",
             "腔调=<自然/轻快/温柔/俏皮/认真/无奈/困倦/黏人>",
-            "情绪=<开心/撒娇/委屈/无奈/认真/困倦/俏皮/平淡>",
         )
         new = patch_seed_audio_source(old)
-        self.assertIn("腔调=<自然/轻快/温柔/俏皮/认真/无奈/困倦/黏人>", new)
-        self.assertNotIn("情绪=<开心/撒娇", new)
+        self.assertIn("情绪=<平静/开心/心疼/委屈/无奈/认真/困倦/俏皮/黏人>", new)
+        self.assertNotIn("腔调=<自然/轻快", new)
         self.assertIn("音色保持前面描述的音色，不要变", new)
 
     def test_parse_style(self):
@@ -948,17 +948,17 @@ class SeedAudioPatchTests(unittest.TestCase):
         exec("import re\n" + funcs["_parse_style"], mod)
         parse = mod["_parse_style"]
 
-        style, delta = parse("腔调=温柔；语速=稍快；顿挫=分明；句尾=软；力度=轻")
-        self.assertIn("带点温柔", style)
-        self.assertIn("语速稍快", style)
-        self.assertIn("停顿分明", style)
-        self.assertEqual(delta, 15)
-        # 旧格式（情绪=…）仍能解析
-        style_old, delta_old = parse("情绪=俏皮；语速=稍慢；句尾=软；力度=轻")
+        style, delta = parse("情绪=心疼；语速=稍慢；顿挫=自然；句尾=软；力度=轻")
+        self.assertIn("带点心疼", style)
+        self.assertIn("语速稍慢", style)
+        self.assertIn("顿挫自然", style)
+        self.assertEqual(delta, -10)
+        # 旧格式（腔调=…）仍能解析
+        style_old, delta_old = parse("腔调=俏皮；语速=稍快；句尾=软；力度=轻")
         self.assertIn("带点俏皮", style_old)
-        self.assertEqual(delta_old, -15)
+        self.assertEqual(delta_old, 15)
         # 音色词必须被剔除，不能靠动态提示改音色
-        timbre, _ = parse("腔调=甜美清脆；语速=正常")
+        timbre, _ = parse("情绪=甜美清脆；语速=正常")
         self.assertNotIn("甜美", timbre)
         self.assertNotIn("清脆", timbre)
         self.assertEqual(parse("胡说八道")[1], 0)
