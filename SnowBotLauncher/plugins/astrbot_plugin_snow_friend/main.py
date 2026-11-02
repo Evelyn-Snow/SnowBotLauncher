@@ -208,6 +208,8 @@ class SnowFriend(Star):
             items = await client.call_action("get_doubt_friends_add_request", count=50)
         except Exception as exc:
             logger.info(f"[{NAME}] 读取可疑好友申请失败：{exc}")
+            if text in ("请求添加你为好友", "请求加你为好友"):
+                event.stop_event()
             return
         item = find_doubt_request(items, qq)
         if not item:
