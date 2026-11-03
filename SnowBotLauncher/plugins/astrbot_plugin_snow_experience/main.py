@@ -33,6 +33,7 @@ from .library import (
     event_type_name,
     experience_summary,
     extract_book_text,
+    monthly_event_name,
     pick_arxiv_paper,
     pick_book,
     pick_event_type,
@@ -234,10 +235,15 @@ class SnowExperience(Star):
             logger.warning(f"[{NAME}] 事件未完成（不消耗配额）：{exc}")
             return
         ts = time.time()
-        record_path = self._events_dir() / f"{today}-{event_type}.md"
+        record_path = self._events_dir() / monthly_event_name(today, event_type)
         record_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(record_path, "w", encoding="utf-8") as f:
-            f.write(render_event_record(ts, event_type, title, body))
+        record = render_event_record(ts, event_type, title, body, heading="##")
+        if record_path.exists():
+            old = record_path.read_text(encoding="utf-8-sig").rstrip()
+            text = old + "\n\n" + record
+        else:
+            text = f"# {today[:7]} {event_type_name(event_type)}\n\n" + record
+        record_path.write_text(text.rstrip() + "\n", encoding="utf-8")
         state["last_date"] = today
         state["quotas"] = quota_record(state.setdefault("quotas", {}), week, event_type)
         records = state.setdefault("records", [])

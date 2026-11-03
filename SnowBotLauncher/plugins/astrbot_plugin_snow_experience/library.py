@@ -372,10 +372,12 @@ def event_type_name(event_type: str) -> str:
     return _EVENT_TYPE_NAMES.get(event_type, event_type)
 
 
-def render_event_record(ts: float, event_type: str, title: str, body: str) -> str:
+def render_event_record(
+    ts: float, event_type: str, title: str, body: str, heading: str = "#"
+) -> str:
     day = _dt.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
     lines = [
-        f"# {event_type_name(event_type)}：{title}",
+        f"{heading} {event_type_name(event_type)}：{title}",
         "",
         f"- 日期：{day}",
         f"- 类型：{event_type_name(event_type)}",
@@ -384,6 +386,11 @@ def render_event_record(ts: float, event_type: str, title: str, body: str) -> st
         "",
     ]
     return "\n".join(lines)
+
+
+def monthly_event_name(day: str, event_type: str) -> str:
+    """按月归档：2026-11-04 + book → 2026-11-book.md。"""
+    return f"{str(day or '').strip()[:7]}-{event_type}.md"
 
 
 def experience_summary(

@@ -101,6 +101,10 @@ from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
     parse_owner_reply,
     parse_qq_list,
 )
+from plugins.astrbot_plugin_obsidian_notes.recording import (
+    append_diary_entry,
+    merge_daily_diary,
+)
 from plugins.astrbot_plugin_obsidian_notes.scoping import (  # noqa: E402
     derive_scope_id,
     scope_kind,
@@ -140,6 +144,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     event_time_for_date,
     experience_summary,
     extract_book_text,
+    monthly_event_name,
     parse_arxiv_entries,
     pick_arxiv_paper,
     pick_book,
@@ -147,6 +152,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     pick_gutendex_book,
     quota_allow,
     quota_record,
+    render_event_record,
     week_key,
 )
 
@@ -534,6 +540,24 @@ class ObsidianScopeRegressionTests(unittest.TestCase):
         self.assertEqual(scope_kind("网页-x"), "网页")
         self.assertEqual(scope_kind(""), "全局")
 
+    def test_monthly_diary_entry_and_migration(self):
+        text = "# 2026-11\n"
+        text = append_diary_entry(text, "2026-11-02", "- 10:00 上午的事")
+        text = append_diary_entry(text, "2026-11-02", "- 18:00 下午的事")
+        text = append_diary_entry(text, "2026-11-01", "- 09:00 补写前一天")
+        self.assertIn("## 2026-11-01", text)
+        self.assertLess(text.index("## 2026-11-01"), text.index("## 2026-11-02"))
+        self.assertEqual(text.count("- 18:00 下午的事"), 1)
+        # 同一天的两条都在 11-02 小节内，而不是被塞到文件末尾
+        section = text.split("## 2026-11-02", 1)[1]
+        self.assertIn("- 10:00 上午的事", section)
+        self.assertIn("- 18:00 下午的事", section)
+        merged = merge_daily_diary(
+            [("2026-10-31", "# 2026-10-31\n- 18:06 甲"), ("2026-10-30", "# 2026-10-30\n- 09:00 乙")]
+        )
+        self.assertIn("# 2026-10", merged)
+        self.assertIn("## 2026-10-30", merged)
+        self.assertIn("## 2026-10-31", merged)
 
 
 class ContinuityRegressionTests(unittest.TestCase):
@@ -1363,6 +1387,14 @@ class ExperienceTests(unittest.TestCase):
         first = pick_arxiv_paper(entries, set())
         self.assertEqual(pick_arxiv_paper(entries, {first["title"]})["title"], "Duplicate Skip Test")
         self.assertEqual(parse_arxiv_entries("not xml"), [])
+
+    def test_monthly_event_name_and_heading(self):
+        self.assertEqual(
+            monthly_event_name("2026-11-04", "book"), "2026-11-book.md"
+        )
+        record = render_event_record(0, "book", "西遊記", "正文", heading="##")
+        self.assertTrue(record.startswith("## 读书：西遊記"))
+        self.assertIn("- 类型：读书", record)
 
     def test_extract_documents(self):
         from types import SimpleNamespace
