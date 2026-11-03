@@ -45,7 +45,7 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 
 | 插件 | 作用 | 仓库 |
 |---|---|---|
-| `snow_sleep` | 作息：默认 00:00–07:00 休息，不回复、不被动读群消息 | [astrbot_plugin_snow_sleep](https://github.com/Evelyn-Snow/astrbot_plugin_snow_sleep) |
+| `snow_sleep` | 小雪作息：默认 00:00–07:00 休息，不回复、不被动读群消息 | [astrbot_plugin_snow_sleep](https://github.com/Evelyn-Snow/astrbot_plugin_snow_sleep) |
 | `snow_continuity` | 连续对话接话：互动后“你……”和图片确定性回复，不受读空气概率影响 | [astrbot_plugin_snow_continuity](https://github.com/Evelyn-Snow/astrbot_plugin_snow_continuity) |
 | `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 | [astrbot_plugin_search_manners](https://github.com/Evelyn-Snow/astrbot_plugin_search_manners) |
 | `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 | [astrbot_plugin_share_card](https://github.com/Evelyn-Snow/astrbot_plugin_share_card) |
@@ -182,7 +182,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.40.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.41.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -191,7 +191,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.40.exe
+installer\output\SnowBotLauncher-Setup-1.5.41.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式
