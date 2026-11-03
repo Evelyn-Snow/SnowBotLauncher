@@ -19,7 +19,7 @@ from snowbot.core import paths  # noqa: E402
 from snowbot.core.services import QqHealthMonitor  # noqa: E402
 from snowbot.astrbot.seed_audio_patch import patch_seed_audio_source  # noqa: E402
 from snowbot.core.config import default_config  # noqa: E402
-from snowbot.core.services import ServiceManager  # noqa: E402
+from snowbot.core.services import ServiceManager, port_listening  # noqa: E402
 from snowbot.packs import engine as pe  # noqa: E402
 from snowbot.core.persona_files import import_persona_file, render_persona  # noqa: E402
 from plugins.astrbot_plugin_bili_vision.library import resolve_video_id  # noqa: E402
@@ -229,6 +229,21 @@ class NapCatRegressionTests(unittest.TestCase):
             self.assertEqual(ServiceManager(cfg).napcat_token(), "token-123")
         finally:
             shutil.rmtree(root, ignore_errors=True)
+
+    def test_port_listening_falls_back_when_state_unknown(self):
+        import socket
+        from types import SimpleNamespace
+
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        port = srv.getsockname()[1]
+        fake = [SimpleNamespace(status="NONE", laddr=SimpleNamespace(port=port))]
+        try:
+            self.assertTrue(port_listening(port, fake))
+        finally:
+            srv.close()
+        self.assertFalse(port_listening(port, fake))
 
     def test_quick_login_argument_is_passed(self):
         root = Path(tempfile.mkdtemp(prefix="snowbot-napcat-"))

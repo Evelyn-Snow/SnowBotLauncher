@@ -27,12 +27,14 @@ def port_listening(port: int, conns=None) -> bool:
                 return True
         except Exception:
             continue
-    if conns:
+    # Windows 的 TCP 表偶尔会把监听态报成 NONE/CLOSED（进程仍在正常服务），
+    # 不管有没有拿到连接列表，都用实际 TCP 连接兜底，避免状态误判成“已停止”。
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.2)
+            return s.connect_ex(("127.0.0.1", port)) == 0
+    except Exception:
         return False
-    # 后备方案：psutil 不可用时直接尝试连接
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.3)
-        return s.connect_ex(("127.0.0.1", port)) == 0
 
 
 def listening_pid(port: int, conns=None):
