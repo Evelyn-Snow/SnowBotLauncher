@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLineEdit,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QMessageBox,
     QScrollArea,
@@ -65,6 +66,39 @@ class SettingsMixin:
         path_hint.setObjectName("muted")
         form.addRow("", path_hint)
         layout.addWidget(paths)
+
+        qq_box = QGroupBox("QQ 协议端")
+        qform = QFormLayout(qq_box)
+        qform.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        qform.setSpacing(10)
+        self.qq_backend = QComboBox()
+        self.qq_backend.addItem("NapCat（内置流程）", "napcat")
+        self.qq_backend.addItem("SnowLuma（外部安装）", "snowluma")
+        current_backend = str(self.cfg.get("qq_backend") or "napcat")
+        self.qq_backend.setCurrentIndex(
+            1 if current_backend == "snowluma" else 0
+        )
+        self.dir_snowluma = QLineEdit(str(self.cfg.get("snowluma_dir") or ""))
+        self.port_snowluma = QSpinBox()
+        self.port_snowluma.setRange(1, 65535)
+        self.port_snowluma.setValue(int(self.cfg.get("snowluma_webui_port") or 5099))
+        self.node_exe = QLineEdit(str(self.cfg.get("node_exe") or ""))
+        self.node_exe.setPlaceholderText("留空自动查找 node")
+        self.qq_exe = QLineEdit(str(self.cfg.get("qq_exe") or ""))
+        qform.addRow("使用协议端", self.qq_backend)
+        qform.addRow("SnowLuma 目录", self._path_row(self.dir_snowluma, dir_mode=True))
+        qform.addRow("SnowLuma WebUI 端口", self.port_snowluma)
+        qform.addRow("Node.js", self._path_row(self.node_exe, dir_mode=False))
+        qform.addRow("QQ 程序", self._path_row(self.qq_exe, dir_mode=False))
+        qq_hint = QLabel(
+            "NapCat 由启动器内置流程启动；SnowLuma 需要你先从官方 Releases 解压到本机目录"
+            "（启动器不分发它），并自行用手机扫码登录一次。OneBot 仍反向连到 AstrBot 的 "
+            "6199，平台 ID 保持 napcat 以保留会话。"
+        )
+        qq_hint.setWordWrap(True)
+        qq_hint.setObjectName("muted")
+        qform.addRow("", qq_hint)
+        layout.addWidget(qq_box)
 
         ports = QGroupBox("端口设置")
         pform = QFormLayout(ports)
@@ -207,6 +241,11 @@ class SettingsMixin:
                 "start_minimized": self.chk_start_min.isChecked(),
                 "autostart_services": self.chk_auto_services.isChecked(),
                 "napcat_quick_login": self.chk_quick_login.isChecked(),
+                "qq_backend": str(self.qq_backend.currentData() or "napcat"),
+                "snowluma_dir": self.dir_snowluma.text().strip(),
+                "snowluma_webui_port": int(self.port_snowluma.value()),
+                "node_exe": self.node_exe.text().strip(),
+                "qq_exe": self.qq_exe.text().strip(),
             }
         )
         want_autostart = self.chk_autostart.isChecked()

@@ -1,6 +1,7 @@
 """端口探测、进程控制与 AstrBot/NapCat 服务管理。"""
 import json
 import os
+import shutil
 import socket
 import subprocess
 import time
@@ -311,10 +312,58 @@ class QqHealthMonitor:
 class ServiceManager:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.procs = {"astrbot": None, "napcat": None}
-        self.started_at = {"astrbot": None, "napcat": None}
+        self.procs = {"astrbot": None, "napcat": None, "snowluma": None}
+        self.started_at = {"astrbot": None, "napcat": None, "snowluma": None}
         self.log_files = {}
         LOG_DIR.mkdir(exist_ok=True)
+
+    # ---------- QQ 协议端 ----------
+    def qq_backend(self) -> str:
+        return "snowluma" if str(self.cfg.get("qq_backend") or "").lower() == "snowluma" else "napcat"
+
+    def qq_backend_label(self) -> str:
+        return "SnowLuma" if self.qq_backend() == "snowluma" else "NapCat"
+
+    def snowluma_dir(self) -> Path:
+        return Path(str(self.cfg.get("snowluma_dir") or r"C:\SnowLuma"))
+
+    def snowluma_webui_port(self) -> int:
+        try:
+            return int(self.cfg.get("snowluma_webui_port") or 5099)
+        except Exception:
+            return 5099
+
+    def snowluma_account(self) -> str:
+        cfgdir = self.snowluma_dir() / "config"
+        try:
+            for f in sorted(cfgdir.glob("onebot_*.json")):
+                num = f.stem.replace("onebot_", "")
+                if num.isdigit() and 5 <= len(num) <= 12:
+                    return num
+        except Exception:
+            pass
+        return ""
+
+    def snowluma_log_file(self):
+        p = LOG_DIR / "snowluma_console.log"
+        return p if p.exists() else None
+
+    def _ensure_snowluma_runtime(self) -> None:
+        """确保 SnowLuma 自动注入 QQ，并使用启动器配置的 WebUI 端口。"""
+        cfgdir = self.snowluma_dir() / "config"
+        cfgdir.mkdir(parents=True, exist_ok=True)
+        path = cfgdir / "runtime.json"
+        data = {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+            if not isinstance(data, dict):
+                data = {}
+        except Exception:
+            data = {}
+        data["webuiPort"] = self.snowluma_webui_port()
+        data["webuiHost"] = "127.0.0.1"
+        data["hookAutoLoad"] = True
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # ---------- 状态 ----------
     def status(self) -> dict:
@@ -322,23 +371,32 @@ class ServiceManager:
         dash = int(self.cfg["dashboard_port"])
         ob = int(self.cfg["onebot_port"])
         nc = int(self.cfg["napcat_port"])
+        backend = self.qq_backend()
+        webui_port = self.snowluma_webui_port() if backend == "snowluma" else nc
 
         astrbot_up = port_listening(dash, conns)
-        napcat_up = port_listening(nc, conns)
+        qq_up = port_listening(webui_port, conns)
         qqs = qq_processes()
 
         return {
             "astrbot_up": astrbot_up,
             "astrbot_pid": listening_pid(dash, conns),
-            "napcat_up": napcat_up,
-            "napcat_pid": listening_pid(nc, conns),
+            "qq_backend": backend,
+            "qq_label": "SnowLuma" if backend == "snowluma" else "NapCat",
+            "qq_up": qq_up,
+            "qq_pid": listening_pid(webui_port, conns),
+            "qq_webui": f"http://127.0.0.1:{webui_port}",
+            "qq_webui_port": webui_port,
+            # 兼容旧界面字段
+            "napcat_up": qq_up,
+            "napcat_pid": listening_pid(webui_port, conns),
             "qq_running": bool(qqs),
             "qq_pids": [p.pid for p in qqs],
             "onebot_connected": onebot_connected(ob, conns),
-            "token": self.napcat_token(),
-            "qq": self.napcat_account(),
+            "token": self.napcat_token() if backend == "napcat" else "",
+            "qq": self.snowluma_account() if backend == "snowluma" else self.napcat_account(),
             "astrbot_started_at": self.started_at.get("astrbot"),
-            "napcat_started_at": self.started_at.get("napcat"),
+            "napcat_started_at": self.started_at.get(backend),
         }
 
     # ---------- 信息读取 ----------
@@ -535,11 +593,104 @@ class ServiceManager:
         self.started_at["napcat"] = None
         return (True, "NapCat / QQ 已停止") if stopped else (False, "NapCat / QQ 未在运行")
 
+    # ---------- SnowLuma（外部安装，启动器只负责启停） ----------
+    def start_snowluma(self):
+        d = self.snowluma_dir()
+        if not (d / "index.mjs").exists():
+            return False, f"SnowLuma 目录无效：{d}（需要 index.mjs）"
+        if port_listening(self.snowluma_webui_port()):
+            return False, "SnowLuma 已在运行"
+        node = str(self.cfg.get("node_exe") or "").strip() or shutil.which("node")
+        if not node:
+            return False, "找不到 Node.js（SnowLuma 需要 24+，可在设置里指定 node.exe）"
+        self._ensure_snowluma_runtime()
+        # SnowLuma 注入的是已运行的 QQ 进程；没开 QQ 就先拉起来（不带 -q，由用户扫码）。
+        if not qq_processes():
+            qq_exe = Path(str(self.cfg.get("qq_exe") or r"C:\Program Files\Tencent\QQNT\QQ.exe"))
+            if not qq_exe.exists():
+                return False, f"QQ 程序不存在：{qq_exe}"
+            try:
+                subprocess.Popen(
+                    [str(qq_exe)],
+                    cwd=str(qq_exe.parent),
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
+                )
+            except Exception as exc:
+                return False, f"启动 QQ 失败：{exc}"
+        LOG_DIR.mkdir(exist_ok=True)
+        log_path = LOG_DIR / "snowluma_console.log"
+        log_f = open(log_path, "ab", buffering=0)
+        log_f.write(f"\n===== {now_str()} 启动 SnowLuma =====\n".encode("utf-8"))
+        try:
+            p = subprocess.Popen(
+                [node, "index.mjs"],
+                cwd=str(d),
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+                | subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        except Exception as exc:
+            log_f.close()
+            return False, f"启动失败：{exc}"
+        finally:
+            try:
+                log_f.close()
+            except Exception:
+                pass
+        self.procs["snowluma"] = p
+        self.started_at["snowluma"] = time.time()
+        return (
+            True,
+            f"SnowLuma 启动中，WebUI：http://127.0.0.1:{self.snowluma_webui_port()}",
+        )
+
+    def stop_snowluma(self):
+        stopped = False
+        p = self.procs.get("snowluma")
+        if p and p.poll() is None:
+            kill_tree(p.pid)
+            stopped = True
+        d = str(self.snowluma_dir()).lower()
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "cwd"]):
+            try:
+                name = (proc.info["name"] or "").lower()
+                cmd = " ".join(proc.info.get("cmdline") or [])
+                cwd = (proc.info.get("cwd") or "").lower()
+                if name.startswith("node") and "index.mjs" in cmd and d in cwd:
+                    kill_tree(proc.pid)
+                    stopped = True
+            except Exception:
+                continue
+        for proc in qq_processes():
+            try:
+                proc.kill()
+                stopped = True
+            except Exception:
+                pass
+        self.started_at["snowluma"] = None
+        return (
+            (True, "SnowLuma / QQ 已停止")
+            if stopped
+            else (False, "SnowLuma / QQ 未在运行")
+        )
+
+    # 统一入口：界面只关心“QQ 协议端”，具体后端由配置决定。
+    def start_qq(self):
+        return self.start_snowluma() if self.qq_backend() == "snowluma" else self.start_napcat()
+
+    def stop_qq(self):
+        return self.stop_snowluma() if self.qq_backend() == "snowluma" else self.stop_napcat()
+
     def start_all(self):
         msgs = []
         ok1, m1 = self.start_astrbot()
         msgs.append(m1)
-        ok2, m2 = self.start_napcat()
+        ok2, m2 = self.start_qq()
         msgs.append(m2)
         # “已经在运行”对一键启动来说属于成功，不应弹黄色警告。
         ok1 = ok1 or "已在运行" in m1
@@ -550,6 +701,6 @@ class ServiceManager:
         msgs = []
         ok1, m1 = self.stop_astrbot()
         msgs.append(m1)
-        ok2, m2 = self.stop_napcat()
+        ok2, m2 = self.stop_qq()
         msgs.append(m2)
         return ok1 or ok2, "；".join(msgs)

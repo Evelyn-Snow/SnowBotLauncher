@@ -245,6 +245,41 @@ class NapCatRegressionTests(unittest.TestCase):
             srv.close()
         self.assertFalse(port_listening(port, fake))
 
+    def test_snowluma_backend_helpers(self):
+        root = Path(tempfile.mkdtemp(prefix="snowbot-snowluma-"))
+        try:
+            (root / "config").mkdir()
+            (root / "index.mjs").write_text("", encoding="utf-8")
+            (root / "config" / "onebot_3651873041.json").write_text(
+                "{}", encoding="utf-8"
+            )
+            cfg = {
+                "qq_backend": "snowluma",
+                "snowluma_dir": str(root),
+                "snowluma_webui_port": 5099,
+                "dashboard_port": 1,
+                "onebot_port": 2,
+                "napcat_port": 3,
+                "qq_exe": str(root / "QQ.exe"),
+            }
+            m = ServiceManager(cfg)
+            self.assertEqual(m.qq_backend(), "snowluma")
+            self.assertEqual(m.qq_backend_label(), "SnowLuma")
+            self.assertEqual(m.snowluma_account(), "3651873041")
+            m._ensure_snowluma_runtime()
+            runtime = json.loads(
+                (root / "config" / "runtime.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(runtime["webuiPort"], 5099)
+            self.assertEqual(runtime["webuiHost"], "127.0.0.1")
+            self.assertTrue(runtime["hookAutoLoad"])
+            st = m.status()
+            self.assertEqual(st["qq_backend"], "snowluma")
+            self.assertEqual(st["qq_label"], "SnowLuma")
+            self.assertEqual(st["qq_webui"], "http://127.0.0.1:5099")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_quick_login_argument_is_passed(self):
         root = Path(tempfile.mkdtemp(prefix="snowbot-napcat-"))
         try:

@@ -91,9 +91,7 @@ class ConsoleMixin:
         self.napcat_card.add_row(1, "QQ 账号", self.qq_lbl)
 
         self.napcat_link = link_button("http://127.0.0.1:6099")
-        self.napcat_link.clicked.connect(
-            lambda: self.open_url(f"http://127.0.0.1:{self.cfg['napcat_port']}")
-        )
+        self.napcat_link.clicked.connect(self._open_qq_webui)
         self.napcat_card.add_row(2, "WebUI", self.napcat_link)
 
         token_row = QHBoxLayout()
@@ -131,9 +129,7 @@ class ConsoleMixin:
         self.btn_napcat_stop.setObjectName("danger")
         self.btn_napcat_stop.clicked.connect(self.stop_napcat)
         self.btn_napcat_open = QPushButton("打开 WebUI")
-        self.btn_napcat_open.clicked.connect(
-            lambda: self.open_url(f"http://127.0.0.1:{self.cfg['napcat_port']}")
-        )
+        self.btn_napcat_open.clicked.connect(self._open_qq_webui)
         for b in (self.btn_napcat_start, self.btn_napcat_stop, self.btn_napcat_open):
             self.napcat_card.buttons.addWidget(b)
         cards.addWidget(self.napcat_card, 1)
@@ -152,7 +148,7 @@ class ConsoleMixin:
         self.btn_stop_all.clicked.connect(self.stop_all)
         quick.addWidget(self.btn_start_all)
         quick.addWidget(self.btn_stop_all)
-        self.hint_lbl = QLabel("提示：NapCat 启动会拉起 QQ 登录窗口，需管理员权限。")
+        self.hint_lbl = QLabel("提示：启动 QQ 协议端会拉起 QQ 登录窗口，需管理员权限。")
         self.hint_lbl.setObjectName("muted")
         self.hint_lbl.setWordWrap(True)
         quick.addWidget(self.hint_lbl, 1)
@@ -218,6 +214,11 @@ class ConsoleMixin:
         napcat_up = st["napcat_up"]
         qq_running = st["qq_running"]
         conn = st["onebot_connected"]
+        backend = st.get("qq_backend", "napcat")
+        backend_label = st.get("qq_label", "NapCat")
+        webui = st.get("qq_webui") or f"http://127.0.0.1:{self.cfg['napcat_port']}"
+        self.napcat_card.title_label.setText(backend_label)
+        self.napcat_card.sub_label.setText("QQ 协议端（OneBot v11）")
 
         self._check_qq_health(st, conn, napcat_up)
 
@@ -238,7 +239,7 @@ class ConsoleMixin:
             self.btn_astrbot_start.setEnabled(True)
             self.btn_astrbot_stop.setEnabled(False)
 
-        # NapCat
+        # QQ 协议端（NapCat / SnowLuma）
         if napcat_up:
             self.napcat_card.set_status("on", "运行中")
             self.napcat_status_lbl.setText(f"运行中 · PID {st['napcat_pid'] or '—'}")
@@ -246,7 +247,7 @@ class ConsoleMixin:
             self.btn_napcat_stop.setEnabled(True)
         elif qq_running:
             self.napcat_card.set_status("starting", "QQ 启动中…")
-            self.napcat_status_lbl.setText("QQ 已启动，等待 NapCat 服务…")
+            self.napcat_status_lbl.setText(f"QQ 已启动，等待 {backend_label} 服务…")
             self.btn_napcat_start.setEnabled(False)
             self.btn_napcat_stop.setEnabled(True)
         else:
@@ -256,7 +257,10 @@ class ConsoleMixin:
             self.btn_napcat_stop.setEnabled(False)
 
         self.qq_lbl.setText(st["qq"] or ("QQ 运行中" if qq_running else "未登录"))
-        if health_qr := getattr(self, "health", None):
+        if backend == "snowluma":
+            if qq_running and not conn:
+                self.qq_lbl.setText(f"等待扫码登录（{backend_label} WebUI）")
+        elif health_qr := getattr(self, "health", None):
             try:
                 if qq_running and health_qr.qrcode_waiting():
                     self.qq_lbl.setText("等待扫码登录（NapCat WebUI 或 cache\\qrcode.png）")
@@ -275,11 +279,14 @@ class ConsoleMixin:
         token = st["token"] or "—"
         self._token = st["token"]
         self.token_lbl.setText(token if self.token_visible else self._mask(token))
+        is_napcat = backend == "napcat"
+        self.btn_token_toggle.setEnabled(is_napcat and bool(st["token"]))
+        self.btn_token_copy.setEnabled(is_napcat and bool(st["token"]))
         # 运行时长
         self.astrbot_runtime.setText(self._runtime_text(st["astrbot_started_at"], astrbot_up))
         # 地址同步设置（只影响显示）
         self.astrbot_link.setText(f"http://localhost:{self.cfg['dashboard_port']}")
-        self.napcat_link.setText(f"http://127.0.0.1:{self.cfg['napcat_port']}")
+        self.napcat_link.setText(webui)
         self.ob_lbl.setText(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
 
         # 顶部汇总
@@ -323,13 +330,15 @@ class ConsoleMixin:
         health = getattr(self, "health", None)
         if health is None:
             return
-        # NapCat 在跑，或 QQ 进程在跑，都算"应当在线"
+        # NapCat / SnowLuma 在跑，或 QQ 进程在跑，都算"应当在线"
         process_alive = bool(napcat_up or st.get("qq_running"))
+        backend = st.get("qq_backend", "napcat")
+        backend_label = st.get("qq_label", "NapCat")
         events = health.update(
             connected=conn,
             napcat_running=process_alive,
             qq_version=self._qq_version(),
-            offline_marker=health.napcat_offline_marker(),
+            offline_marker=health.napcat_offline_marker() if backend == "napcat" else None,
         )
         for event in events:
             etype = event.get("type")
@@ -338,7 +347,7 @@ class ConsoleMixin:
                 count = health.offline_count_today()
                 self._notify(
                     f"QQ 掉线{('（今日第 %d 次）' % count) if count else ''}",
-                    detail + "\n需要到 NapCat WebUI 重新扫码登录。",
+                    detail + f"\n需要到 {backend_label} WebUI 重新扫码登录。",
                     warning=True,
                 )
             elif etype == "online":
@@ -346,7 +355,7 @@ class ConsoleMixin:
             elif etype == "version_change":
                 self._notify(
                     "QQ 版本变化（可能自动更新）",
-                    detail + "\nQQ 更新后 NapCat 可能需要同步升级，否则容易掉线。",
+                    detail + f"\nQQ 更新后 {backend_label} 可能需要同步升级，否则容易掉线。",
                     warning=True,
                 )
         # 状态行显示今日掉线次数
@@ -438,10 +447,11 @@ class ConsoleMixin:
             QMessageBox.warning(
                 self,
                 "需要管理员权限",
-                "启动 NapCat 需要管理员权限，请使用「以管理员身份重启」后重试。",
+                f"启动 {self.manager.qq_backend_label()} 需要管理员权限，"
+                "请使用「以管理员身份重启」后重试。",
             )
             return
-        ok, msg = self.manager.start_napcat()
+        ok, msg = self.manager.start_qq()
         self._toast(msg, ok)
         self.refresh_status()
 
@@ -451,23 +461,32 @@ class ConsoleMixin:
         self.refresh_status()
 
     def stop_napcat(self):
+        label = self.manager.qq_backend_label()
         if (
             QMessageBox.question(
                 self,
-                "停止 NapCat",
-                "停止 NapCat 会关闭 QQ 登录进程。确定继续？",
+                f"停止 {label}",
+                f"停止 {label} 会关闭 QQ 登录进程。确定继续？",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             != QMessageBox.StandardButton.Yes
         ):
             return
-        ok, msg = self.manager.stop_napcat()
+        ok, msg = self.manager.stop_qq()
         self._toast(msg, ok)
         self.refresh_status()
 
+    def _open_qq_webui(self):
+        st = self.manager.status()
+        url = st.get("qq_webui") or f"http://127.0.0.1:{self.cfg['napcat_port']}"
+        self.open_url(url)
+
     def start_all(self):
         if not is_admin():
-            self._toast("提示：NapCat 需要管理员权限，请先以管理员身份重启", False)
+            self._toast(
+                f"提示：{self.manager.qq_backend_label()} 需要管理员权限，请先以管理员身份重启",
+                False,
+            )
         ok, msg = self.manager.start_all()
         self._toast(msg, ok)
         QTimer.singleShot(600, self.refresh_status)
