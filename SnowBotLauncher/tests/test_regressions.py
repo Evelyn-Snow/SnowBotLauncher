@@ -23,6 +23,10 @@ from snowbot.core.services import ServiceManager, port_listening  # noqa: E402
 from snowbot.packs import engine as pe  # noqa: E402
 from snowbot.core.persona_files import import_persona_file, render_persona  # noqa: E402
 from plugins.astrbot_plugin_bili_vision.library import resolve_video_id  # noqa: E402
+from plugins.astrbot_plugin_bili_vision.subtitles import (  # noqa: E402
+    format_subtitles,
+    pick_subtitle,
+)
 from plugins.astrbot_plugin_share_card.library import (  # noqa: E402
     extract_share_text,
     merge_share_text,
@@ -767,6 +771,29 @@ class BiliVisionRegressionTests(unittest.TestCase):
     def test_resolve_invalid_raises(self):
         with self.assertRaises(ValueError):
             resolve_video_id("https://example.com/no-video")
+
+    def test_pick_and_format_subtitles(self):
+        subs = [
+            {"lan": "en-US", "subtitle_url": "https://aisubtitle.hdslb.com/en.json"},
+            {"lan": "zh-CN", "subtitle_url": "https://aisubtitle.hdslb.com/zh.json"},
+            {"lan": "zh-Hant", "subtitle_url": "https://aisubtitle.hdslb.com/tw.json"},
+        ]
+        chosen = pick_subtitle(subs)
+        self.assertEqual(chosen["lan"], "zh-CN")
+        self.assertIsNone(pick_subtitle([{"lan": "en-US"}]))
+        text = format_subtitles(
+            [
+                {"from": 0, "to": 1.5, "content": "大家好"},
+                {"from": 65, "to": 67, "content": "这里是第二段"},
+            ]
+        )
+        self.assertIn("[00:00] 大家好", text)
+        self.assertIn("[01:05] 这里是第二段", text)
+        long_text = format_subtitles(
+            [{"from": i, "content": "内容" * 50} for i in range(20)], max_chars=500
+        )
+        self.assertLessEqual(len(long_text), 560)
+        self.assertIn("中间省略", long_text)
 
 
 

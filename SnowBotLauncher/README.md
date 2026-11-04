@@ -49,7 +49,7 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 | `snow_continuity` | 连续对话接话：互动后“你……”和图片确定性回复，不受读空气概率影响 | [astrbot_plugin_snow_continuity](https://github.com/Evelyn-Snow/astrbot_plugin_snow_continuity) |
 | `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 | [astrbot_plugin_search_manners](https://github.com/Evelyn-Snow/astrbot_plugin_search_manners) |
 | `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 | [astrbot_plugin_share_card](https://github.com/Evelyn-Snow/astrbot_plugin_share_card) |
-| `bili_vision` | B站视频画面理解：缩略图抽帧 + 视觉模型，不下载完整视频 | [astrbot_plugin_bili_vision](https://github.com/Evelyn-Snow/astrbot_plugin_bili_vision) |
+| `bili_vision` | B站视频理解：字幕 + 缩略图抽帧 + 视觉模型，不下载完整视频 | [astrbot_plugin_bili_vision](https://github.com/Evelyn-Snow/astrbot_plugin_bili_vision) |
 | `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 | [astrbot_plugin_snow_imagebox](https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox) |
 | `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
 | `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
@@ -182,7 +182,7 @@ build.bat
 构建流程：
 
 1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.41.exe`
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.42.exe`
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
@@ -191,7 +191,7 @@ build.bat
 运行生成好的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.41.exe
+installer\output\SnowBotLauncher-Setup-1.5.42.exe
 ```
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式
