@@ -51,10 +51,8 @@ class SettingsMixin:
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(10)
         self.dir_astrbot = QLineEdit(self.cfg["astrbot_dir"])
-        self.dir_napcat = QLineEdit(self.cfg["napcat_dir"])
         self.python_exe = QLineEdit(self.cfg["python_exe"])
         form.addRow("AstrBot 目录", self._path_row(self.dir_astrbot, dir_mode=True))
-        form.addRow("NapCat 目录", self._path_row(self.dir_napcat, dir_mode=True))
         form.addRow("Python 解释器", self._path_row(self.python_exe, dir_mode=False))
         detect_btn = QPushButton("自动检测官方启动器实例")
         detect_btn.setObjectName("ghost")
@@ -71,6 +69,8 @@ class SettingsMixin:
 
         qq_box = QGroupBox("QQ 协议端")
         qform = QFormLayout(qq_box)
+        self._qq_form = qform
+        self._qq_rows = {}
         qform.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         qform.setSpacing(10)
         self.qq_backend = QComboBox()
@@ -80,6 +80,10 @@ class SettingsMixin:
         self.qq_backend.setCurrentIndex(
             1 if current_backend == "snowluma" else 0
         )
+        self.dir_napcat = QLineEdit(self.cfg["napcat_dir"])
+        self.port_napcat = QSpinBox()
+        self.port_napcat.setRange(1, 65535)
+        self.port_napcat.setValue(int(self.cfg["napcat_port"]))
         self.dir_snowluma = QLineEdit(str(self.cfg.get("snowluma_dir") or ""))
         self.port_snowluma = QSpinBox()
         self.port_snowluma.setRange(1, 65535)
@@ -88,18 +92,21 @@ class SettingsMixin:
         self.node_exe.setPlaceholderText("留空自动查找 node")
         self.qq_exe = QLineEdit(str(self.cfg.get("qq_exe") or ""))
         qform.addRow("使用协议端", self.qq_backend)
+        self._qq_rows["napcat_dir"] = qform.rowCount()
+        qform.addRow("NapCat 目录", self._path_row(self.dir_napcat, dir_mode=True))
+        self._qq_rows["napcat_port"] = qform.rowCount()
+        qform.addRow("NapCat WebUI 端口", self.port_napcat)
+        self._qq_rows["snowluma_dir"] = qform.rowCount()
         qform.addRow("SnowLuma 目录", self._path_row(self.dir_snowluma, dir_mode=True))
+        self._qq_rows["snowluma_port"] = qform.rowCount()
         qform.addRow("SnowLuma WebUI 端口", self.port_snowluma)
+        self._qq_rows["node"] = qform.rowCount()
         qform.addRow("Node.js", self._path_row(self.node_exe, dir_mode=False))
         qform.addRow("QQ 程序", self._path_row(self.qq_exe, dir_mode=False))
-        qq_hint = QLabel(
-            "NapCat 由启动器内置流程启动；SnowLuma 需要你先从官方 Releases 解压到本机目录"
-            "（启动器不分发它），并自行用手机扫码登录一次。OneBot 仍反向连到 AstrBot 的 "
-            "6199，平台 ID 保持 napcat 以保留会话。"
-        )
-        qq_hint.setWordWrap(True)
-        qq_hint.setObjectName("muted")
-        qform.addRow("", qq_hint)
+        self.qq_hint = QLabel()
+        self.qq_hint.setWordWrap(True)
+        self.qq_hint.setObjectName("muted")
+        qform.addRow("", self.qq_hint)
         layout.addWidget(qq_box)
 
         ports = QGroupBox("端口设置")
@@ -108,18 +115,15 @@ class SettingsMixin:
         pform.setSpacing(10)
         self.port_dash = QSpinBox()
         self.port_ob = QSpinBox()
-        self.port_napcat = QSpinBox()
-        for sp in (self.port_dash, self.port_ob, self.port_napcat):
+        for sp in (self.port_dash, self.port_ob):
             sp.setRange(1, 65535)
         self.port_dash.setValue(int(self.cfg["dashboard_port"]))
         self.port_ob.setValue(int(self.cfg["onebot_port"]))
-        self.port_napcat.setValue(int(self.cfg["napcat_port"]))
         pform.addRow("AstrBot 面板端口", self.port_dash)
         pform.addRow("OneBot WS 端口", self.port_ob)
-        pform.addRow("NapCat WebUI 端口", self.port_napcat)
         port_hint = QLabel(
             "这里的端口用于状态检测与跳转。若要与实际服务一致，请同步修改 AstrBot 的 "
-            "cmd_config.json 和 NapCat 的网络配置。"
+            "cmd_config.json 和协议端的网络配置。"
         )
         port_hint.setWordWrap(True)
         port_hint.setObjectName("muted")
@@ -148,6 +152,7 @@ class SettingsMixin:
         layout.addWidget(behavior)
 
         maintenance = QGroupBox("维护")
+        self.napcat_maint_box = maintenance
         m_layout = QVBoxLayout(maintenance)
         mirror_hint = QLabel(
             "NapCat 插件商店打不开时，可注入国内可用的 GitHub 加速镜像；"
@@ -174,9 +179,33 @@ class SettingsMixin:
         layout.addLayout(btns)
         layout.addStretch(1)
 
+        self.qq_backend.currentIndexChanged.connect(self._update_backend_visibility)
+        self._update_backend_visibility()
+
         scroll.setWidget(host)
         outer.addWidget(scroll)
         return page
+
+    def _update_backend_visibility(self, *_args):
+        """按所选协议端显示对应路径/端口，避免两套配置同时铺在页面上。"""
+        snow = str(self.qq_backend.currentData() or "napcat") == "snowluma"
+        self._qq_form.setRowVisible(self._qq_rows["napcat_dir"], not snow)
+        self._qq_form.setRowVisible(self._qq_rows["napcat_port"], not snow)
+        self._qq_form.setRowVisible(self._qq_rows["snowluma_dir"], snow)
+        self._qq_form.setRowVisible(self._qq_rows["snowluma_port"], snow)
+        self._qq_form.setRowVisible(self._qq_rows["node"], snow)
+        self.chk_quick_login.setVisible(not snow)
+        self.napcat_maint_box.setVisible(not snow)
+        text = (
+            "SnowLuma 需要你先从官方 Releases 解压到本机目录（启动器不分发它），"
+            "并自行用手机扫码登录一次；Node.js 留空时自动查找。"
+            if snow
+            else "NapCat 由启动器内置流程启动，目录需包含 launcher.bat；"
+            "已保存账号时默认走快速登录，避免每次扫码。"
+        )
+        self.qq_hint.setText(
+            text + " OneBot 反向连到 AstrBot 的 6199，平台 ID 保持 napcat 以保留会话。"
+        )
 
     def _path_row(self, line: QLineEdit, dir_mode: bool) -> QWidget:
         w = QWidget()
@@ -300,6 +329,7 @@ class SettingsMixin:
             defaults.get("qq_exe", r"C:\Program Files\Tencent\QQNT\QQ.exe")
         )
         self.chk_autostart.setChecked(False)
+        self._update_backend_visibility()
         self._toast("已恢复默认值，点击「保存设置」生效")
 
     def autostart_enabled(self) -> bool:

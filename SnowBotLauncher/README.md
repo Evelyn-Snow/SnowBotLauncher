@@ -171,7 +171,7 @@ SnowLuma 是另一套 QQ 协议端，适合 NapCat 频繁被踢下线时替代�
 
 ### 第 4 步 · 回到 SnowBotLauncher
 
-1. 「设置」页确认 AstrBot 目录、NapCat 目录与三个端口（默认 `6185 / 6199 / 6099`）。
+1. 「设置」页确认 AstrBot 目录与「QQ 协议端」里的协议端目录、WebUI 端口（NapCat 默认 `6099`，SnowLuma 默认 `5099`）；三个端口整体为 `6185 / 6199 / 6099`（NapCat）或 `6185 / 6199 / 5099`（SnowLuma）。
 2. 「控制台」页点「一键启动全部」，AstrBot 与 NapCat 状态灯都变绿。
 3. 「增强配置」页连接 AstrBot 后台，配置人格、语音、记忆等；或用「配置包」一键应用整套配置。
 4. **配置大模型服务商并设为默认**（DeepSeek / 智谱等，AstrBot WebUI 或增强配置页均可），机器人才会开始回复。
