@@ -6,14 +6,12 @@ import os
 import sys
 from pathlib import Path
 
+from .common import read_json, write_json_atomic
 from .paths import APP_DIR, CONFIG_PATH, DATA_DIR
 
 def _read_json(path: Path) -> dict:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8-sig"))
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+    data = read_json(path, {})
+    return data if isinstance(data, dict) else {}
 
 
 def discover_napcat_dir() -> Path:
@@ -52,7 +50,7 @@ def _astrbot_candidates() -> list[tuple[float, Path, Path, int]]:
             except Exception:
                 continue
 
-    legacy = Path(os.environ.get("ASTRBOT_DIR") or r"C:\Users\Administrator\AstrBot")
+    legacy = Path(os.environ.get("ASTRBOT_DIR") or Path.home() / "AstrBot")
     legacy_py = Path(
         os.environ.get("ASTRBOT_PYTHON")
         or legacy / ".venv" / "Scripts" / "python.exe"
@@ -98,7 +96,6 @@ def default_config() -> dict:
         "napcat_port": 6099,
         "close_to_tray": True,
         "start_minimized": False,
-        "autostart": False,
         "autostart_services": False,
         "napcat_quick_login": True,
         "qq_backend": "napcat",
@@ -156,9 +153,7 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
-    CONFIG_PATH.write_text(
-        json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    write_json_atomic(CONFIG_PATH, cfg)
 
 
 def launcher_command() -> list:

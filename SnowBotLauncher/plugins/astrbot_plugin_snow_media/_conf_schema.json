@@ -1,0 +1,133 @@
+{
+  "enabled": {
+    "description": "启用视频/语音理解",
+    "type": "bool",
+    "default": true
+  },
+  "voice_enabled": {
+    "description": "转写语音消息",
+    "type": "bool",
+    "default": true
+  },
+  "voice_group_mode": {
+    "description": "群聊语音处理范围",
+    "type": "string",
+    "default": "addressed",
+    "hint": "addressed=只处理 @/引用她的语音；all=全部；off=不处理。私聊始终处理"
+  },
+  "video_enabled": {
+    "description": "理解视频文件",
+    "type": "bool",
+    "default": true
+  },
+  "video_group_mode": {
+    "description": "群聊视频处理范围",
+    "type": "string",
+    "default": "addressed",
+    "hint": "addressed=只处理 @/引用她的视频；all=全部；off=不处理。私聊始终处理"
+  },
+  "audio_file_enabled": {
+    "description": "也转写音频文件",
+    "type": "bool",
+    "default": true,
+    "hint": "群文件里的 mp3/wav/amr 等按语音处理"
+  },
+  "video_max_mb": {
+    "description": "视频大小上限（MB）",
+    "type": "float",
+    "default": 150,
+    "hint": "超过不下载/不处理，避免占满磁盘"
+  },
+  "video_max_seconds": {
+    "description": "视频最长处理秒数",
+    "type": "int",
+    "default": 600,
+    "hint": "超过只取前段；默认 10 分钟"
+  },
+  "video_inline_seconds": {
+    "description": "视频音频最多听多少秒",
+    "type": "int",
+    "default": 120,
+    "hint": "本地 ASR 较慢，默认只转写前 2 分钟；画面仍按整段抽帧"
+  },
+  "frame_cols": {
+    "description": "画面拼图列数",
+    "type": "int",
+    "default": 3
+  },
+  "frame_rows": {
+    "description": "画面拼图行数",
+    "type": "int",
+    "default": 3
+  },
+  "max_videos_per_message": {
+    "description": "一条消息最多处理几个视频",
+    "type": "int",
+    "default": 1
+  },
+  "vision_provider_id": {
+    "description": "视觉模型提供商 ID",
+    "type": "string",
+    "default": "",
+    "hint": "留空用当前对话模型；视频画面描述需要能看图的模型"
+  },
+  "ffmpeg": {
+    "description": "ffmpeg 路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动找 PATH 或启动器自带 ffmpeg"
+  },
+  "ffprobe": {
+    "description": "ffprobe 路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动找 ffmpeg 同目录的 ffprobe"
+  },
+  "asr_python": {
+    "description": "ASR 专用 Python",
+    "type": "string",
+    "default": "",
+    "hint": "装了 faster-whisper 的解释器；留空用当前解释器"
+  },
+  "asr_model": {
+    "description": "Whisper 模型",
+    "type": "string",
+    "default": "small"
+  },
+  "asr_threads": {
+    "description": "ASR 线程数",
+    "type": "int",
+    "default": 2
+  },
+  "asr_compute_type": {
+    "description": "ASR 计算精度",
+    "type": "string",
+    "default": "int8"
+  },
+  "asr_language": {
+    "description": "转写语言",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动识别"
+  },
+  "asr_initial_prompt": {
+    "description": "转写提示词",
+    "type": "string",
+    "default": ""
+  },
+  "asr_download_root": {
+    "description": "Whisper 模型缓存目录",
+    "type": "string",
+    "default": ""
+  },
+  "voice_timeout_seconds": {
+    "description": "语音识别超时秒数",
+    "type": "int",
+    "default": 90
+  },
+  "video_asr_timeout_seconds": {
+    "description": "视频音频识别超时秒数",
+    "type": "int",
+    "default": 300
+  }
+}

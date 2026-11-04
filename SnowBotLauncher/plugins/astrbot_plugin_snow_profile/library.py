@@ -7,6 +7,7 @@ frontmatter 记录 qq/昵称/历史昵称/更新时间/互动次数，正文是�
 from __future__ import annotations
 
 import datetime as _dt
+import math
 import re
 
 _NAME_DATE_RE = re.compile(r"^(.*?)（(\d{4}-\d{2}-\d{2})）$")
@@ -37,6 +38,12 @@ def render_profile(
     updated_ts: float,
     exchanges: int = 0,
     moral_score: int | None = None,
+    impression_score: int | None = None,
+    familiarity_score: int | None = None,
+    familiarity_level: str = "",
+    active_days: int = 0,
+    first_seen: str = "",
+    last_seen: str = "",
 ) -> str:
     """渲染完整画像 markdown。history 为曾用名列表（已含日期）。"""
     lines = [
@@ -49,7 +56,23 @@ def render_profile(
     ]
     if moral_score is not None:
         lines.append(f"道德评分: {max(0, min(100, int(moral_score)))}")
-    lines += ["---", "", f"# {TITLE_PREFIX}{name or qq}（{qq}）", "", body.strip(), ""]
+    if impression_score is not None:
+        lines.append(f"印象评分: {max(0, min(100, int(impression_score)))}")
+    if familiarity_score is not None:
+        lines.append(f"熟悉度: {max(0, min(100, int(familiarity_score)))}")
+    if familiarity_level:
+        lines.append(f"熟悉等级: {familiarity_level}")
+    if active_days:
+        lines.append(f"活跃天数: {max(0, int(active_days))}")
+    if first_seen:
+        lines.append(f"首次互动: {first_seen}")
+    if last_seen:
+        lines.append(f"最近互动: {last_seen}")
+    # 正文里可能带着旧 H1 标题；标题由这里统一生成，避免重复
+    body_text = re.sub(
+        r"^\s*#\s+.*(?:\n+|$)", "", str(body or "").strip(), count=1
+    ).strip()
+    lines += ["---", "", f"# {TITLE_PREFIX}{name or qq}（{qq}）", "", body_text, ""]
     return "\n".join(lines)
 
 
@@ -62,6 +85,12 @@ def parse_profile(md: str) -> dict:
         "updated": "",
         "exchanges": 0,
         "moral_score": None,
+        "impression_score": None,
+        "familiarity_score": None,
+        "familiarity_level": "",
+        "active_days": 0,
+        "first_seen": "",
+        "last_seen": "",
         "body": "",
     }
     text = str(md or "")
@@ -97,6 +126,27 @@ def parse_profile(md: str) -> dict:
                 result["moral_score"] = max(0, min(100, int(value)))
             except ValueError:
                 pass
+        elif key == "印象评分":
+            try:
+                result["impression_score"] = max(0, min(100, int(value)))
+            except ValueError:
+                pass
+        elif key == "熟悉度":
+            try:
+                result["familiarity_score"] = max(0, min(100, int(value)))
+            except ValueError:
+                pass
+        elif key == "熟悉等级":
+            result["familiarity_level"] = value
+        elif key == "活跃天数":
+            try:
+                result["active_days"] = max(0, int(value))
+            except ValueError:
+                pass
+        elif key == "首次互动":
+            result["first_seen"] = value
+        elif key == "最近互动":
+            result["last_seen"] = value
     return result
 
 
@@ -115,6 +165,114 @@ def merge_name_history(
         if name_only and name_only != new_name and item.strip() != entry:
             result.append(item.strip())
     return result[:cap]
+
+
+# ---------------- 熟悉度 ----------------
+
+FAMILIARITY_LEVELS = (
+    (88, "知己"),
+    (79, "亲近"),
+    (68, "好友"),
+    (56, "好朋友"),
+    (44, "朋友"),
+    (32, "熟人"),
+    (20, "认识"),
+    (10, "眼熟"),
+    (0, "陌生"),
+)
+ADMIN_FAMILIARITY_LEVEL = "管理员"
+
+_FAMILIARITY_GUIDES = {
+    "管理员": "这是管理员/主人：可以亲昵、撒娇，但别越界，也别因为身份就一味顺从。",
+    "知己": "很熟的老朋友：可以主动分享自己的事、吐槽、开玩笑，语气最放松。",
+    "亲近": "很亲近的人：会主动关心、开玩笑，也愿意说自己的小情绪。",
+    "好友": "好友：可以接梗、吐槽、分享日常，但别过度打探私事。",
+    "好朋友": "好朋友：比普通朋友更随意，能开玩笑，会关心近况。",
+    "朋友": "朋友：可以随意接梗、开玩笑，聊日常；不要过度打听私事。",
+    "熟人": "熟人：客气但放松，能接梗；不主动深入私事，不撒娇。",
+    "认识": "认识不久：礼貌、友好，保持一点距离，不主动问私事。",
+    "眼熟": "只是眼熟：客气、简短，别自来熟，也别撒娇。",
+    "陌生": "陌生人：礼貌、保持距离，不主动套近乎，不透露自己的事。",
+}
+
+
+def _clamp_score(value, default: int = 50) -> int:
+    try:
+        return max(0, min(100, int(round(float(value)))))
+    except (TypeError, ValueError):
+        return default
+
+
+def familiarity_level(score, is_admin: bool = False) -> str:
+    if is_admin:
+        return ADMIN_FAMILIARITY_LEVEL
+    value = _clamp_score(score, 0)
+    for threshold, label in FAMILIARITY_LEVELS:
+        if value >= threshold:
+            return label
+    return "陌生"
+
+
+def compute_familiarity(
+    exchanges: int,
+    active_days: int,
+    impression: int,
+    moral: int,
+    days_since_last: float = 0.0,
+    is_admin: bool = False,
+) -> tuple[int, str]:
+    """聊天频率 + 印象分 + 道德分 → 0~100 熟悉度；非管理员最高 94（知己）。"""
+    if is_admin:
+        return 100, ADMIN_FAMILIARITY_LEVEL
+    exchanges = max(0, int(exchanges or 0))
+    active_days = max(0, int(active_days or 0))
+    impression = _clamp_score(impression)
+    moral = _clamp_score(moral)
+    frequency = min(
+        100.0, 12.0 * math.log10(1 + exchanges) + active_days * 1.2
+    )
+    base = 0.45 * frequency + 0.30 * impression + 0.25 * moral
+    confidence = min(
+        1.0, 0.5 * (exchanges / 30.0) + 0.5 * (active_days / 10.0)
+    )
+    score = base * confidence
+    days = max(0.0, float(days_since_last or 0))
+    if days > 90:
+        score *= 0.6
+    elif days > 30:
+        score *= 0.85
+    score = max(0, min(94, int(round(score))))
+    return score, familiarity_level(score)
+
+
+def familiarity_guidance(level: str) -> str:
+    return _FAMILIARITY_GUIDES.get(str(level or ""), _FAMILIARITY_GUIDES["陌生"])
+
+
+_IMPRESSION_RE = re.compile(r"印象评分[:：]\s*(\d{1,3})")
+
+
+def extract_impression(text: str, default: int = 50) -> int:
+    match = _IMPRESSION_RE.search(str(text or ""))
+    if not match:
+        return _clamp_score(default)
+    return _clamp_score(match.group(1), _clamp_score(default))
+
+
+def strip_impression(text: str) -> str:
+    return "\n".join(
+        line
+        for line in str(text or "").splitlines()
+        if "印象评分" not in line
+    ).strip()
+
+
+def smooth_score(old, new, alpha: float = 0.3) -> int:
+    """分数平滑，避免一次对话就让印象大起大落。"""
+    old_value = _clamp_score(old)
+    new_value = _clamp_score(new)
+    ratio = max(0.0, min(1.0, float(alpha)))
+    return _clamp_score(old_value * (1 - ratio) + new_value * ratio)
 
 
 def _drop_headings(text: str) -> str:
@@ -174,6 +332,132 @@ def in_quiet_hours(spec: str, hour: int) -> bool:
     return False
 
 
+# ---------------- 主动消息时间窗与虚拟人生 ----------------
+
+_HHMM_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def _hhmm_minutes(raw: str) -> int | None:
+    match = _HHMM_RE.match(str(raw or "").strip())
+    if not match:
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if hour == 24 and minute == 0:
+        return 1440
+    if not (0 <= hour < 24 and 0 <= minute < 60):
+        return None
+    return hour * 60 + minute
+
+
+def _time_ranges(spec: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for part in re.split(r"[,，\s]+", str(spec or "")):
+        if "-" not in part:
+            continue
+        left, right = part.split("-", 1)
+        start, end = _hhmm_minutes(left), _hhmm_minutes(right)
+        if start is None or end is None or start == end:
+            continue
+        ranges.append((start, end))
+    return ranges
+
+
+def in_time_windows(spec: str, hhmm: str) -> bool:
+    """主动消息时间窗：'12:00-13:30,18:00-22:00'；空配置视为全天。"""
+    ranges = _time_ranges(spec)
+    if not ranges:
+        return True
+    now = _hhmm_minutes(hhmm)
+    if now is None:
+        return False
+    for start, end in ranges:
+        if start < end:
+            if start <= now < end:
+                return True
+        elif now >= start or now < end:
+            return True
+    return False
+
+
+def pick_today_plan(
+    plans_data: dict, today: str, persona_id: str = ""
+) -> dict | None:
+    """从虚拟人生 plans.json 里选今天的日程（同 sleep 插件的匹配规则）。"""
+    plans = plans_data.get("plans") if isinstance(plans_data, dict) else None
+    if not isinstance(plans, dict):
+        return None
+    matching = [
+        value
+        for key, value in plans.items()
+        if isinstance(value, dict) and str(key).startswith(f"{today}::")
+    ]
+    if not matching:
+        return None
+    if persona_id:
+        for plan in matching:
+            if str(plan.get("persona_id", "")) == persona_id:
+                return plan
+    return matching[0] if len(matching) == 1 else None
+
+
+def current_timeline_item(plan: dict, hhmm: str) -> dict | None:
+    """从虚拟人生今日日程里取当前时段的活动。"""
+    if not isinstance(plan, dict):
+        return None
+    now = _hhmm_minutes(hhmm)
+    if now is None:
+        return None
+    timeline = plan.get("timeline")
+    if not isinstance(timeline, list):
+        return None
+    for item in timeline:
+        if not isinstance(item, dict):
+            continue
+        start = _hhmm_minutes(str(item.get("start") or ""))
+        end = _hhmm_minutes(str(item.get("end") or ""))
+        if start is None or end is None or start == end:
+            continue
+        inside = (
+            start <= now < end
+            if start < end
+            else (now >= start or now < end)
+        )
+        if inside:
+            return item
+    return None
+
+
+def activity_allows_proactive(item: dict | None) -> bool:
+    """虚拟人生活动是否适合主动聊天：睡觉/忙/在路上/低可打扰度都不发。"""
+    if not isinstance(item, dict):
+        return True  # 没日程数据时退回时间窗判断
+    state = str(item.get("state") or "").strip().lower()
+    availability = str(item.get("availability") or "").strip().lower()
+    if state in ("sleep", "busy", "transit"):
+        return False
+    if availability in ("blocked", "low"):
+        return False
+    activity = str(item.get("activity") or "")
+    if any(
+        word in activity
+        for word in ("睡觉", "睡眠", "上课", "开会", "面试", "聊天", "约会", "打电话", "通话")
+    ):
+        return False
+    return state in ("available", "social") or any(
+        word in activity for word in ("午休", "休息", "下班", "空闲", "午餐", "晚饭", "晚餐", "吃饭")
+    )
+
+
+def activity_line(item: dict | None) -> str:
+    if not isinstance(item, dict):
+        return ""
+    activity = str(item.get("activity") or "").strip()
+    location = str(item.get("location") or "").strip()
+    if not activity:
+        return ""
+    return f"{activity}（{location}）" if location else activity
+
+
 def should_update(
     state: dict,
     *,
@@ -228,6 +512,8 @@ PROFILE_SYSTEM_PROMPT = (
 
 PROFILE_VOICE_RULES = (
     "请更新你私下记的这份印象笔记：\n"
+    "- 正文最前面单独写一行「印象评分：NN」（0-100，50 是中性；根据 TA 对你的态度、"
+    "互动质量、是否真诚来评，别大起大落），空一行再写正文；\n"
     "- 用第一人称写，就像你自己在日记里记下这个人：提到对方用 TA 的昵称或「他/她」，提到自己用「我」；\n"
     "- 用你平时聊天的语气和性格写，可以带情绪、有自己的判断和态度；\n"
     "- 不要写成客观档案，不要用「该用户」「对方」「助手」这类第三人称，也不要写「用户画像」；\n"

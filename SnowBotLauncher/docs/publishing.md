@@ -2,6 +2,8 @@
 
 发布前的准备工作已在本仓库完成（见「已完成」一节），本文档记录剩余的发布步骤和插件市场提审要点。**注意：任何发布材料里都不要出现 AstrBot 后台密码、API Key、B站 Cookie、真实 QQ 号和本机实例路径。**
 
+> **2026-11-04 更新**：插件现为 **18 个**；下文“8 个插件 / 3+3+2 分批 / 版本表”是首次发布记录，当前版本以各插件 `metadata.yaml` 为准。`snow_burst`、`snow_media`、`snow_reply` 三个新仓库已创建并推送，`bili_vision`、`snow_profile` 等也已更新到当前源码；剩余动作是插件市场提审。
+
 ## 一、开源 SnowBotLauncher 到 GitHub
 
 仓库已具备：MIT `LICENSE`、README 免责声明与许可证章节、`.gitignore`（排除 venv/build/dist/logs/安装包输出）、干净的 Git 历史（发布前已扫描，无任何密钥与个人信息）。
@@ -12,30 +14,30 @@
 2. 推送本地仓库：
 
    ```
-   cd C:\Working_Files\AIMade\SnowBotLauncher
+   cd SnowBotLauncher
    git remote add origin https://github.com/<你的用户名>/SnowBotLauncher.git
    git push -u origin main
    ```
 
 3. 建议在仓库页开启 Issues，并在 About 里写一句话简介（可复用 README 首段）。
-4. 以后发布新版本时：改版本号（`snowbot/core/paths.py` 的 `APP_VERSION`、`installer/SnowBotLauncher.iss`、`build.bat`、README）→ 提交并打 tag（如 `v1.5.4`）→ 在 GitHub Releases 上传 `installer/output` 里的 Setup exe。
+4. 以后发布新版本时：改 `snowbot/core/paths.py` 的 `APP_VERSION`（`build.bat` 会自动传给安装器）→ 提交并打 tag（如 `v1.5.47`）→ 在 GitHub Releases 上传 `installer/output` 里的 Setup exe。
 
 ## 二、插件上架 AstrBot 插件市场
 
 机制：每个插件放一个**独立公开仓库**（命名 `astrbot_plugin_*`），推送到 GitHub 后提交到 AstrBot 插件市场。两条提审路径：
 
-- **AstrBot Cloud 发布页（推荐）**：打开 <https://cloud.astrbot.app/publish>，填插件仓库地址即可自动解析提交；**同一账号同时最多 3 个在审**，8 个插件分 3+3+2 三批提。
+- **AstrBot Cloud 发布页（推荐）**：打开 <https://cloud.astrbot.app/publish>，填插件仓库地址即可自动解析提交；**同一账号同时最多 3 个在审**，当前 18 个插件请分批提。
 - **GitHub Issue**：到 [AstrBotDevs/AstrBot](https://github.com/AstrBotDevs/AstrBot/issues/new/choose) 选 `[Plugin]` 模板，内容用 `plugin-releases\_submit\<插件名>-issue.md` 里的文本。
 
 审核通过后收录进插件市场索引。
 
 ### 发布步骤（已全部准备就绪）
 
-1. GitHub 上创建 8 个**空**公开仓库（名字与 `plugins/` 下目录一致，不要勾选自动生成 README/LICENSE）。
-2. 逐个推送（仓库已在 `C:\Working_Files\AIMade\plugin-releases\<插件名>\` 准备好，含首次提交）：
+1. GitHub 上创建公开仓库（名字与 `plugins/` 下目录一致，不要勾选自动生成 README/LICENSE）。
+2. 逐个推送（仓库已在本仓库的 `plugin-releases/<插件名>/` 准备好，含首次提交）：
 
    ```
-   cd C:\Working_Files\AIMade\plugin-releases\astrbot_plugin_star_citizen
+   cd plugin-releases/astrbot_plugin_star_citizen
    git remote add origin https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen.git
    git push -u origin main
    ```

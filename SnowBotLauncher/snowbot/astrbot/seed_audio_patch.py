@@ -27,7 +27,6 @@ def get_astrbot_temp_path():
     return path"""
 
 DECORATOR_MARKER = "    @filter.on_decorating_result(priority=-1000)"
-COOLDOWN_SECONDS = 600
 
 CLASS_LINE = "class SeedAudioTTSPlugin(Star):\n"
 CLASS_STATE = (
@@ -98,8 +97,6 @@ REFERENCE_BLOCK = """        ref_path = str(getattr(self, "reference_path", "") 
             except Exception as _exc:
                 logger.info(f"[SeedAudio] 参考音频读取失败，按纯文本合成：{_exc}")
 """
-
-PROMPT_REF_NOTE = "用 @Audio1 的音色、语速和说话风格模仿；"
 
 # 补丁 4：台词校验从「逐字全等」放宽到「相似度达标即接受」。
 # 原逻辑念错一个字就整次重试，每次重试都计费（实测重试率 38%，多花约 1/3 的钱）；

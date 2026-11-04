@@ -1,20 +1,22 @@
 # SnowBotLauncher
 
-AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **SnowBot 配置包** 系统：一键启停、状态监控、WebUI/Token 快捷入口、实时日志、后台挂起、开机自启、配置包导入与应用。
+AstrBot + QQ 协议端（NapCat / SnowLuma）的 Windows 桌面统一控制台，并内置可扩展的 **SnowBot 配置包** 系统：一键启停、状态监控、WebUI/Token 快捷入口、实时日志、后台挂起、开机自启、配置包导入与应用。
 
-基于 PySide6（Qt）实现，打包后为独立 exe，无需安装 Python。**还没装过 AstrBot / NapCat 的新用户，请先看下方[前置准备](#前置准备astrbot-与-napcat)。**
+基于 PySide6（Qt）实现，打包后为独立 exe，无需安装 Python。**还没装过 AstrBot / QQ 协议端的新用户，请先看下方[前置准备](#前置准备)。**
+
+源码仓库：<https://github.com/Evelyn-Snow/SnowBotLauncher>
 
 ## 功能
 
 ### 服务控制
-- **统一启停**：一键启动/停止 AstrBot 与 NapCat，显示 PID、运行时长
-- **状态监控**：AstrBot 面板、OneBot 反向 WS（6199）、NapCat WebUI、QQ 账号、连接状态
-- **快捷入口**：直接打开 AstrBot WebUI / NapCat WebUI，Token 显示与一键复制
-- **实时日志**：AstrBot 与 NapCat 双标签页日志实时跟随
+- **统一启停**：一键启动/停止 AstrBot 与 QQ 协议端（NapCat 或 SnowLuma），显示 PID、运行时长
+- **状态监控**：AstrBot 面板、OneBot 反向 WS（6199）、协议端 WebUI、QQ 账号、连接状态
+- **快捷入口**：直接打开 AstrBot WebUI / 协议端 WebUI，Token 显示与一键复制
+- **实时日志**：AstrBot 与 QQ 协议端双标签页日志实时跟随
 - **后台挂起**：关闭窗口或点「后台挂起」隐藏到系统托盘，服务不中断；托盘菜单可恢复、启停、退出
-- **设置页**：自动检测官方启动器实例、路径、端口、关闭到托盘、启动最小化、开机自启（计划任务）、启动后自动拉起服务
-- **NapCat 快速登录**：启动时自动读取已保存的 QQ 账号并传入 `-q`，避免每次重新扫码
-- **健壮性**：单实例锁、自动提权（NapCat 需要管理员权限）
+- **设置页**：自动检测官方启动器实例、路径、端口、QQ 协议端、关闭到托盘、启动最小化、开机自启（计划任务）、启动后自动拉起服务
+- **NapCat 快速登录**：NapCat 模式下自动读取已保存的 QQ 账号并传入 `-q`，避免每次重新扫码
+- **健壮性**：单实例锁、自动提权（协议端需要管理员权限）
 
 ### 配置包（SnowBot Pack）
 - **清单驱动**：`pack.json` 描述人格、插件、模型、语音、表情包等配置
@@ -22,7 +24,7 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 - **计划预览**：先登录 AstrBot 读取当前状态，生成将要执行的步骤，确认后再应用
 - **备份还原**：应用前自动快照全局配置、人格、插件配置、提供商；可一键还原
 - **可重复执行**：已安装的插件、已存在的人格会跳过或更新，失败项可单独重跑
-- **扩展性**：支持插件市场/随包插件、任意 `/api/v1` 请求、Python 脚本步骤（需显式授权）
+- **扩展性**：支持插件市场/随包插件、AstrBot 后台接口（`/api`，v1 路径写 `/v1/...`）、Python 脚本步骤（需显式授权）
 - **旧版兼容**：识别 dafeiyu 风格的 `settings/pack.json + tools/import_*.py`，自动转换为脚本步骤
 
 ### 增强配置
@@ -47,9 +49,12 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 |---|---|---|
 | `snow_sleep` | 小雪作息：默认 00:00–07:00 休息，不回复、不被动读群消息 | [astrbot_plugin_snow_sleep](https://github.com/Evelyn-Snow/astrbot_plugin_snow_sleep) |
 | `snow_continuity` | 连续对话接话：互动后“你……”和图片确定性回复，不受读空气概率影响 | [astrbot_plugin_snow_continuity](https://github.com/Evelyn-Snow/astrbot_plugin_snow_continuity) |
+| `snow_burst` | 消息合流：连续发来的几句话合成一次理解和回复，减少碎片化回应 | [astrbot_plugin_snow_burst](https://github.com/Evelyn-Snow/astrbot_plugin_snow_burst) |
 | `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 | [astrbot_plugin_search_manners](https://github.com/Evelyn-Snow/astrbot_plugin_search_manners) |
 | `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 | [astrbot_plugin_share_card](https://github.com/Evelyn-Snow/astrbot_plugin_share_card) |
 | `bili_vision` | B站视频理解：字幕 + 缩略图抽帧 + 视觉模型，不下载完整视频 | [astrbot_plugin_bili_vision](https://github.com/Evelyn-Snow/astrbot_plugin_bili_vision) |
+| `snow_media` | 视频/语音理解：群里视频抽帧看画面并转写音频，语音消息本地转文字 | [astrbot_plugin_snow_media](https://github.com/Evelyn-Snow/astrbot_plugin_snow_media) |
+| `snow_reply` | 自主引用回复：话题乱/目标远时自己搜前文并引用，有冷却和频率上限 | [astrbot_plugin_snow_reply](https://github.com/Evelyn-Snow/astrbot_plugin_snow_reply) |
 | `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 | [astrbot_plugin_snow_imagebox](https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox) |
 | `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
 | `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
@@ -58,6 +63,10 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 | `snow_guard` | 安全守卫：出网白名单、内网/元数据/短链拦截、外部内容注入防护 | [astrbot_plugin_snow_guard](https://github.com/Evelyn-Snow/astrbot_plugin_snow_guard) |
 | `snow_balance` | 余额感知：对话/语音/视觉额度不足时用自己的口吻私聊主人（饿了/嗓子哑了/看不清） | [astrbot_plugin_snow_balance](https://github.com/Evelyn-Snow/astrbot_plugin_snow_balance) |
 | `snow_friend` | 好友申请：等级够高/有会员/老号才自动通过，其余挂起并通知主人 | [astrbot_plugin_snow_friend](https://github.com/Evelyn-Snow/astrbot_plugin_snow_friend) |
+| `snow_profile` | 画像与熟悉度：第一人称印象、印象分/道德分、按熟悉度主动私聊 | [astrbot_plugin_snow_profile](https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile) |
+| `snow_messenger` | 传话：让 Bot 私聊指定的 QQ 好友并转告回复 | [astrbot_plugin_snow_messenger](https://github.com/Evelyn-Snow/astrbot_plugin_snow_messenger) |
+
+> 18 个插件仓库均已创建并推送；插件市场提审按每批最多 3 个进行。
 
 插件发布流程见 [docs/publishing.md](docs/publishing.md)；配置包格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
@@ -67,12 +76,18 @@ AstrBot + NapCat 的 Windows 桌面统一控制台，并内置可扩展的 **Sno
 main.py                      # 程序入口
 snowbot/
 ├─ core/                     # 路径、配置、服务管理、人格文件、视觉配置
+│  ├─ common.py              # JSON 原子读写 / 端口快照 / 进程身份校验
 │  ├─ paths.py
 │  ├─ config.py
 │  ├─ services.py
+│  ├─ group_config.py
+│  ├─ napcat_fix.py
 │  ├─ persona_files.py
+│  ├─ single_instance.py
 │  └─ vision_config.py
-├─ astrbot/client.py         # AstrBot WebUI API 客户端
+├─ astrbot/
+│  ├─ client.py              # AstrBot WebUI API 客户端
+│  └─ seed_audio_patch.py    # 豆包语音插件补丁
 ├─ packs/engine.py           # SnowBot 配置包引擎
 └─ ui/
    ├─ theme.py               # 主题与图标
@@ -81,37 +96,43 @@ snowbot/
    └─ pages/
       ├─ console.py          # 控制台
       ├─ packs.py            # 配置包
-      ├─ enhance/            # 增强配置（人格/表情包/语音/记忆/视觉/存储）
-      │  ├─ common.py        # 共享常量与 Qt 导入
-      │  ├─ tab.py           # 页面外壳与连接
+      ├─ enhance/            # 增强配置
+      │  ├─ common.py
+      │  ├─ tab.py
       │  ├─ persona.py
       │  ├─ meme.py
       │  ├─ voice.py
       │  ├─ memory.py
+      │  ├─ group.py
+      │  ├─ behavior.py
       │  ├─ vision.py
-      │  └─ storage.py
+      │  ├─ search.py
+      │  ├─ storage.py
+      │  └─ extend.py
       ├─ settings.py
       └─ about.py
-plugins/                     # 可选的本机 AstrBot 插件源码
-├─ astrbot_plugin_obsidian_notes/
-└─ astrbot_plugin_snow_imagebox/
+plugins/                     # 18 个随包分发的 AstrBot 插件源码
 tests/                       # 不依赖运行中服务的回归测试
-scripts/                     # 开发辅助脚本
+scripts/                     # 开发/发布脚本；一次性迁移脚本在 archive/
 ```
 
-## 前置准备（AstrBot 与 NapCat）
+## 前置准备
 
-**SnowBotLauncher 只是统一控制台，不负责下载安装 AstrBot 和 NapCat 本体。** 首次使用请按下面四步把环境装好、打通一次，之后日常启停都可以在启动器里完成。
+**SnowBotLauncher 只是统一控制台，不负责下载安装 AstrBot 和 QQ 协议端本体。** 首次使用请按下面步骤把环境装好、打通一次，之后日常启停都可以在启动器里完成。QQ 协议端 **NapCat 与 SnowLuma 二选一**，不要同时登录同一个 QQ。
 
 ### 你需要准备
 
 | 组件 | 作用 | 获取 |
 |---|---|---|
-| QQ NT 桌面版 | NapCat 依赖 QQ 本体运行 | [QQ 官网](https://im.qq.com/pcqq/index.shtml) |
-| AstrBot | 机器人核心：接入大模型、插件、WebUI | [文档](https://docs.astrbot.app/) · [GitHub](https://github.com/AstrBotDevs/AstrBot) |
-| NapCat | QQ 协议端：把 QQ 消息接入 AstrBot | [文档](https://napneko.github.io/) · [GitHub](https://github.com/NapNeko/NapCatQQ) |
+| QQ NT 桌面版 | 协议端依赖 QQ 本体运行 | [QQ 官网](https://im.qq.com/pcqq/index.shtml) |
+| AstrBot | 机器人核心：接入大模型、插件、WebUI | [GitHub](https://github.com/AstrBotDevs/AstrBot) · [文档](https://docs.astrbot.app/) |
+| NapCat（可选） | QQ 协议端：把 QQ 消息接入 AstrBot | [GitHub](https://github.com/NapNeko/NapCatQQ) · [Releases](https://github.com/NapNeko/NapCatQQ/releases) · [文档](https://napneko.github.io/) |
+| SnowLuma（可选） | 另一套 QQ 协议端，NapCat 频繁掉线时替代 | [GitHub](https://github.com/SnowLuma/SnowLuma) · [Releases](https://github.com/SnowLuma/SnowLuma/releases) · [文档](https://snowluma.github.io) |
+| 本机扩展插件 | 18 个自研插件，随安装包分发，也可从各自仓库安装 | 见下方[本机扩展插件](#本机扩展插件)表 |
 
-> 建议：QQ 登录后关闭「自动更新」，QQ 大版本升级可能导致 NapCat 短暂不适配；用小号跑机器人，降低风控影响。
+> **协议端选择建议**：先用 NapCat；如果反复被踢下线，再换 SnowLuma。SnowLuma Lite 需要 **Node.js 24+**，采用源码可见非商业许可，本项目不打包/不再分发它的本体。
+
+> 建议：QQ 登录后关闭「自动更新」，QQ 大版本升级可能导致协议端短暂不适配；用小号跑机器人，降低风控影响。
 
 > 系统要求：Windows 10/11 x64；NapCat 版本需与 QQ 版本匹配（QQ 升级后及时更新 NapCat）。
 
@@ -125,19 +146,28 @@ scripts/                     # 开发辅助脚本
 
 也可以源码方式部署：`git clone` AstrBot 后自建 venv 装依赖；这种目录可在启动器「设置」页手动选择，或点「自动检测官方启动器实例」。
 
-### 第 2 步 · 安装 NapCat
+### 第 2 步 · 安装 QQ 协议端（NapCat 或 SnowLuma）
 
 1. 先安装并登录一次 QQ NT 桌面版。
 2. 按 [NapCat 安装文档](https://napneko.github.io/guide/start-install) 用 **NapCatInstaller**（Windows）安装 **NapCat.Shell**，或到 [Releases](https://github.com/NapNeko/NapCatQQ/releases) 下载 zip 解压。
 3. 启动器默认找 `C:\NapCat\NapCat.Shell`（需包含 `launcher.bat`）；装在别处时在启动器「设置」页指定目录。
 
-### 第 3 步 · 打通 AstrBot ↔ NapCat（一次性）
+### 第 3 步 · 打通 AstrBot ↔ QQ 协议端（一次性）
 
 1. 启动 AstrBot，浏览器打开面板 `http://127.0.0.1:6185`，默认账号 `astrbot / astrbot`，**首次登录后请改密码**。
 2. WebUI → 「消息平台」→ 新增平台，类型选 **aiocqhttp**，端口保持默认 `6199`。
 3. 启动 NapCat 并登录机器人 QQ（NapCat WebUI 默认 `http://127.0.0.1:6099`）。
 4. NapCat 的「网络配置」里新增 **反向 WebSocket 连接**，地址填 `ws://127.0.0.1:6199/ws`。
 5. AstrBot 消息平台页出现「在线」即打通；用另一个 QQ 给机器人发句私聊验证。
+
+### 可选 · 用 SnowLuma 代替 NapCat
+
+SnowLuma 是另一套 QQ 协议端，适合 NapCat 频繁被踢下线时替代；两者**不要同时登录同一个 QQ**。
+
+1. 安装 Node.js 24+、QQ NT，并把 SnowLuma lite 解压到 `C:\SnowLuma`（含 `index.mjs`）。
+2. 启动器「设置」→ QQ 协议端选 **SnowLuma**，填 SnowLuma 目录、WebUI 端口（默认 `5099`）、QQ 路径。
+3. SnowLuma 的 OneBot 反向 WS 指向 `ws://127.0.0.1:6199/ws`，访问令牌必须与 AstrBot 的 `ws_reverse_token` 一致。
+4. 启动器会先拉起 QQ，再由 SnowLuma 注入；首次需要扫码登录。
 
 ### 第 4 步 · 回到 SnowBotLauncher
 
@@ -157,7 +187,8 @@ scripts/                     # 开发辅助脚本
 ├─ packs\            # 配置包
 ├─ presets\          # 变量预设（不含密码与密钥）
 ├─ personas\         # 本地 Markdown 人格文件
-└─ backups\          # 应用配置包前的自动备份
+├─ backups\          # 应用配置包前的自动备份
+└─ temp\             # 临时文件（安装包/媒体处理）
 ```
 
 安装版以管理员运行，配置和日志不写 Program Files，升级/卸载不会被文件锁影响。
@@ -173,6 +204,13 @@ python main.py
 
 也可以直接运行 `scripts\run_dev.bat`（无控制台）或 `scripts\run_dev_console.bat`（带控制台）。
 
+测试（不依赖运行中的 AstrBot/NapCat）：
+
+```bat
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m pyflakes snowbot tests
+```
+
 ## 打包
 
 ```bat
@@ -181,21 +219,23 @@ build.bat
 
 构建流程：
 
-1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples/docs）
-2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-1.5.42.exe`
+1. PyInstaller 从 `main.py` 打包为 `dist\SnowBotLauncher\SnowBotLauncher.exe`（onedir，管理员清单，附带 examples）
+2. Inno Setup 编译出 `installer\output\SnowBotLauncher-Setup-<版本>.exe`（版本号从 `paths.py` 读取，文档不再单独维护）
 
 需要 Inno Setup 6（`ISCC.exe`），默认查找 `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`。
 
 ## 安装
 
-运行生成好的安装包：
+从 [GitHub Releases](https://github.com/Evelyn-Snow/SnowBotLauncher/releases) 下载最新 Setup，或运行本地构建出的安装包：
 
 ```
-installer\output\SnowBotLauncher-Setup-1.5.42.exe
+installer\output\SnowBotLauncher-Setup-<版本>.exe
 ```
+
+安装前请先按[前置准备](#前置准备)装好 AstrBot 和一个 QQ 协议端；安装包只包含控制台、18 个插件源码和文档，**不包含 AstrBot、QQ、协议端本体或模型 API Key**。
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式
-- 安装与运行都需要管理员权限（NapCat 需要向 QQ 注入引导模块）
+- 安装与运行都需要管理员权限（NapCat/SnowLuma 需要向 QQ 注入引导模块）
 - 卸载：Windows 设置 → 应用，或开始菜单中的「卸载 SnowBotLauncher」；用户数据目录保留，可按需手动删除
 - 安装包未做代码签名，首次运行可能出现 SmartScreen 提示，选择「更多信息 → 仍要运行」即可
 

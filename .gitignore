@@ -1,3 +1,7 @@
 tools/
-*.log
 plugin-releases/
+*.log
+asr-bench/
+bili_test_*
+*.m4s
+SnowLuma-*.zip

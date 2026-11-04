@@ -131,7 +131,8 @@ class LauncherWindow(
 
         self.tabs.addTab(self._build_console_tab(), "控制台")
         self.tabs.addTab(scroll_page(self._build_packs_tab()), "配置包")
-        self.tabs.addTab(EnhanceTab(self.cfg, astrbot_dashboard_info(self.cfg)), "增强配置")
+        self.enhance = EnhanceTab(self.cfg, astrbot_dashboard_info(self.cfg))
+        self.tabs.addTab(self.enhance, "增强配置")
         self.tabs.addTab(self._build_settings_tab(), "设置")
         self.tabs.addTab(self._build_about_tab(), "使用说明")
 

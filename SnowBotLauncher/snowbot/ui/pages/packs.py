@@ -634,6 +634,9 @@ class PacksMixin:
         ):
             return
         self._append_pack_log(f"开始还原备份：{backups[index]['name']}")
+        if not self.current_pack:
+            QMessageBox.warning(self, "无法还原", "请先在左侧选择一个配置包。")
+            return
         self._start_pack_worker(
             "restore", self.current_pack, values, snapshot=backups[index]["path"]
         )
@@ -689,5 +692,3 @@ class PacksMixin:
 
     def open_packs_dir(self):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(pe.PACKS_DIR)))
-
-    # ---------------- 托盘 ----------------

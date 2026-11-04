@@ -1,5 +1,7 @@
 #define MyAppName "SnowBotLauncher"
-#define MyAppVersion "1.5.42"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0"
+#endif
 #define MyAppExeName "SnowBotLauncher.exe"
 #define MyAppId "{{3F6D2A9B-1C4E-4D7A-8B2F-5E9C7D1A6B30}"
 
@@ -29,8 +31,13 @@ Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 [Files]
 Source: "..\dist\SnowBotLauncher\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\docs\*"; DestDir: "{app}\docs"; Flags: recursesubdirs createallsubdirs
-Source: "..\plugins\*"; DestDir: "{app}\plugins"; Excludes: "__pycache__,*.pyc"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\docs\pack-schema.md"; DestDir: "{app}\docs"; Flags: recursesubdirs createallsubdirs
+Source: "..\plugins\*"; DestDir: "{app}\plugins"; Excludes: "data\*,__pycache__\*,*.pyc"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+[InstallDelete]
+Type: filesandordirs; Name: "{app}\plugins\data"
+Type: files; Name: "{app}\docs\publishing.md"
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

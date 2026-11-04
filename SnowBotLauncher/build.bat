@@ -12,8 +12,16 @@ echo [1/4] 安装依赖...
 ".venv\Scripts\python.exe" -m pip install -r requirements.txt pyinstaller
 if errorlevel 1 goto :err
 
-echo [2/4] PyInstaller 打包 exe...
-".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --uac-admin --name SnowBotLauncher --icon app.ico --add-data "examples;examples" --add-data "docs;docs" main.py
+echo [2/4] 读取版本并打包 exe...
+".venv\Scripts\python.exe" scripts\print_version.py > "%TEMP%\snowbot_version.txt"
+set /p APPVER=<"%TEMP%\snowbot_version.txt"
+del "%TEMP%\snowbot_version.txt" >nul 2>nul
+if not defined APPVER (
+    echo 读取版本号失败。
+    goto :err
+)
+if exist "plugins\data" rmdir /s /q "plugins\data"
+".venv\Scripts\python.exe" -m PyInstaller --noconfirm --clean --windowed --uac-admin --name SnowBotLauncher --icon app.ico --add-data "examples;examples" main.py
 if errorlevel 1 goto :err
 
 echo [3/4] 检查 Inno Setup...
@@ -24,14 +32,14 @@ if not exist "%ISCC%" (
     goto :err
 )
 
-echo [4/4] 生成安装包...
-"%ISCC%" "installer\SnowBotLauncher.iss"
+echo [4/4] 生成安装包 %APPVER%...
+"%ISCC%" /DMyAppVersion=%APPVER% "installer\SnowBotLauncher.iss"
 if errorlevel 1 goto :err
 
 echo.
 echo 构建完成：
 echo   exe:     dist\SnowBotLauncher\SnowBotLauncher.exe
-echo   setup:   installer\output\SnowBotLauncher-Setup-1.5.42.exe
+echo   setup:   installer\output\SnowBotLauncher-Setup-%APPVER%.exe
 pause
 exit /b 0
 

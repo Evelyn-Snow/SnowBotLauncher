@@ -1,0 +1,9 @@
+name: astrbot_plugin_snow_reply
+display_name: 小雪引用回复
+desc: 由她自己判断何时需要引用回复，并在前文里搜索目标消息；只在话题混乱或目标很远时触发，有冷却和频率上限
+help: 不需要指令：话题乱、对方同时说几件事、或要回的那句很靠前时，她会自己搜索前文并引用；普通聊天不会频繁引用
+version: v0.2.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_reply
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp

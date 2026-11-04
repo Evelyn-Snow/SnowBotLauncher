@@ -2,7 +2,6 @@
 import json
 import os
 import shutil
-import socket
 import subprocess
 import time
 from pathlib import Path
@@ -10,43 +9,17 @@ from pathlib import Path
 import psutil
 import re
 
+from .common import list_tcp_connections, pid_matches, port_snapshot
 from .config import now_str
 from .paths import FFMPEG_BIN_DIR, LOG_DIR
 
-def list_tcp_connections():
-    try:
-        return psutil.net_connections(kind="tcp")
-    except Exception:
-        return []
-
 
 def port_listening(port: int, conns=None) -> bool:
-    conns = conns if conns is not None else list_tcp_connections()
-    for c in conns:
-        try:
-            if c.status == psutil.CONN_LISTEN and c.laddr and c.laddr.port == port:
-                return True
-        except Exception:
-            continue
-    # Windows 的 TCP 表偶尔会把监听态报成 NONE/CLOSED（进程仍在正常服务），
-    # 不管有没有拿到连接列表，都用实际 TCP 连接兜底，避免状态误判成“已停止”。
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(0.2)
-            return s.connect_ex(("127.0.0.1", port)) == 0
-    except Exception:
-        return False
+    return bool(port_snapshot(port, conns).get("listening"))
 
 
 def listening_pid(port: int, conns=None):
-    conns = conns if conns is not None else list_tcp_connections()
-    for c in conns:
-        try:
-            if c.status == psutil.CONN_LISTEN and c.laddr and c.laddr.port == port:
-                return c.pid
-        except Exception:
-            continue
-    return None
+    return port_snapshot(port, conns).get("pid")
 
 
 def onebot_connected(port: int, conns=None) -> bool:
@@ -314,7 +287,6 @@ class ServiceManager:
         self.cfg = cfg
         self.procs = {"astrbot": None, "napcat": None, "snowluma": None}
         self.started_at = {"astrbot": None, "napcat": None, "snowluma": None}
-        self.log_files = {}
         LOG_DIR.mkdir(exist_ok=True)
 
     # ---------- QQ 协议端 ----------
@@ -374,22 +346,24 @@ class ServiceManager:
         backend = self.qq_backend()
         webui_port = self.snowluma_webui_port() if backend == "snowluma" else nc
 
-        astrbot_up = port_listening(dash, conns)
-        qq_up = port_listening(webui_port, conns)
+        dash_snap = port_snapshot(dash, conns)
+        qq_snap = port_snapshot(webui_port, conns)
+        astrbot_up = bool(dash_snap["listening"])
+        qq_up = bool(qq_snap["listening"])
         qqs = qq_processes()
 
         return {
             "astrbot_up": astrbot_up,
-            "astrbot_pid": listening_pid(dash, conns),
+            "astrbot_pid": dash_snap["pid"],
             "qq_backend": backend,
             "qq_label": "SnowLuma" if backend == "snowluma" else "NapCat",
             "qq_up": qq_up,
-            "qq_pid": listening_pid(webui_port, conns),
+            "qq_pid": qq_snap["pid"],
             "qq_webui": f"http://127.0.0.1:{webui_port}",
             "qq_webui_port": webui_port,
             # 兼容旧界面字段
             "napcat_up": qq_up,
-            "napcat_pid": listening_pid(webui_port, conns),
+            "napcat_pid": qq_snap["pid"],
             "qq_running": bool(qqs),
             "qq_pids": [p.pid for p in qqs],
             "onebot_connected": onebot_connected(ob, conns),
@@ -429,6 +403,10 @@ class ServiceManager:
         cfg = self.cfg
         if port_listening(int(cfg["dashboard_port"])):
             return False, "AstrBot 已在运行"
+        if not str(cfg.get("python_exe") or "").strip() or not str(
+            cfg.get("astrbot_dir") or ""
+        ).strip():
+            return False, "请先在设置里选择 AstrBot 目录和 Python 解释器"
         py = Path(cfg["python_exe"])
         d = Path(cfg["astrbot_dir"])
         if not py.exists():
@@ -474,7 +452,6 @@ class ServiceManager:
 
         self.procs["astrbot"] = p
         self.started_at["astrbot"] = time.time()
-        self.log_files["astrbot"] = log_path
         return True, "AstrBot 启动中…"
 
     def _prepare_napcat_file_log(self):
@@ -554,6 +531,12 @@ class ServiceManager:
     # ---------- 停止 ----------
     def stop_astrbot(self):
         pid = listening_pid(int(self.cfg["dashboard_port"]))
+        if pid and not pid_matches(
+            int(pid),
+            names=("python.exe", "pythonw.exe"),
+            cmd_markers=("main.py", "astrbot"),
+        ):
+            pid = None
         p = self.procs.get("astrbot")
         if not pid and p and p.poll() is None:
             pid = p.pid
@@ -580,7 +563,11 @@ class ServiceManager:
             except Exception:
                 continue
         pid = listening_pid(int(self.cfg["napcat_port"]))
-        if pid:
+        if pid and pid_matches(
+            int(pid),
+            names=("node.exe", "qq.exe", "napcatwinbootmain.exe"),
+            cmd_markers=("napcat", "launcher.bat"),
+        ):
             kill_tree(int(pid))
             stopped = True
         p = self.procs.get("napcat")
@@ -684,16 +671,31 @@ class ServiceManager:
         return self.start_snowluma() if self.qq_backend() == "snowluma" else self.start_napcat()
 
     def stop_qq(self):
-        return self.stop_snowluma() if self.qq_backend() == "snowluma" else self.stop_napcat()
+        """停止 QQ 协议端：两个后端都清一遍，避免切换后残留。"""
+        results = []
+        for backend in ("napcat", "snowluma"):
+            try:
+                if backend == "napcat":
+                    results.append(self.stop_napcat())
+                else:
+                    results.append(self.stop_snowluma())
+            except Exception as exc:
+                results.append((False, f"{backend} 停止失败：{exc}"))
+        stopped = [msg for ok, msg in results if ok]
+        if stopped:
+            return True, "；".join(stopped)
+        return False, "；".join(msg for _, msg in results)
 
     def start_all(self):
         msgs = []
         ok1, m1 = self.start_astrbot()
         msgs.append(m1)
+        ok1 = ok1 or "已在运行" in m1
+        if not ok1:
+            msgs.append("AstrBot 启动失败，已跳过 QQ 协议端")
+            return False, "；".join(msgs)
         ok2, m2 = self.start_qq()
         msgs.append(m2)
-        # “已经在运行”对一键启动来说属于成功，不应弹黄色警告。
-        ok1 = ok1 or "已在运行" in m1
         ok2 = ok2 or "已在运行" in m2
         return bool(ok1 and ok2), "；".join(msgs)
 
@@ -703,4 +705,4 @@ class ServiceManager:
         msgs.append(m1)
         ok2, m2 = self.stop_qq()
         msgs.append(m2)
-        return ok1 or ok2, "；".join(msgs)
+        return bool(ok1 and ok2), "；".join(msgs)

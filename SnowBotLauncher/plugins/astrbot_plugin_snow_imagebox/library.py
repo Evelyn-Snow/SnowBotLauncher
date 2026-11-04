@@ -138,21 +138,25 @@ class ImageLibrary:
     def save(self) -> None:
         self._ensure_dirs()
         payload = json.dumps(self._data, ensure_ascii=False, indent=2)
-        tmp = self.index_path.with_suffix(".json.tmp")
+        tmp = self.index_path.with_name(
+            f"{self.index_path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
         tmp.write_text(payload, encoding="utf-8")
         os.replace(tmp, self.index_path)
 
     def items(self) -> list[dict[str, Any]]:
-        return [dict(item) for item in self._data["items"]]
+        with self._lock_guard():
+            return [dict(item) for item in self._data["items"]]
 
     def get(self, image_id: str) -> dict[str, Any] | None:
         wanted = str(image_id or "").strip()
         if not wanted:
             return None
-        for item in self._data["items"]:
-            if str(item.get("id")) == wanted:
-                return item
-        return None
+        with self._lock_guard():
+            for item in self._data["items"]:
+                if str(item.get("id")) == wanted:
+                    return item
+            return None
 
     def file_path(self, item: dict[str, Any]) -> Path:
         return (self.root / str(item.get("file") or "")).resolve()
@@ -274,6 +278,12 @@ class ImageLibrary:
         return terms
 
     def search(self, query: str = "", limit: int = 10) -> list[dict[str, Any]]:
+        with self._lock_guard():
+            return self._search_locked(query, limit)
+
+    def _search_locked(
+        self, query: str = "", limit: int = 10
+    ) -> list[dict[str, Any]]:
         limit = max(1, min(50, int(limit or 10)))
         terms = self._terms(query)
         scored: list[tuple[float, dict[str, Any]]] = []
@@ -447,6 +457,10 @@ class ImageLibrary:
             pass
 
     def stats(self) -> dict[str, Any]:
+        with self._lock_guard():
+            return self._stats_locked()
+
+    def _stats_locked(self) -> dict[str, Any]:
         items = self._data["items"]
         total = sum(int(item.get("size") or 0) for item in items)
         now = _now()

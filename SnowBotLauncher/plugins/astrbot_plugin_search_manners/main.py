@@ -14,7 +14,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 
-from .library import SearchRateLimiter, has_explicit_search_request
+from .library import SearchRateLimiter, has_explicit_search_request, tool_call_name
 
 NAME = "astrbot_plugin_search_manners"
 PROMPT_MARK = "[联网搜索]"
@@ -84,10 +84,7 @@ class SearchManners(Star):
             if not calls:
                 continue
             for call in calls:
-                name = getattr(call, "name", None)
-                if name is None and isinstance(call, dict):
-                    name = call.get("name")
-                if str(name or "").startswith("web_search"):
+                if tool_call_name(call).startswith("web_search"):
                     searched = True
                     break
             if searched:

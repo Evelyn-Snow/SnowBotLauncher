@@ -1,0 +1,61 @@
+{
+  "enabled": {
+    "description": "启用自主引用回复",
+    "type": "bool",
+    "default": true,
+    "hint": "由模型自己决定是否引用；只有话题混乱或目标消息离得很远时才用，普通聊天不引用"
+  },
+  "lookback_minutes": {
+    "description": "搜索前文的分钟范围",
+    "type": "int",
+    "default": 720
+  },
+  "lookback_messages": {
+    "description": "最多回看多少条消息",
+    "type": "int",
+    "default": 200
+  },
+  "min_message_distance": {
+    "description": "目标至少相隔几条消息",
+    "type": "int",
+    "default": 4,
+    "hint": "离当前消息少于这么多条时，视为不需要引用"
+  },
+  "min_time_distance_minutes": {
+    "description": "目标至少相隔多少分钟",
+    "type": "int",
+    "default": 10,
+    "hint": "消息条数不够但时间够久，也允许引用"
+  },
+  "search_threshold": {
+    "description": "匹配阈值",
+    "type": "float",
+    "default": 0.2,
+    "hint": "模型给的原话片段/描述与历史消息的最低匹配分，太低容易引错"
+  },
+  "cooldown_minutes": {
+    "description": "两次引用最小间隔（分钟）",
+    "type": "int",
+    "default": 30
+  },
+  "max_per_hour": {
+    "description": "每小时最多引用几次",
+    "type": "int",
+    "default": 2
+  },
+  "max_per_day": {
+    "description": "每天最多引用几次",
+    "type": "int",
+    "default": 6
+  },
+  "history_per_session": {
+    "description": "每个会话保留多少条前文",
+    "type": "int",
+    "default": 300
+  },
+  "intent_ttl_seconds": {
+    "description": "引用意图有效期（秒）",
+    "type": "int",
+    "default": 300
+  }
+}

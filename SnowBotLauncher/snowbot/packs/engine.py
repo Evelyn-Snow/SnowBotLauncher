@@ -39,7 +39,6 @@ STEP_TYPES = {
     "provider.upsert",
     "provider.test",
     "pip.install",
-    "tool.permission",
     "http",
     "script",
     "sleep",
@@ -670,11 +669,8 @@ def _run_step(step: dict, ctx: PackContext) -> StepResult:
         return StepResult(f"安装 Python 依赖（{len(packages)} 个）", True)
 
     if kind == "tool.permission":
-        tool = str(fill(step.get("tool", ""), mapping))
-        return StepResult(
-            f"工具权限「{tool}」",
-            True,
-            "当前 AstrBot 4.x 不支持通过 API 设置工具权限，已跳过",
+        raise PackError(
+            "tool.permission 步骤已不支持：AstrBot 4.x 没有可用的工具权限写入 API"
         )
 
     if kind == "http":
@@ -750,6 +746,7 @@ def _run_script(step: dict, ctx: PackContext) -> StepResult:
         env[str(key)] = str(fill(value, ctx.mapping()))
 
     ctx.log(f"运行脚本：{script_path.name} {' '.join(args)}")
+    proc = None
     try:
         proc = subprocess.run(
             [str(python_exe), str(script_path), *args],
@@ -761,12 +758,18 @@ def _run_script(step: dict, ctx: PackContext) -> StepResult:
             errors="replace",
             timeout=int(step.get("timeout", 3600)),
         )
+    except subprocess.TimeoutExpired as exc:
+        raise PackError(f"脚本超时：{script_path.name}") from exc
+    except OSError as exc:
+        raise PackError(f"脚本启动失败：{exc}") from exc
     finally:
         if answers_path:
             try:
                 answers_path.unlink()
             except Exception:
                 pass
+    if proc is None:
+        raise PackError(f"脚本没有执行：{script_path.name}")
     output = (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
     for line in output.splitlines()[-80:]:
         if line.strip():

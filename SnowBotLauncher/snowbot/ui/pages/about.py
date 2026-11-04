@@ -75,5 +75,3 @@ class AboutMixin:
         )
         layout.addWidget(text)
         return page
-
-    # ---------------- 配置包 ----------------

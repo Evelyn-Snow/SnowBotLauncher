@@ -1,0 +1,68 @@
+{
+  "enabled": {
+    "description": "启用消息合流",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后，私聊里连续发来的几句话会先等一个很短的窗口，再合成一段理解和回复"
+  },
+  "enabled_platforms": {
+    "description": "生效平台",
+    "type": "string",
+    "default": "aiocqhttp",
+    "hint": "逗号分隔的平台类型；webchat 默认不接管，避免影响网页聊天流"
+  },
+  "wait_seconds": {
+    "description": "基础等待秒数",
+    "type": "float",
+    "default": 1.8,
+    "hint": "每条新消息都会把窗口刷新到这个值；太小合不上，太大影响响应速度"
+  },
+  "max_wait_seconds": {
+    "description": "私聊最长等待秒数",
+    "type": "float",
+    "default": 5.0,
+    "hint": "私聊连续追问最多延长到这个上限，避免一直等"
+  },
+  "group_wait_seconds": {
+    "description": "群聊基础等待秒数",
+    "type": "float",
+    "default": 1.2,
+    "hint": "群聊节奏更快，默认比私聊短；@ 机器人后连续补充几句也能合上"
+  },
+  "group_max_wait_seconds": {
+    "description": "群聊最长等待秒数",
+    "type": "float",
+    "default": 3.0,
+    "hint": "群聊连续追问最多延长到这个上限"
+  },
+  "max_messages": {
+    "description": "一次最多合几条",
+    "type": "int",
+    "default": 6,
+    "hint": "超过这个条数就立刻分组处理，防止一大段话等太久"
+  },
+  "continuity_threshold": {
+    "description": "连续性延长阈值",
+    "type": "float",
+    "default": 0.18,
+    "hint": "评分达到这个值才允许把窗口延长到最长等待；越低越容易合并"
+  },
+  "private_only": {
+    "description": "只处理私聊",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后即使 group_enabled=true 也不碰群聊，作为保守开关"
+  },
+  "group_enabled": {
+    "description": "群聊也启用",
+    "type": "bool",
+    "default": true,
+    "hint": "群聊里同一个人的连续消息会合流；不同发送者各自成组，不会混在一起"
+  },
+  "merge_history": {
+    "description": "合并历史里的连续 user 消息",
+    "type": "bool",
+    "default": true,
+    "hint": "把对话历史中相邻的 user 消息并成一条再交给模型，减少旧碎片造成的理解跳跃"
+  }
+}

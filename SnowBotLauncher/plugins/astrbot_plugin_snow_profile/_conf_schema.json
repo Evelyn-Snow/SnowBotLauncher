@@ -115,6 +115,97 @@
     "type": "int",
     "default": 40
   },
+  "impression_initial": {
+    "description": "印象分初始值",
+    "type": "int",
+    "default": 50,
+    "hint": "50 为中性；画像更新时模型给新印象分，代码按 alpha 平滑"
+  },
+  "impression_smooth_alpha": {
+    "description": "印象分平滑系数",
+    "type": "float",
+    "default": 0.3,
+    "hint": "0~1，越大越相信模型本次判断；建议 0.2~0.4，避免一次对话大起大落"
+  },
+  "proactive_enabled": {
+    "description": "按熟悉度主动私聊",
+    "type": "bool",
+    "default": false,
+    "hint": "只对非管理员、熟悉度达标且最近活跃的私聊对象生效；主人仍由 proactive_chat 负责"
+  },
+  "proactive_windows": {
+    "description": "主动消息时间窗",
+    "type": "string",
+    "default": "12:00-13:30,18:00-22:00",
+    "hint": "只在午休和下班休息时间检查；格式 HH:MM-HH:MM，逗号分隔；留空=全天"
+  },
+  "virtual_life_adapt": {
+    "description": "联动虚拟人生日程",
+    "type": "bool",
+    "default": true,
+    "hint": "读取虚拟人生今日日程，睡觉/上课/忙/在路上/低可打扰度时不主动；生成消息会结合当前在做的事"
+  },
+  "proactive_min_familiarity": {
+    "description": "主动消息最低熟悉度",
+    "type": "int",
+    "default": 44,
+    "hint": "0~94；44 约等于「朋友」，低于此值不主动打扰"
+  },
+  "proactive_check_minutes": {
+    "description": "窗内检查间隔（分钟）",
+    "type": "int",
+    "default": 15
+  },
+  "proactive_chance": {
+    "description": "每次检查的触发概率",
+    "type": "float",
+    "default": 0.15,
+    "hint": "0~1；配合冷却和每日上限，避免频繁打扰"
+  },
+  "proactive_cooldown_hours": {
+    "description": "同一人主动消息冷却（小时）",
+    "type": "int",
+    "default": 36
+  },
+  "proactive_daily_max": {
+    "description": "同一人每天最多主动几条",
+    "type": "int",
+    "default": 1
+  },
+  "proactive_min_idle_minutes": {
+    "description": "至少安静多久才主动",
+    "type": "int",
+    "default": 120,
+    "hint": "刚聊过不打扰；单位分钟"
+  },
+  "proactive_active_days": {
+    "description": "只主动最近活跃的人",
+    "type": "int",
+    "default": 14,
+    "hint": "超过这么多天没出现的人不主动，避免突然冒出来"
+  },
+  "proactive_quiet_hours": {
+    "description": "主动消息静默时段",
+    "type": "string",
+    "default": "0-7",
+    "hint": "格式同画像更新静默时段，如 0-7 或 23-7"
+  },
+  "proactive_max_per_check": {
+    "description": "每次检查最多主动几人",
+    "type": "int",
+    "default": 1
+  },
+  "proactive_exclude_admins": {
+    "description": "不主动打扰管理员",
+    "type": "bool",
+    "default": true,
+    "hint": "主人/管理员由 proactive_chat 插件负责，避免双份消息"
+  },
+  "proactive_persona_id": {
+    "description": "主动消息使用的人格",
+    "type": "string",
+    "default": "小雪"
+  },
   "owner_session": {
     "description": "所有者会话（永不忽略）",
     "type": "string",

@@ -1,6 +1,7 @@
 """设置页：路径、端口、托盘与开机自启。"""
 import ctypes
 import subprocess
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from snowbot.core.config import (
+    astrbot_dashboard_info,
     default_config,
     discover_astrbot,
     discover_napcat_dir,
@@ -261,6 +263,18 @@ class SettingsMixin:
 
         save_config(self.cfg)
         self.manager.cfg = self.cfg
+        # 让增强配置页和 QQ 健康监控立刻用上新端口/日志目录，而不是等重启。
+        enhance = getattr(self, "enhance", None)
+        if enhance is not None:
+            info = astrbot_dashboard_info(self.cfg)
+            enhance.dashboard = info
+            port = int(info.get("port") or self.cfg.get("dashboard_port") or 6185)
+            enhance.url_edit.setText(f"http://127.0.0.1:{port}")
+        health = getattr(self, "health", None)
+        if health is not None:
+            health.napcat_log_dir = Path(
+                str(self.cfg.get("napcat_dir") or "")
+            ) / "logs"
         self._toast("设置已保存")
         self.refresh_status()
 
@@ -276,6 +290,16 @@ class SettingsMixin:
         self.chk_start_min.setChecked(defaults["start_minimized"])
         self.chk_auto_services.setChecked(False)
         self.chk_quick_login.setChecked(defaults.get("napcat_quick_login", True))
+        idx = self.qq_backend.findData(defaults.get("qq_backend", "napcat"))
+        if idx >= 0:
+            self.qq_backend.setCurrentIndex(idx)
+        self.dir_snowluma.setText(defaults.get("snowluma_dir", r"C:\SnowLuma"))
+        self.port_snowluma.setValue(int(defaults.get("snowluma_webui_port", 5099)))
+        self.node_exe.setText(defaults.get("node_exe", ""))
+        self.qq_exe.setText(
+            defaults.get("qq_exe", r"C:\Program Files\Tencent\QQNT\QQ.exe")
+        )
+        self.chk_autostart.setChecked(False)
         self._toast("已恢复默认值，点击「保存设置」生效")
 
     def autostart_enabled(self) -> bool:

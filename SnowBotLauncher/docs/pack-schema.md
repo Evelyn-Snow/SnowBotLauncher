@@ -152,13 +152,11 @@ my-pack/
 
 ### tool.permission
 
-```json
-{"type": "tool.permission", "tool": "set_signature", "permission": "admin"}
-```
+AstrBot 4.x 没有可用的工具权限写入 API，此步骤已不再支持；包含该步骤的配置包会明确失败，不会假装成功。
 
 ### http
 
-直接调用 `/api/v1` 下的扩展接口，便于适配插件自己的 API。
+调用 AstrBot 后台接口。客户端会在路径前拼 `/api`，所以调用 v1 接口时路径写 `/v1/...`。
 
 ```json
 {"type": "http", "method": "POST", "path": "/plugins/extensions/meme_manager/community/install", "body": {"pack_id": "xxx"}, "timeout": 900}

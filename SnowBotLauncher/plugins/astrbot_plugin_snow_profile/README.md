@@ -15,6 +15,19 @@
 
 默认存放在插件数据目录 `profiles/`；可在配置里填任意绝对路径（例如 Obsidian 仓库下的「画像」文件夹），方便直接翻看编辑。文件以 QQ 号命名，手改后下次更新会以你的版本为基础继续合并。
 
+## 熟悉度（v0.3.0）
+
+画像 frontmatter 新增 `印象评分`、`熟悉度`、`熟悉等级`、`活跃天数`、`首次互动`、`最近互动`：
+
+- **印象分**：画像更新时模型给 0-100 的整体印象，代码按 `impression_smooth_alpha` 平滑，避免一次对话大起大落
+- **熟悉度**：`45% 聊天频率 + 30% 印象分 + 25% 道德分`，再乘一个 0~1 的置信度（互动次数/活跃天数），避免刚聊几句就“熟人”
+- **等级**：陌生 → 眼熟 → 认识 → 熟人 → 朋友 → 好朋友 → 好友 → 亲近 → 知己
+- **上限**：非管理员最高 94（知己）；管理员/主人单独 100「管理员」，永远在最高档
+- 聊天注入会带上熟悉度和对应分寸提示：陌生保持距离，朋友可接梗，知己更放松
+- **主动私聊**：只在 `proactive_windows`（默认午休 12:00-13:30、下班后 18:00-22:00）检查；达到 `proactive_min_familiarity`、最近活跃、安静够久、过了冷却且概率命中，才会主动发一句
+- **虚拟人生联动**：读取今日日程的当前活动；睡觉/上课/忙/在路上/低可打扰度时不发；生成消息会结合她正在做的事（如“刚下课在食堂排队”），不凭空编
+- 管理员/主人默认排除（仍由 proactive_chat 负责），避免双份消息
+
 ## 道德评价（v0.2.0）
 
 画像自带**道德评分（0-100，初始 75）+ 文字佐证**，放在 `## 道德评价` 小节：
@@ -49,6 +62,22 @@
 | max_per_day | 4 | 每用户每天更新上限 |
 | max_buffer_per_user | 24 | 每人对话缓冲条数上限 |
 | inject_limit_chars | 400 | 注入画像的最大字数 |
+| impression_initial | 50 | 印象分初始值（50 中性） |
+| impression_smooth_alpha | 0.3 | 印象分平滑系数 |
+| proactive_enabled | false | 按熟悉度主动私聊 |
+| proactive_windows | 12:00-13:30,18:00-22:00 | 只在午休/下班后检查 |
+| virtual_life_adapt | true | 联动虚拟人生日程，结合当前活动生成 |
+| proactive_min_familiarity | 44 | 主动消息最低熟悉度（约「朋友」） |
+| proactive_check_minutes | 15 | 时间窗内检查间隔 |
+| proactive_chance | 0.15 | 每次检查命中概率 |
+| proactive_cooldown_hours | 36 | 同一人冷却 |
+| proactive_daily_max | 1 | 同一人每天最多几条 |
+| proactive_min_idle_minutes | 120 | 至少安静多久才主动 |
+| proactive_active_days | 14 | 只主动最近活跃的人 |
+| proactive_quiet_hours | 0-7 | 主动消息静默时段 |
+| proactive_max_per_check | 1 | 每次检查最多主动几人 |
+| proactive_exclude_admins | true | 不主动打扰管理员/主人 |
+| proactive_persona_id | 小雪 | 主动消息使用的人格 |
 | quiet_hours | 0-6 | 不调用模型更新画像的静默时段（注入不受影响） |
 | moral_enabled | true | 道德评价与分级策略总开关 |
 | moral_initial | 75 | 道德评分初始值 |

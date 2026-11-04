@@ -412,11 +412,16 @@ class ConsoleMixin:
 
     def refresh_logs(self):
         self._update_log(self.astrbot_log_view, tail_text(self.astrbot_log))
-        napcat_file = self.manager.napcat_log_file()
-        napcat_text = tail_text(napcat_file) if napcat_file else ""
-        if not napcat_text:
-            napcat_text = tail_text(LOG_DIR / "napcat_console.log")
-        self._update_log(self.napcat_log_view, napcat_text)
+        snowluma = self.manager.qq_backend() == "snowluma"
+        self.log_tabs.setTabText(1, "SnowLuma" if snowluma else "NapCat")
+        if snowluma:
+            qq_text = tail_text(self.manager.snowluma_log_file())
+        else:
+            napcat_file = self.manager.napcat_log_file()
+            qq_text = tail_text(napcat_file) if napcat_file else ""
+            if not qq_text:
+                qq_text = tail_text(LOG_DIR / "napcat_console.log")
+        self._update_log(self.napcat_log_view, qq_text)
 
     def _update_log(self, view: QPlainTextEdit, text: str):
         if not text:
@@ -521,5 +526,3 @@ class ConsoleMixin:
 
     def open_url(self, url: str):
         QDesktopServices.openUrl(QUrl(url))
-
-    # ---------------- 设置 ----------------

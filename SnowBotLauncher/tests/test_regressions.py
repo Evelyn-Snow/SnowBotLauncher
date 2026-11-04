@@ -22,10 +22,28 @@ from snowbot.core.config import default_config  # noqa: E402
 from snowbot.core.services import ServiceManager, port_listening  # noqa: E402
 from snowbot.packs import engine as pe  # noqa: E402
 from snowbot.core.persona_files import import_persona_file, render_persona  # noqa: E402
-from plugins.astrbot_plugin_bili_vision.library import resolve_video_id  # noqa: E402
+from plugins.astrbot_plugin_bili_vision.library import (  # noqa: E402
+    FAIL_LINES_LONG,
+    FAIL_LINES_NO_SPEECH,
+    FAIL_LINES_TECH,
+    estimate_asr_seconds,
+    is_long_wait,
+    pick_fail_line,
+    plan_progress,
+    resolve_video_id,
+)
 from plugins.astrbot_plugin_bili_vision.subtitles import (  # noqa: E402
     format_subtitles,
     pick_subtitle,
+)
+from plugins.astrbot_plugin_snow_burst.library import (  # noqa: E402
+    chunk_parts,
+    continuity_score,
+    group_parts,
+    merge_contexts,
+    merge_texts,
+    merge_user_messages,
+    should_extend,
 )
 from plugins.astrbot_plugin_share_card.library import (  # noqa: E402
     extract_share_text,
@@ -81,6 +99,7 @@ from plugins.astrbot_plugin_snow_balance.library import (  # noqa: E402
     CAP_VISION,
     CAP_VOICE,
     compose_message,
+    default_voice_log_path,
     format_balance,
     grade_balance,
     grade_voice,
@@ -124,22 +143,46 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
 )
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     PROFILE_SYSTEM_PROMPT,
+    activity_allows_proactive,
+    activity_line,
     apply_moral_delta,
     build_moral_section,
     build_profile_prompt,
     clean_llm_markdown,
+    compute_familiarity,
+    current_timeline_item,
+    extract_impression,
     extract_score,
+    familiarity_guidance,
+    familiarity_level,
+    in_time_windows,
     looks_like_profile,
     merge_name_history,
     moral_injection,
     moral_level,
     moral_section,
     parse_profile,
+    pick_today_plan,
     profile_summary,
     render_profile,
     should_ignore,
     should_update,
+    smooth_score,
     split_moral_section,
+    strip_impression,
+)
+from plugins.astrbot_plugin_snow_reply.library import (  # noqa: E402
+    bigram_score,
+    format_record,
+    match_score,
+    search_quote_target,
+)
+from plugins.astrbot_plugin_snow_media.library import (  # noqa: E402
+    is_audio_name,
+    is_video_name,
+    sheet_rows,
+    video_block,
+    voice_block,
 )
 from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     SUPPORTED_DOC_SUFFIXES,
@@ -163,6 +206,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
 from plugins.astrbot_plugin_search_manners.library import (  # noqa: E402
     SearchRateLimiter,
     has_explicit_search_request,
+    tool_call_name,
 )
 from snowbot.core.group_config import (  # noqa: E402
     build_scoped_groups,
@@ -260,7 +304,7 @@ class NapCatRegressionTests(unittest.TestCase):
         try:
             (root / "config").mkdir()
             (root / "index.mjs").write_text("", encoding="utf-8")
-            (root / "config" / "onebot_3651873041.json").write_text(
+            (root / "config" / "onebot_10001.json").write_text(
                 "{}", encoding="utf-8"
             )
             cfg = {
@@ -275,7 +319,7 @@ class NapCatRegressionTests(unittest.TestCase):
             m = ServiceManager(cfg)
             self.assertEqual(m.qq_backend(), "snowluma")
             self.assertEqual(m.qq_backend_label(), "SnowLuma")
-            self.assertEqual(m.snowluma_account(), "3651873041")
+            self.assertEqual(m.snowluma_account(), "10001")
             m._ensure_snowluma_runtime()
             runtime = json.loads(
                 (root / "config" / "runtime.json").read_text(encoding="utf-8")
@@ -474,6 +518,18 @@ class SearchMannersRegressionTests(unittest.TestCase):
         self.assertFalse(has_explicit_search_request("今天过得怎么样"))
         # 宽松策略：包含关键词就算显式请求，“搜索框在哪”也会命中
         self.assertTrue(has_explicit_search_request("搜索框在哪"))
+
+    def test_tool_call_name_shapes(self):
+        from types import SimpleNamespace
+
+        self.assertEqual(
+            tool_call_name(SimpleNamespace(function=SimpleNamespace(name="web_search_deepseek"))),
+            "web_search_deepseek",
+        )
+        self.assertEqual(tool_call_name({"function": {"name": "web_search"}}), "web_search")
+        self.assertEqual(tool_call_name({"name": "web_search"}), "web_search")
+        self.assertEqual(tool_call_name(SimpleNamespace(name="x")), "x")
+        self.assertEqual(tool_call_name(None), "")
 
     def test_limiter_interval_and_daily_cap(self):
         import tempfile
@@ -794,6 +850,65 @@ class BiliVisionRegressionTests(unittest.TestCase):
         )
         self.assertLessEqual(len(long_text), 560)
         self.assertIn("中间省略", long_text)
+
+    def test_plan_progress_short_video_never_interrupts(self):
+        self.assertEqual(plan_progress(0), [])
+        self.assertEqual(plan_progress(479), [])
+
+    def test_plan_progress_count_and_delays(self):
+        class SeqRng:
+            def __init__(self, count, values):
+                self.count = count
+                self.values = list(values)
+
+            def choices(self, population, weights=None, k=1):
+                return [self.count]
+
+            def uniform(self, a, b):
+                return self.values.pop(0)
+
+        self.assertEqual(plan_progress(600, SeqRng(0, [])), [])
+        self.assertEqual(plan_progress(600, SeqRng(1, [200])), [200])
+        self.assertEqual(plan_progress(600, SeqRng(2, [200, 300])), [200, 500])
+        # 第二次间隔是相对前一次的增量，不是绝对值
+        self.assertEqual(plan_progress(600, SeqRng(2, [180, 240])), [180, 420])
+
+    def test_plan_progress_random_bounds(self):
+        import random
+
+        for seed in range(50):
+            delays = plan_progress(600, random.Random(seed))
+            self.assertLessEqual(len(delays), 2)
+            if delays:
+                self.assertGreaterEqual(delays[0], 180)
+
+    def test_estimate_asr_wait(self):
+        self.assertEqual(estimate_asr_seconds(0), 12.0)
+        self.assertAlmostEqual(estimate_asr_seconds(120), 60.0)
+        # 一分钟内能听完的不说“有点长”，只简单说等一下
+        self.assertFalse(is_long_wait(60))
+        self.assertFalse(is_long_wait(100))
+        self.assertFalse(is_long_wait(120))
+        self.assertTrue(is_long_wait(125))
+        self.assertTrue(is_long_wait(600))
+
+    def test_fail_line_matches_reason(self):
+        class First:
+            def choice(self, seq):
+                return seq[0]
+
+        rng = First()
+        self.assertIn(
+            pick_fail_line("转写内容太少", 117, rng), FAIL_LINES_NO_SPEECH
+        )
+        self.assertIn(pick_fail_line("ASR 超时", 703, rng), FAIL_LINES_LONG)
+        self.assertIn(
+            pick_fail_line("没有取到音频地址", 117, rng), FAIL_LINES_TECH
+        )
+        # 长视频但只是网络失败，不该说“太长”
+        self.assertIn(
+            pick_fail_line("没有取到音频地址", 703, rng), FAIL_LINES_TECH
+        )
 
 
 
@@ -1171,10 +1286,106 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(parsed["exchanges"], 7)
         self.assertIn("## 性格", parsed["body"])
 
+    def test_render_does_not_duplicate_title(self):
+        body = "# 我眼里的旧标题\n\n## 性格\n温和"
+        md = render_profile("1", "小明", [], body, 0, 1)
+        h1 = [line for line in md.splitlines() if line.startswith("# ")]
+        self.assertEqual(len(h1), 1)
+        self.assertIn("小明", h1[0])
+
     def test_parse_without_frontmatter(self):
         parsed = parse_profile("随手写的正文")
         self.assertEqual(parsed["body"], "随手写的正文")
         self.assertEqual(parsed["name"], "")
+
+    def test_familiarity_roundtrip_and_levels(self):
+        md = render_profile(
+            "123456",
+            "大肥鱼",
+            [],
+            "## 性格\n很憨",
+            1700000000.0,
+            12,
+            moral_score=78,
+            impression_score=64,
+            familiarity_score=47,
+            familiarity_level="朋友",
+            active_days=6,
+            first_seen="2026-10-01",
+            last_seen="2026-11-04 18:00",
+        )
+        parsed = parse_profile(md)
+        self.assertEqual(parsed["impression_score"], 64)
+        self.assertEqual(parsed["familiarity_score"], 47)
+        self.assertEqual(parsed["familiarity_level"], "朋友")
+        self.assertEqual(parsed["active_days"], 6)
+        self.assertEqual(parsed["first_seen"], "2026-10-01")
+        self.assertEqual(parsed["last_seen"], "2026-11-04 18:00")
+
+        low, low_level = compute_familiarity(6, 1, 50, 75)
+        high, high_level = compute_familiarity(500, 60, 80, 90)
+        self.assertLess(low, high)
+        self.assertEqual(low_level, "陌生")
+        self.assertIn(high_level, ("亲近", "知己"))
+        self.assertLessEqual(high, 94)
+        admin_score, admin_level = compute_familiarity(0, 0, 0, 0, is_admin=True)
+        self.assertEqual((admin_score, admin_level), (100, "管理员"))
+        self.assertEqual(familiarity_level(94), "知己")
+        self.assertIn("保持距离", familiarity_guidance("陌生"))
+        self.assertIn("老朋友", familiarity_guidance("知己"))
+
+    def test_impression_parse_strip_smooth(self):
+        body = "印象评分：72\n\n## 性格\n温和"
+        self.assertEqual(extract_impression(body, 50), 72)
+        self.assertEqual(extract_impression("## 性格\n温和", 50), 50)
+        self.assertNotIn("印象评分", strip_impression(body))
+        self.assertIn("## 性格", strip_impression(body))
+        self.assertEqual(smooth_score(50, 100, 0.3), 65)
+        self.assertEqual(smooth_score(50, 0, 0.3), 35)
+
+    def test_proactive_time_windows(self):
+        spec = "12:00-13:30,18:00-22:00"
+        self.assertTrue(in_time_windows(spec, "12:00"))
+        self.assertTrue(in_time_windows(spec, "13:29"))
+        self.assertFalse(in_time_windows(spec, "13:30"))
+        self.assertTrue(in_time_windows(spec, "18:30"))
+        self.assertFalse(in_time_windows(spec, "23:00"))
+        self.assertTrue(in_time_windows("", "03:00"))
+        self.assertTrue(in_time_windows("23:00-01:00", "00:30"))
+        self.assertFalse(in_time_windows("23:00-01:00", "12:00"))
+
+    def test_vlife_current_activity(self):
+        plan = {
+            "timeline": [
+                {"start": "11:30", "end": "13:00", "activity": "午餐", "location": "食堂", "state": "available", "availability": "normal"},
+                {"start": "13:00", "end": "14:00", "activity": "午休", "location": "宿舍", "state": "sleep", "availability": "blocked"},
+            ]
+        }
+        lunch = current_timeline_item(plan, "12:00")
+        self.assertEqual(lunch["activity"], "午餐")
+        self.assertTrue(activity_allows_proactive(lunch))
+        nap = current_timeline_item(plan, "13:30")
+        self.assertEqual(nap["activity"], "午休")
+        self.assertFalse(activity_allows_proactive(nap))
+        self.assertIsNone(current_timeline_item(plan, "15:00"))
+        self.assertIn("食堂", activity_line(lunch))
+        busy = {"activity": "上课", "state": "busy", "availability": "low"}
+        self.assertFalse(activity_allows_proactive(busy))
+        chatting = {"activity": "和哥哥聊天", "state": "social", "availability": "high"}
+        self.assertFalse(activity_allows_proactive(chatting))
+        self.assertTrue(activity_allows_proactive(None))
+
+    def test_pick_today_plan(self):
+        data = {
+            "plans": {
+                "2026-11-04::小雪": {"timeline": [{"start": "00:00", "end": "07:00", "state": "sleep"}]},
+                "2026-11-03::小雪": {"timeline": []},
+            }
+        }
+        plan = pick_today_plan(data, "2026-11-04", "小雪")
+        self.assertIsNotNone(plan)
+        self.assertEqual(len(plan["timeline"]), 1)
+        self.assertIsNone(pick_today_plan(data, "2026-11-05", "小雪"))
 
     def test_merge_name_history(self):
         history = merge_name_history([], "旧名", "新名", 1700000000.0)
@@ -1878,6 +2089,16 @@ class BalanceTests(unittest.TestCase):
         self.assertEqual(grade_voice([False] * 6), "down")             # 全失败
         self.assertEqual(grade_voice([], down=True), "down")
 
+    def test_default_voice_log_path(self):
+        from pathlib import Path
+
+        path = default_voice_log_path(
+            r"C:\AstrBot\data\plugin_data\astrbot_plugin_seed_audio_tts"
+        )
+        self.assertEqual(
+            path, Path(r"C:\AstrBot\data\temp\seed_audio_calls.jsonl")
+        )
+
     def test_messages_are_personified(self):
         self.assertIn("饿", compose_message(CAP_LLM, "low", "¥3.00"))
         self.assertIn("嗓子", compose_message(CAP_VOICE, "empty", ""))
@@ -2066,6 +2287,245 @@ class FriendRequestTests(unittest.TestCase):
         self.assertIn("小明", text)
         self.assertIn("32 级", text)
         self.assertIn("会员", text)
+
+
+class SnowBurstTests(unittest.TestCase):
+    def test_continuity_followup_scores_higher_than_new_topic(self):
+        followup = continuity_score("这个视频讲了什么", "好看吗")
+        new_topic = continuity_score("在吗", "帮我查一下明天天气")
+        self.assertGreater(followup, new_topic)
+        self.assertTrue(should_extend(followup, 0.18))
+        self.assertFalse(should_extend(new_topic, 0.18))
+
+    def test_merge_texts_dedupes_adjacent(self):
+        self.assertEqual(merge_texts(["a", "", "a", "b"]), "a\nb")
+        self.assertEqual(merge_texts(["  第一句  ", "第二句"]), "第一句\n第二句")
+
+    def test_merge_user_contexts(self):
+        contexts = [
+            {"role": "system", "content": "sys"},
+            {"role": "user", "content": "这个视频讲了什么"},
+            {"role": "user", "content": [{"type": "text", "text": "好看吗"}]},
+            {"role": "assistant", "content": "我看看"},
+            {"role": "user", "content": "嗯"},
+            {"role": "user", "content": "还有别的吗"},
+        ]
+        merged = merge_contexts(contexts)
+        self.assertEqual([m["role"] for m in merged], ["system", "user", "assistant", "user"])
+        self.assertEqual(len(merged[1]["content"]), 1)
+        self.assertIn("这个视频讲了什么", merged[1]["content"][0]["text"])
+        self.assertIn("好看吗", merged[1]["content"][0]["text"])
+        self.assertIn("嗯", merged[3]["content"][0]["text"])
+        self.assertIn("还有别的吗", merged[3]["content"][0]["text"])
+
+    def test_merge_user_messages_keeps_image_parts(self):
+        left = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "看看这个"},
+                {"type": "image_url", "image_url": {"url": "x"}},
+            ],
+        }
+        right = {"role": "user", "content": "怎么样"}
+        merged = merge_user_messages(left, right)
+        types = [part["type"] for part in merged["content"]]
+        self.assertEqual(types, ["text", "image_url", "text"])
+        self.assertEqual(merged["content"][0]["text"], "看看这个")
+        self.assertEqual(merged["content"][2]["text"], "怎么样")
+
+    def test_group_history_does_not_merge_different_senders(self):
+        contexts = [
+            {"role": "user", "name": "A", "content": "第一句"},
+            {"role": "user", "name": "B", "content": "第二句"},
+            {"role": "user", "name": "A", "content": "第三句"},
+        ]
+        merged = merge_contexts(contexts, same_sender_only=True)
+        self.assertEqual(len(merged), 3)
+
+        same = [
+            {"role": "user", "name": "A", "content": "第一句"},
+            {"role": "user", "name": "A", "content": "第二句"},
+        ]
+        merged_same = merge_contexts(same, same_sender_only=True)
+        self.assertEqual(len(merged_same), 1)
+        self.assertIn("第一句", merged_same[0]["content"][0]["text"])
+        self.assertIn("第二句", merged_same[0]["content"][0]["text"])
+
+    def test_group_history_labeled_cross_sender_merges(self):
+        contexts = [
+            {
+                "role": "user",
+                "content": "[2026-11-04 18:00:00] 小明(ID:1001): 这个视频讲了什么",
+            },
+            {
+                "role": "user",
+                "content": "[2026-11-04 18:00:01] 小红(ID:1002): 好看吗",
+            },
+        ]
+        merged = merge_contexts(
+            contexts,
+            same_sender_only=True,
+            allow_labeled_cross_sender=True,
+        )
+        self.assertEqual(len(merged), 1)
+        text = merged[0]["content"][0]["text"]
+        self.assertIn("小明(ID:1001)", text)
+        self.assertIn("小红(ID:1002)", text)
+
+        unlabeled = [
+            {"role": "user", "name": "A", "content": "第一句"},
+            {"role": "user", "name": "B", "content": "第二句"},
+        ]
+        no_merge = merge_contexts(
+            unlabeled,
+            same_sender_only=True,
+            allow_labeled_cross_sender=True,
+        )
+        self.assertEqual(len(no_merge), 2)
+
+    def test_group_and_chunk(self):
+        parts = [
+            {"text": "这个视频讲了什么", "ts": 0.0},
+            {"text": "好看吗", "ts": 0.8},
+            {"text": "那画面呢", "ts": 1.5},
+        ]
+        groups = group_parts(parts, gap_seconds=2.0, threshold=0.18)
+        self.assertEqual(len(groups), 1)
+        chunks = chunk_parts(groups[0], 2)
+        self.assertEqual([len(c) for c in chunks], [2, 1])
+
+        split = group_parts(
+            [
+                {"text": "在吗", "ts": 0.0},
+                {"text": "帮我查一下明天天气", "ts": 3.5},
+            ],
+            gap_seconds=2.0,
+            threshold=0.18,
+        )
+        self.assertEqual(len(split), 2)
+
+
+class SnowMediaTests(unittest.TestCase):
+    def test_media_names(self):
+        self.assertTrue(is_video_name("a.mp4"))
+        self.assertTrue(is_video_name("https://x/a.MOV?x=1"))
+        self.assertFalse(is_video_name("a.mp3"))
+        self.assertTrue(is_audio_name("a.m4a"))
+        self.assertTrue(is_audio_name("voice.amr"))
+        self.assertFalse(is_audio_name("a.txt"))
+
+    def test_media_blocks(self):
+        block = video_block("a.mp4", 120, "画面是猫", "它在叫", truncated=True)
+        self.assertIn("a.mp4", block)
+        self.assertIn("120", block)
+        self.assertIn("画面", block)
+        self.assertIn("前段", block)
+        self.assertIn("没听清内容", voice_block(""))
+        self.assertIn("语音消息", voice_block("你好"))
+        voice = voice_block("[00:01] 你好呀\n[00:03] 今天吃什么")
+        self.assertNotIn("[00:01]", voice)
+        self.assertIn("你好呀 今天吃什么", voice)
+
+    def test_sheet_rows(self):
+        self.assertEqual(sheet_rows(1, 3), 1)
+        self.assertEqual(sheet_rows(4, 3), 2)
+        self.assertEqual(sheet_rows(9, 3), 3)
+
+
+class SnowReplyTests(unittest.TestCase):
+    def _records(self):
+        now = time.time()
+        return [
+            {
+                "id": "m1",
+                "sender_id": "1001",
+                "sender_name": "小明",
+                "text": "我昨天说的那艘北极星号其实货舱挺大的",
+                "ts": now - 1800,
+            },
+            {
+                "id": "m2",
+                "sender_id": "1002",
+                "sender_name": "小红",
+                "text": "晚上吃什么",
+                "ts": now - 1200,
+            },
+            {
+                "id": "m3",
+                "sender_id": "1001",
+                "sender_name": "小明",
+                "text": "随便",
+                "ts": now - 60,
+            },
+            {
+                "id": "m4",
+                "sender_id": "1001",
+                "sender_name": "小明",
+                "text": "你刚才说的是哪艘船",
+                "ts": now,
+            },
+        ]
+
+    def test_match_score(self):
+        self.assertGreater(match_score("北极星号", "我昨天说的那艘北极星号"), 0.8)
+        self.assertGreater(match_score("「北极星号」", "北极星号货舱很大"), 0.9)
+        self.assertLess(match_score("天气", "晚上吃什么"), 0.2)
+        self.assertGreater(bigram_score("北极星号", "北极星号货舱"), 0.2)
+
+    def test_search_far_target(self):
+        records = self._records()
+        target, reason = search_quote_target(
+            records,
+            "北极星号",
+            "m4",
+            now=records[-1]["ts"],
+            min_message_distance=3,
+            min_time_distance_minutes=10,
+        )
+        self.assertIsNotNone(target)
+        self.assertEqual(target["id"], "m1")
+        self.assertIn("匹配", reason)
+
+    def test_search_close_target_refused(self):
+        records = self._records()
+        target, reason = search_quote_target(
+            records,
+            "随便",
+            "m4",
+            now=records[-1]["ts"],
+            min_message_distance=3,
+            min_time_distance_minutes=10,
+        )
+        self.assertIsNone(target)
+        self.assertIn("太近", reason)
+
+    def test_search_by_time_even_if_close(self):
+        records = self._records()
+        records[-2]["ts"] = records[-1]["ts"] - 20 * 60
+        target, _ = search_quote_target(
+            records,
+            "随便",
+            "m4",
+            now=records[-1]["ts"],
+            min_message_distance=3,
+            min_time_distance_minutes=10,
+        )
+        self.assertIsNotNone(target)
+        self.assertEqual(target["id"], "m3")
+
+    def test_search_no_match_and_format(self):
+        records = self._records()
+        target, reason = search_quote_target(
+            records,
+            "星际公民的服务器",
+            "m4",
+            now=records[-1]["ts"],
+        )
+        self.assertIsNone(target)
+        self.assertIn("没找到", reason)
+        text = format_record(records[0])
+        self.assertIn("小明", text)
+        self.assertIn("北极星号", text)
 
 
 if __name__ == "__main__":

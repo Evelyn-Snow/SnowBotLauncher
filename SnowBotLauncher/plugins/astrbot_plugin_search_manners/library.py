@@ -27,6 +27,28 @@ def has_explicit_search_request(text: str) -> bool:
     return any(keyword in lowered for keyword in EXPLICIT_KEYWORDS)
 
 
+def tool_call_name(call) -> str:
+    """兼容 AstrBot ToolCall（call.function.name）与 dict 结构。"""
+    if call is None:
+        return ""
+    function = getattr(call, "function", None)
+    if function is not None:
+        name = getattr(function, "name", None)
+        if name:
+            return str(name)
+        if isinstance(function, dict) and function.get("name"):
+            return str(function["name"])
+    name = getattr(call, "name", None)
+    if name:
+        return str(name)
+    if isinstance(call, dict):
+        function = call.get("function") or {}
+        if isinstance(function, dict) and function.get("name"):
+            return str(function["name"])
+        return str(call.get("name") or "")
+    return ""
+
+
 class SearchRateLimiter:
     """限制自发搜索的频率；显式请求不走这里。
 
@@ -63,7 +85,9 @@ class SearchRateLimiter:
 
     def _save(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".json.tmp")
+        tmp = self.path.with_name(
+            f"{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
         tmp.write_text(
             json.dumps(state, ensure_ascii=False, indent=2),
             encoding="utf-8",
