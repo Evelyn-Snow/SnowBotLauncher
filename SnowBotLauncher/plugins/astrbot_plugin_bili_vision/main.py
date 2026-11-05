@@ -306,6 +306,57 @@ class BiliVision(Star):
                 said.append(text)
                 logger.info(f"[{NAME}] 中途插话：{text}")
 
+    async def _has_speech(self, wav: str) -> bool | None:
+        """用 Silero VAD 先判断有没有人声；失败返回 None，交给正常 ASR 兜底。"""
+        if not bool(self.conf.get("asr_vad_prescan", True)):
+            return None
+        py = self._asr_python()
+        if not py or not Path(py).exists():
+            return None
+        script = Path(__file__).with_name("asr_worker.py")
+        cmd = [
+            py,
+            str(script),
+            "--wav",
+            wav,
+            "--check-speech",
+            "--min-speech-seconds",
+            str(max(0.2, float(self.conf.get("asr_vad_min_seconds") or 1.0))),
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except Exception:
+                pass
+            logger.info(f"[{NAME}] VAD 预检超时，继续正常转写")
+            return None
+        for line in reversed(
+            [x for x in out.decode("utf-8", "replace").splitlines() if x.strip()]
+        ):
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if payload.get("ok"):
+                return bool(payload.get("has_speech"))
+            logger.info(f"[{NAME}] VAD 预检失败，继续正常转写：{payload.get('error')}")
+            return None
+        logger.info(
+            f"[{NAME}] VAD 预检无输出，继续正常转写："
+            f"{err.decode('utf-8', 'replace')[-120:]}"
+        )
+        return None
+
     async def _transcribe(self, wav: str, on_segment=None) -> str:
         py = self._asr_python()
         if not py:
@@ -494,6 +545,15 @@ class BiliVision(Star):
                 max_seconds,
                 str(self.conf.get("asr_ffmpeg") or "") or None,
             )
+            speech = await self._has_speech(wav)
+            if speech is False:
+                logger.info(f"[{NAME}] 没有检测到人声，跳过转写：{info.get('title')}")
+                await self._send_after_grace(
+                    started,
+                    umo,
+                    "这段好像主要是音乐，没听到有人说话，我就当背景音乐听啦。",
+                )
+                return
             text = await self._transcribe(wav, on_segment=on_segment)
             if len(text) < 20:
                 raise RuntimeError("转写内容太少")

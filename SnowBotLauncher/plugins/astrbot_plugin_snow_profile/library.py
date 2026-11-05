@@ -7,8 +7,10 @@ frontmatter 记录 qq/昵称/历史昵称/更新时间/互动次数，正文是�
 from __future__ import annotations
 
 import datetime as _dt
+import json
 import math
 import re
+import time
 
 _NAME_DATE_RE = re.compile(r"^(.*?)（(\d{4}-\d{2}-\d{2})）$")
 
@@ -671,3 +673,769 @@ def moral_injection(md: str, level: str, limit: int = 400) -> str:
         parts.append(evidence)
     parts.append(f"（交流指引：{tone}若TA真诚道歉并改正，可逐步恢复态度。）")
     return "\n".join(parts)
+
+
+# ---------------- 用户关系网 ----------------
+# 关系只从群聊里「能被原话直接证明」的内容提取；宁可不记，也不根据语气、@ 频率
+# 或玩笑去猜。同一对用户可以有多条关系，明确的分手/离职/绝交会进入 ended。
+
+RELATION_MARK = "[我记下的关系]"
+
+RELATION_TYPES = (
+    "家人",
+    "情侣",
+    "夫妻",
+    "前任",
+    "亲戚",
+    "朋友",
+    "同学",
+    "同事",
+    "室友",
+    "上下级",
+    "师生",
+    "合作",
+    "网友",
+    "其他",
+)
+
+_TYPE_ALIASES = {
+    "恋人": "情侣",
+    "男友": "情侣",
+    "女友": "情侣",
+    "男朋友": "情侣",
+    "女朋友": "情侣",
+    "对象": "情侣",
+    "老公": "夫妻",
+    "老婆": "夫妻",
+    "丈夫": "夫妻",
+    "妻子": "夫妻",
+    "配偶": "夫妻",
+    "父母": "家人",
+    "爸妈": "家人",
+    "父子": "家人",
+    "母子": "家人",
+    "父女": "家人",
+    "母女": "家人",
+    "前男友": "前任",
+    "前女友": "前任",
+    "前夫": "前任",
+    "前妻": "前任",
+    "表哥": "亲戚",
+    "表姐": "亲戚",
+    "表妹": "亲戚",
+    "堂哥": "亲戚",
+    "堂姐": "亲戚",
+    "堂妹": "亲戚",
+    "好友": "朋友",
+    "闺蜜": "朋友",
+    "发小": "朋友",
+    "校友": "同学",
+    "舍友": "室友",
+    "老板": "上下级",
+    "领导": "上下级",
+    "上司": "上下级",
+    "下属": "上下级",
+    "雇主": "上下级",
+    "雇员": "上下级",
+    "老师": "师生",
+    "学生": "师生",
+    "师父": "师生",
+    "徒弟": "师生",
+    "搭档": "合作",
+    "合伙人": "合作",
+    "客户": "合作",
+}
+
+_RELATION_CUES = re.compile(
+    "|".join(
+        [
+            "我妈", "我爸", "我父母", "我哥", "我姐", "我弟", "我妹",
+            "老公", "老婆", "丈夫", "妻子", "媳妇", "对象",
+            "女朋友", "男朋友", "前女友", "前男友", "前任", "情侣", "伴侣",
+            "一对", "儿子", "女儿", "孩子", "爸妈", "父母",
+            "表哥", "表姐", "表妹", "堂哥", "堂姐", "堂妹",
+            "叔叔", "阿姨", "舅舅", "姑姑", "爷爷", "奶奶", "姥姥", "姥爷",
+            "亲戚", "家人", "亲哥", "亲姐",
+            "同事", "同学", "室友", "舍友", "校友",
+            "老板", "领导", "上司", "下属", "老师", "学生", "师父", "徒弟",
+            "闺蜜", "兄弟", "朋友", "发小", "邻居", "搭档", "合伙人", "客户",
+            "分手", "离婚", "结婚", "离职", "辞职", "绝交", "在一起", "谈恋爱",
+        ]
+    )
+)
+
+_RELATION_NOISE_RE = re.compile(
+    r"[\s，。！？、,.!?\"'“”‘’：:；;（）()\[\]【】<>《》~～…\-]"
+)
+
+
+def has_relation_cue(text: str) -> bool:
+    return bool(_RELATION_CUES.search(str(text or "")))
+
+
+def normalize_relation_type(value: str) -> str:
+    text = str(value or "").strip()
+    if text in RELATION_TYPES:
+        return text
+    return _TYPE_ALIASES.get(text, "")
+
+
+def _norm_evidence(text: str) -> str:
+    return _RELATION_NOISE_RE.sub("", str(text or ""))
+
+
+def evidence_supported(evidence: str, transcript: str) -> bool:
+    """证据必须能在原始消息里找到，防止模型改写或编造。"""
+    needle = _norm_evidence(evidence)
+    if len(needle) < 4:
+        return False
+    return needle in _norm_evidence(transcript)
+
+
+def evidence_speakers(evidence: str, rows: list[dict]) -> set[str]:
+    """找出说过这句原话的人，用来要求关系至少有一方是亲口说的。"""
+    needle = _norm_evidence(evidence)
+    if len(needle) < 4:
+        return set()
+    found = set()
+    for row in rows or []:
+        line = (
+            f"{row.get('sender')} {row.get('name') or ''}："
+            f"{row.get('text') or ''}"
+        )
+        if needle in _norm_evidence(line):
+            found.add(str(row.get("sender") or ""))
+    return found
+
+
+def _parse_payload_dict(text: str) -> dict:
+    raw = str(text or "").strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```[a-zA-Z]*\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end <= start:
+        return {}
+    try:
+        data = json.loads(raw[start : end + 1])
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def parse_relation_bundle(text: str) -> tuple[list[dict], list[dict]]:
+    """拆出 (明确关系, 只是怀疑的关系)。怀疑只用来决定要不要打听，不写进图谱。"""
+    data = _parse_payload_dict(text)
+    relations = data.get("relations")
+    suspicions = data.get("suspicions")
+    return (
+        [item for item in relations if isinstance(item, dict)]
+        if isinstance(relations, list)
+        else [],
+        [item for item in suspicions if isinstance(item, dict)]
+        if isinstance(suspicions, list)
+        else [],
+    )
+
+
+def parse_relation_payload(text: str) -> list[dict]:
+    return parse_relation_bundle(text)[0]
+
+
+def clean_relation_item(
+    item: dict,
+    member_ids: set[str],
+    transcript: str,
+    min_confidence: float = 0.75,
+) -> dict | None:
+    """校验一条模型输出；不满足「双方都在场 + 有原话证据」就丢弃。"""
+    a = str(item.get("a") or "").strip()
+    b = str(item.get("b") or "").strip()
+    if not a.isdigit() or not b.isdigit() or a == b:
+        return None
+    if a not in member_ids or b not in member_ids:
+        return None
+    rtype = normalize_relation_type(item.get("type"))
+    if not rtype:
+        return None
+    action = str(item.get("action") or "add").strip().lower()
+    if action not in ("add", "confirm", "remove"):
+        action = "add"
+    try:
+        confidence = float(item.get("confidence") or 0)
+    except (TypeError, ValueError):
+        return None
+    confidence = max(0.0, min(1.0, confidence))
+    if action != "remove" and confidence < min_confidence:
+        return None
+    evidence = str(item.get("evidence") or "").strip().strip("“”\"'")[:160]
+    if not evidence or not evidence_supported(evidence, transcript):
+        return None
+    detail = str(item.get("detail") or "").strip()[:12]
+    return {
+        "a": a,
+        "b": b,
+        "type": rtype,
+        "detail": detail,
+        "action": action,
+        "confidence": confidence,
+        "evidence": evidence,
+    }
+
+
+def clean_suspicion_item(
+    item: dict,
+    member_ids: set[str],
+    current_senders: set[str],
+    names: dict[str, str],
+    min_confidence: float = 0.5,
+) -> dict | None:
+    """校验一条「可能有关系」的猜测；它只用于打听，不进关系图谱。"""
+    a = str(item.get("a") or "").strip()
+    b = str(item.get("b") or "").strip()
+    if not a.isdigit() or not b.isdigit() or a == b:
+        return None
+    if a not in member_ids or b not in member_ids:
+        return None
+    if not ({a, b} & current_senders):
+        return None
+    rtype = normalize_relation_type(item.get("type"))
+    if not rtype:
+        return None
+    try:
+        confidence = float(item.get("confidence") or 0)
+    except (TypeError, ValueError):
+        return None
+    confidence = max(0.0, min(1.0, confidence))
+    if confidence < min_confidence:
+        return None
+    evidence = str(item.get("evidence") or "").strip()[:160]
+    reason = str(item.get("reason") or "").strip()[:120]
+    hint = evidence or reason
+    if len(_norm_evidence(hint)) < 4:
+        return None
+    for qq in {a, b} - current_senders:
+        name = str(names.get(qq) or "")
+        if qq not in hint and (not name or name not in hint):
+            return None
+    return {
+        "a": a,
+        "b": b,
+        "type": rtype,
+        "confidence": confidence,
+        "evidence": evidence,
+        "reason": reason,
+        "action": "suspect",
+    }
+
+
+def relation_pair(a: str, b: str) -> tuple[str, str]:
+    return (a, b) if a <= b else (b, a)
+
+
+def find_relation_edge(edges: list[dict], a: str, b: str) -> dict | None:
+    key = relation_pair(a, b)
+    for edge in edges or []:
+        if relation_pair(str(edge.get("a") or ""), str(edge.get("b") or "")) == key:
+            return edge
+    return None
+
+
+def _merge_type_entry(dst: dict, src: dict, scope: str) -> None:
+    dst["confidence"] = max(
+        float(dst.get("confidence") or 0), float(src.get("confidence") or 0)
+    )
+    dst["last_seen"] = max(
+        float(dst.get("last_seen") or 0), float(src.get("last_seen") or 0)
+    )
+    firsts = [
+        float(v)
+        for v in (dst.get("first_seen"), src.get("first_seen"))
+        if v
+    ]
+    if firsts:
+        dst["first_seen"] = min(firsts)
+    if src.get("detail"):
+        dst["detail"] = src["detail"]
+    evidence = list(dst.get("evidence") or [])
+    for quote in src.get("evidence") or []:
+        if quote not in evidence:
+            evidence.append(quote)
+    dst["evidence"] = evidence[-5:]
+    _add_scope(dst, scope)
+
+
+def _merge_edge_entry(dst: dict, src: dict, scope: str) -> None:
+    dst.setdefault("names", {}).update(src.get("names") or {})
+    _add_scope(dst, scope)
+    for key in ("types", "ended"):
+        bucket = dst.setdefault(key, {})
+        for rtype, entry in (src.get(key) or {}).items():
+            if rtype not in bucket:
+                bucket[rtype] = dict(entry)
+                _add_scope(bucket[rtype], scope)
+            else:
+                _merge_type_entry(bucket[rtype], entry, scope)
+    history = list(dst.get("history") or []) + list(src.get("history") or [])
+    history.sort(key=lambda row: float(row.get("time") or 0))
+    dst["history"] = history[-50:]
+    first = [
+        float(v)
+        for v in (dst.get("first_seen"), src.get("first_seen"))
+        if v
+    ]
+    last = [
+        float(v)
+        for v in (dst.get("last_seen"), src.get("last_seen"))
+        if v
+    ]
+    if first:
+        dst["first_seen"] = min(first)
+    if last:
+        dst["last_seen"] = max(last)
+
+
+def migrate_relations(data: dict) -> dict:
+    """把 v1 的按群分组结构合并成一张全局关系网（可重复执行）。"""
+    data = data if isinstance(data, dict) else {}
+    groups = data.get("groups")
+    if not isinstance(groups, dict):
+        data.setdefault("edges", [])
+        data.setdefault("scopes", {})
+        data["version"] = 2
+        return data
+    edges: list[dict] = []
+    scopes: dict = {}
+    for umo, group in groups.items():
+        if not isinstance(group, dict):
+            continue
+        scopes[umo] = {
+            "name": group.get("name") or "",
+            "kind": "group" if ":GroupMessage:" in umo else "private",
+            "last_analyzed_ts": group.get("last_analyzed_ts") or 0,
+            "runs": group.get("runs") or {},
+        }
+        for src in group.get("edges") or []:
+            a = str(src.get("a") or "")
+            b = str(src.get("b") or "")
+            edge = find_relation_edge(edges, a, b)
+            if edge is None:
+                edge = dict(src)
+                edge["names"] = dict(src.get("names") or {})
+                edge["types"] = {
+                    key: dict(value)
+                    for key, value in (src.get("types") or {}).items()
+                }
+                edge["ended"] = {
+                    key: dict(value)
+                    for key, value in (src.get("ended") or {}).items()
+                }
+                edge["history"] = list(src.get("history") or [])
+                edge["scopes"] = [umo]
+                edges.append(edge)
+            else:
+                _merge_edge_entry(edge, src, umo)
+    data.pop("groups", None)
+    data["version"] = 2
+    data["edges"] = edges
+    data["scopes"] = scopes
+    return data
+
+
+def _add_scope(container: dict, scope: str) -> None:
+    if not scope:
+        return
+    scopes = list(container.get("scopes") or [])
+    if scope not in scopes:
+        scopes.append(scope)
+    container["scopes"] = scopes
+
+
+def merge_relation_items(
+    edges: list[dict],
+    items: list[dict],
+    names: dict[str, str],
+    now: float | None = None,
+    scope: str = "",
+) -> int:
+    """把校验后的观察合并进边列表；返回实际改动条数。
+
+    关系网是全局的；scope 只用来记录证据来自哪个群/私聊。
+    """
+    now = float(now if now is not None else 0)
+    changed = 0
+    for item in items or []:
+        a, b = item["a"], item["b"]
+        action = item["action"]
+        edge = find_relation_edge(edges, a, b)
+        if edge is None:
+            # 没有旧关系时，「结束」没有可结束的对象，不要凭空创建空边
+            if action == "remove":
+                continue
+            edge = {
+                "a": relation_pair(a, b)[0],
+                "b": relation_pair(a, b)[1],
+                "names": {},
+                "types": {},
+                "ended": {},
+                "history": [],
+                "scopes": [],
+                "first_seen": now,
+                "last_seen": now,
+            }
+            edges.append(edge)
+        _add_scope(edge, scope)
+        edge.setdefault("names", {})
+        for qq in (a, b):
+            name = str(names.get(qq) or "").strip()
+            if name:
+                edge["names"][qq] = name
+            edge["names"].setdefault(qq, qq)
+        edge.setdefault("types", {})
+        edge.setdefault("ended", {})
+        edge.setdefault("history", [])
+        rtype = item["type"]
+        if action == "remove":
+            old = edge["types"].pop(rtype, None)
+            if old is None:
+                continue
+            old = dict(old)
+            old["ended_at"] = now
+            old.setdefault("evidence", [])
+            old["evidence"] = (old["evidence"] + [item["evidence"]])[-5:]
+            _add_scope(old, scope)
+            edge["ended"][rtype] = old
+            edge.setdefault("suspects", {}).pop(rtype, None)
+        else:
+            entry = edge["types"].get(rtype)
+            if entry is None:
+                entry = {
+                    "confidence": item["confidence"],
+                    "detail": item.get("detail", ""),
+                    "first_seen": now,
+                    "last_seen": now,
+                    "evidence": [item["evidence"]],
+                    "scopes": [],
+                }
+                edge["types"][rtype] = entry
+            else:
+                entry["confidence"] = max(
+                    float(entry.get("confidence") or 0), item["confidence"]
+                )
+                entry["last_seen"] = now
+                if item.get("detail"):
+                    entry["detail"] = item["detail"]
+                evidence = list(entry.get("evidence") or [])
+                if item["evidence"] not in evidence:
+                    evidence.append(item["evidence"])
+                entry["evidence"] = evidence[-5:]
+            _add_scope(entry, scope)
+            edge.setdefault("suspects", {}).pop(rtype, None)
+        edge["last_seen"] = now
+        edge["history"] = list(edge.get("history") or [])[-49:] + [
+            {
+                "time": now,
+                "action": action,
+                "type": rtype,
+                "confidence": item["confidence"],
+                "evidence": item["evidence"],
+                "scope": scope,
+            }
+        ]
+        changed += 1
+    return changed
+
+
+def merge_relation_suspects(
+    edges: list[dict],
+    items: list[dict],
+    names: dict[str, str],
+    now: float,
+    scope: str = "",
+) -> int:
+    """记录「可能有关系」的猜测；已确认的类型不再保留猜测。"""
+    changed = 0
+    for item in items or []:
+        a, b = item["a"], item["b"]
+        edge = find_relation_edge(edges, a, b)
+        if edge is None:
+            edge = {
+                "a": relation_pair(a, b)[0],
+                "b": relation_pair(a, b)[1],
+                "names": {},
+                "types": {},
+                "ended": {},
+                "suspects": {},
+                "history": [],
+                "scopes": [],
+                "first_seen": now,
+                "last_seen": now,
+            }
+            edges.append(edge)
+        _add_scope(edge, scope)
+        edge.setdefault("names", {})
+        for qq in (a, b):
+            name = str(names.get(qq) or "").strip()
+            if name:
+                edge["names"][qq] = name
+            edge["names"].setdefault(qq, qq)
+        rtype = item["type"]
+        if rtype in (edge.get("types") or {}):
+            continue
+        suspects = edge.setdefault("suspects", {})
+        entry = suspects.get(rtype)
+        if entry is None:
+            entry = {
+                "confidence": item["confidence"],
+                "first_seen": now,
+                "last_seen": now,
+                "evidence": [item["evidence"]] if item.get("evidence") else [],
+                "reason": item.get("reason", ""),
+                "scopes": [],
+                "asked": [],
+            }
+            suspects[rtype] = entry
+        else:
+            entry["confidence"] = max(
+                float(entry.get("confidence") or 0), item["confidence"]
+            )
+            entry["last_seen"] = now
+            if item.get("reason"):
+                entry["reason"] = item["reason"]
+            evidence = list(entry.get("evidence") or [])
+            quote = item.get("evidence") or ""
+            if quote and quote not in evidence:
+                evidence.append(quote)
+            entry["evidence"] = evidence[-5:]
+        _add_scope(entry, scope)
+        edge["last_seen"] = now
+        changed += 1
+    return changed
+
+
+def gossip_candidates(
+    data: dict,
+    now: float,
+    min_confidence: float = 0.5,
+    ttl_days: float = 30,
+    max_asks: int = 1,
+    half_life_days: float = 180.0,
+) -> list[dict]:
+    """列出值得打听的猜测；必须能找到同时认识双方的群和第三个人。"""
+    out = []
+    scopes = (data or {}).get("scopes") or {}
+    for edge in (data or {}).get("edges") or []:
+        a = str(edge.get("a") or "")
+        b = str(edge.get("b") or "")
+        confirmed = edge.get("types") or {}
+        for rtype, entry in (edge.get("suspects") or {}).items():
+            if rtype in confirmed:
+                continue
+            confidence = effective_confidence(entry, now, half_life_days)
+            if confidence < min_confidence:
+                continue
+            last_seen = float(entry.get("last_seen") or 0)
+            if ttl_days > 0 and now - last_seen > ttl_days * 86400:
+                continue
+            asked = list(entry.get("asked") or [])
+            if len(asked) >= max_asks:
+                continue
+            scope = ""
+            for umo, meta in scopes.items():
+                if not isinstance(meta, dict) or meta.get("kind") != "group":
+                    continue
+                members = meta.get("members") or {}
+                if a in members and b in members:
+                    scope = umo
+                    break
+            if not scope:
+                continue
+            out.append(
+                {
+                    "a": a,
+                    "b": b,
+                    "type": rtype,
+                    "confidence": confidence,
+                    "evidence": "；".join(entry.get("evidence") or []),
+                    "reason": str(entry.get("reason") or ""),
+                    "names": dict(edge.get("names") or {}),
+                    "scope": scope,
+                    "asked": asked,
+                }
+            )
+    out.sort(key=lambda item: item["confidence"], reverse=True)
+    return out
+
+
+def gossip_fallback_question(a_name: str, b_name: str, rtype: str) -> str:
+    a_name = a_name or "他"
+    b_name = b_name or "她"
+    if rtype in ("情侣", "夫妻"):
+        return (
+            f"诶，问你个事，{a_name}和{b_name}是不是在一起呀？"
+            "我有点好奇，不方便说就算了。"
+        )
+    if rtype == "家人":
+        return f"诶，{a_name}和{b_name}是亲戚吗？我有点好奇。"
+    if rtype == "同事":
+        return f"对了，{a_name}和{b_name}是同事吗？我有点好奇。"
+    if rtype == "同学":
+        return f"诶，{a_name}和{b_name}是同学吗？我有点好奇。"
+    return (
+        f"诶，你知道{a_name}和{b_name}是什么关系吗？"
+        "我有点好奇，不方便说就算了。"
+    )
+
+
+def build_gossip_prompt(
+    target_name: str,
+    a_name: str,
+    b_name: str,
+    rtype: str,
+    reason: str,
+) -> str:
+    return (
+        f"你想私下找 {target_name or '一个熟人'} 打听一件事：你隐约觉得 "
+        f"{a_name} 和 {b_name} 可能是{rtype}关系，但你没有确凿证据。\n"
+        f"你注意到的线索：{reason or '他们平时互动有点多'}。\n"
+        "要求：用第一人称、口语，像平时 QQ 聊天一样，带一点好奇和八卦，但别冒犯；"
+        "只是问 TA 知不知道，不要肯定地下结论；不要提聊天记录、分析、系统、"
+        "画像这些词；不超过 45 字；对方不方便说也没关系。只输出这一句。"
+    )
+
+
+def effective_confidence(
+    entry: dict, now: float, half_life_days: float = 180.0
+) -> float:
+    """没有新证据的关系随时间衰减，但文件里保留记录。"""
+    try:
+        confidence = float(entry.get("confidence") or 0)
+        last_seen = float(entry.get("last_seen") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    confidence = max(0.0, min(1.0, confidence))
+    if half_life_days <= 0 or last_seen <= 0:
+        return confidence
+    age_days = max(0.0, (float(now) - last_seen) / 86400.0)
+    return confidence * (0.5 ** (age_days / float(half_life_days)))
+
+
+def _strength_label(confidence: float) -> str:
+    if confidence >= 0.8:
+        return "很确定"
+    if confidence >= 0.65:
+        return "比较确定"
+    return "有一点"
+
+
+def relation_injection(
+    data: dict,
+    visible_ids: set[str],
+    now: float,
+    focus_id: str = "",
+    max_edges: int = 6,
+    limit: int = 400,
+    half_life_days: float = 180.0,
+) -> str:
+    """生成注入用的全局关系摘要。
+
+    - visible_ids：当前会话里出现过的人（群聊里是最近的发言者）
+    - focus_id：当前说话的人；他/她与网络里其他人的关系也会带上
+    """
+    visible = {str(x) for x in (visible_ids or set()) if str(x)}
+    focus = str(focus_id or "")
+    if not visible and not focus:
+        return ""
+    edges = (data or {}).get("edges") or []
+    rows = []
+    for edge in edges:
+        a = str(edge.get("a") or "")
+        b = str(edge.get("b") or "")
+        if not ((a in visible and b in visible) or (focus and focus in (a, b))):
+            continue
+        types = []
+        best = 0.0
+        for rtype, entry in (edge.get("types") or {}).items():
+            conf = effective_confidence(entry, now, half_life_days)
+            if conf < 0.5:
+                continue
+            best = max(best, conf)
+            detail = str(entry.get("detail") or "").strip()
+            label = f"{rtype}（{detail}）" if detail else rtype
+            types.append((conf, f"{label}（{_strength_label(conf)}）"))
+        if not types:
+            continue
+        types.sort(reverse=True)
+        names = edge.get("names") or {}
+        left = str(names.get(a) or "一个人")
+        right = str(names.get(b) or "一个人")
+        text = "、".join(label for _, label in types[:4])
+        rows.append((best, f"- {left} 和 {right}：{text}"))
+    if not rows:
+        return ""
+    rows.sort(reverse=True)
+    lines = [row for _, row in rows[: max(1, int(max_edges))]]
+    head = (
+        f"{RELATION_MARK} 我平时感觉到的这几个人之间的关系（不一定全对，只用来理解"
+        "他们怎么称呼彼此；不要主动挑明，也不要拿来开玩笑）："
+    )
+    text = head + "\n" + "\n".join(lines)
+    if limit > 0 and len(text) > limit:
+        text = text[:limit] + "…"
+    return text
+
+
+RELATION_SYSTEM_PROMPT = (
+    "你只做一件事：从对话记录里找出能被原话直接证明的用户关系。"
+    "规则：\n"
+    "1. 只能使用「可识别成员」里的 QQ 号，a 和 b 必须是其中两个不同的人；"
+    "不在名单里的人不要写。\n"
+    "2. 必须有明确证据，例如「他是我哥」「这是我同事」「我们分手了」；"
+    "仅凭称呼、@、玩笑、语气、互动频率，不得推断。\n"
+    "3. 同一对用户可以有多种关系，分别输出多条；关系发生变化时（如情侣分手、"
+    "同事离职），同时输出 remove 旧类型和 add 新类型。\n"
+    "4. 不确定就不输出；宁可漏记，不要瞎记。\n"
+    "5. relations 里的 evidence 必须是消息里的原话片段，不能改写。\n"
+    "6. 另外可以给 suspicions：没有直接原话、但你觉得两人可能有什么关系"
+    "（例如总互相@、称呼暧昧、总一起出现、上下文暗示）。只给有具体线索的，"
+    "confidence 0.5-0.7；suspicions 只用来决定要不要向熟人打听，不会当成事实。\n"
+    f"允许的 type：{'、'.join(RELATION_TYPES)}。"
+    "detail 可选，用来补充「母子」「上级」等具体说法，最多 6 个字。\n"
+    "只输出 JSON，不要解释："
+    '{"relations":[{"a":"10001","b":"10002","type":"朋友",'
+    '"detail":"","action":"add","confidence":0.9,"evidence":"原话"}],'
+    '"suspicions":[{"a":"10001","b":"10003","type":"情侣",'
+    '"confidence":0.55,"evidence":"线索","reason":"为什么觉得像"}]}'
+)
+
+
+def build_relation_prompt(
+    group_label: str,
+    members: list[tuple[str, str]],
+    rows: list[dict],
+    existing: list[str],
+) -> str:
+    member_text = "、".join(
+        f"{qq}={name or '未知'}" for qq, name in members[:40]
+    ) or "（暂无）"
+    lines = []
+    budget = 3200
+    for row in rows[-80:]:
+        stamp = time.strftime("%H:%M", time.localtime(float(row.get("ts") or 0)))
+        line = (
+            f"[{stamp}] {row.get('sender')} {row.get('name') or ''}："
+            f"{str(row.get('text') or '')[:160]}"
+        )
+        budget -= len(line)
+        if budget < 0:
+            break
+        lines.append(line)
+    convo = "\n".join(lines) or "（暂无消息）"
+    known = "\n".join(existing[:20]) or "（还没有记录）"
+    return (
+        f"会话：{group_label or '未知会话'}\n"
+        f"可识别成员（只能使用这些 QQ 号）：{member_text}\n\n"
+        f"最近消息：\n{convo}\n\n"
+        f"已经记下的关系（没有新证据就不要重复输出）：\n{known}\n\n"
+        "请按系统提示的 JSON 格式输出。"
+    )

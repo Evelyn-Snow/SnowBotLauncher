@@ -15,6 +15,18 @@
     "default": "addressed",
     "hint": "addressed=只处理 @/引用她的语音；all=全部；off=不处理。私聊始终处理"
   },
+  "voice_stt_backend": {
+    "description": "语音消息识别方式",
+    "type": "string",
+    "default": "auto",
+    "hint": "auto=优先用 QQ 自带语音转文字，失败回退本地 whisper；qq=只用 QQ（语音会交给腾讯识别）；local=只用本地"
+  },
+  "voice_qq_timeout_seconds": {
+    "description": "QQ 语音转文字超时秒数",
+    "type": "int",
+    "default": 8,
+    "hint": "超时后 auto 模式回退本地 whisper"
+  },
   "video_enabled": {
     "description": "理解视频文件",
     "type": "bool",
@@ -49,6 +61,17 @@
     "type": "int",
     "default": 120,
     "hint": "本地 ASR 较慢，默认只转写前 2 分钟；画面仍按整段抽帧"
+  },
+  "video_vad_prescan": {
+    "description": "转写前先检测视频有没有人声",
+    "type": "bool",
+    "default": true,
+    "hint": "纯音乐/无台词的视频直接跳过 whisper，只保留画面理解"
+  },
+  "video_vad_min_seconds": {
+    "description": "至少检测到几秒人声才转写",
+    "type": "float",
+    "default": 1.0
   },
   "frame_cols": {
     "description": "画面拼图列数",

@@ -19,6 +19,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
+from .auto_diary import build_auto_diary_prompt, select_diary_context
 from .recording import append_diary_entry, month_of
 from .scoping import derive_scope_id, scope_kind, scope_subdir
 
@@ -367,25 +368,10 @@ class ObsidianNotes(Star):
         return "其他私聊", other_weight
 
     def _select_auto_context(self, snapshot: list[dict]) -> list[dict]:
-        owner_items = [
-            item for item in snapshot
-            if str(item.get("scope")) in ("所有者私聊", "所有者参与的群聊")
-        ]
-        other_items = [
-            item for item in snapshot
-            if str(item.get("scope")) not in ("所有者私聊", "所有者参与的群聊")
-        ]
-        selected_owner = owner_items[-8:]
-        selected_other = sorted(
-            other_items,
-            key=lambda item: (int(item.get("weight") or 1), float(item.get("time") or 0)),
-            reverse=True,
-        )[:4]
-        if not selected_owner:
-            selected_other = other_items[-12:]
-        selected = selected_owner + selected_other
-        selected.sort(key=lambda item: float(item.get("time") or 0))
-        return selected
+        return select_diary_context(
+            snapshot,
+            focus=str(self.conf.get("auto_diary_focus") or "global"),
+        )
 
     def _state_path(self) -> Path:
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -573,20 +559,13 @@ class ObsidianNotes(Star):
                 break
             lines.append(line)
             total += len(line)
-        limit = max(40, min(int(self.conf.get("auto_diary_max_chars") or 120), 300))
+        limit = max(40, min(int(self.conf.get("auto_diary_max_chars") or 200), 300))
         source = "\n\n".join(lines)
         extra = self._virtual_context_block()
         if extra:
             source = f"{source}\n\n{extra}"
-        prompt = (
-            "根据下面最近的对话，写一条今天的日记。这些对话包含所有者私聊、群聊和其他人私聊，"
-            "已按重要性筛选。请优先记录所有者私聊或所有者参与的群聊中值得记住的事、所有者的偏好、"
-            "情绪或约定；群聊和其他人私聊只保留真正有信息量、与所有者相关的部分，不写无关闲聊。"
-            "要求：第一人称；1~2 句；不超过 "
-            f"{limit} 字；不要逐句复述，不要编造，不要写 QQ 号、昵称、群号、文件路径、工具名或系统提示；"
-            "直接输出日记正文，不要标题、引号、列表。\n\n"
-            f"对话：\n{source}"
-        )
+        focus = str(self.conf.get("auto_diary_focus") or "global")
+        prompt = build_auto_diary_prompt(source, limit, focus)
         try:
             provider = await self.context.get_using_provider_async(umo=owner)
             if provider is None:

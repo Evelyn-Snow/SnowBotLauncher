@@ -30,7 +30,17 @@
     "description": "自动写日记",
     "type": "bool",
     "default": true,
-    "hint": "只统计所有者私聊；按下面的频率和长度限制自动生成简短日记"
+    "hint": "按下面的频率和长度限制，把最近的对话自动总结成简短日记"
+  },
+  "auto_diary_focus": {
+    "description": "自动日记关注范围",
+    "type": "string",
+    "default": "global",
+    "options": [
+      "global",
+      "owner"
+    ],
+    "hint": "global=所有私聊和群聊都取样，轮流记录；owner=沿用旧逻辑，优先所有者相关的内容"
   },
   "auto_diary_min_interval_minutes": {
     "description": "自动日记最小间隔（分钟）",
@@ -53,8 +63,8 @@
   "auto_diary_max_chars": {
     "description": "每条自动日记最大字数",
     "type": "int",
-    "default": 120,
-    "hint": "超过会截断；建议 80–160"
+    "default": 200,
+    "hint": "超过会截断；建议 160–240，最大 300"
   },
   "auto_diary_quiet_hours": {
     "description": "免打扰时段",

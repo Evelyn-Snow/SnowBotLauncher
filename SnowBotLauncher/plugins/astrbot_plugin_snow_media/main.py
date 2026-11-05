@@ -1,6 +1,7 @@
 """小雪看视频/听语音：把群里的视频文件和语音消息变成她能读的文字。
 
-- 语音（Record）：本地 faster-whisper 转写，替换成「（语音消息）…」再进模型
+- 语音（Record）：优先用 QQ 自带语音转文字，失败回退本地 faster-whisper，
+  替换成「（语音消息）…」再进模型
 - 视频（Video / 视频文件）：ffmpeg 抽 9 帧拼图 → 视觉模型描述；同时抽音频转写
 - 群聊默认只处理 @/引用她的消息；私聊全部处理
 - 只做短中视频：超过上限只取前段音频，避免一条消息卡太久
@@ -27,12 +28,14 @@ from .library import (
     build_sheet,
     extract_audio,
     extract_frames,
+    extract_ptt_text,
     is_audio_name,
     is_video_name,
     probe_duration,
     sheet_rows,
     video_block,
     voice_block,
+    voice_stt_order,
 )
 
 NAME = "astrbot_plugin_snow_media"
@@ -121,6 +124,56 @@ class SnowMedia(Star):
             return True
         return self._addressed(event)
 
+    async def _has_speech(self, wav: str) -> bool | None:
+        """用 Silero VAD 预检；失败返回 None，继续正常转写。"""
+        if not bool(self.conf.get("video_vad_prescan", True)):
+            return None
+        py = self._asr_python()
+        if not py or not Path(py).exists():
+            return None
+        script = Path(__file__).with_name("asr_worker.py")
+        cmd = [
+            py,
+            str(script),
+            "--wav",
+            wav,
+            "--check-speech",
+            "--min-speech-seconds",
+            str(max(0.2, float(self.conf.get("video_vad_min_seconds") or 1.0))),
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        try:
+            out, err = await asyncio.wait_for(proc.communicate(), timeout=60)
+        except asyncio.TimeoutError:
+            proc.kill()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except Exception:
+                pass
+            return None
+        for line in reversed(
+            [x for x in out.decode("utf-8", "replace").splitlines() if x.strip()]
+        ):
+            try:
+                payload = json.loads(line)
+            except Exception:
+                continue
+            if payload.get("ok"):
+                return bool(payload.get("has_speech"))
+            logger.info(f"[{NAME}] VAD 预检失败，继续正常转写：{payload.get('error')}")
+            return None
+        logger.info(
+            f"[{NAME}] VAD 预检无输出，继续正常转写："
+            f"{err.decode('utf-8', 'replace')[-120:]}"
+        )
+        return None
+
     async def _transcribe(self, wav: str, timeout: int) -> str:
         py = self._asr_python()
         if not py:
@@ -202,7 +255,43 @@ class SnowMedia(Star):
             return ""
         return str(getattr(result, "completion_text", "") or "").strip()
 
-    async def _voice_text(self, record: Record) -> str:
+    async def _qq_voice_text(self, event: AstrMessageEvent) -> tuple[str, str]:
+        """调用 QQ 自带语音转文字；返回 (文本, 失败原因)。"""
+        message_id = str(getattr(event.message_obj, "message_id", "") or "").strip()
+        if not message_id:
+            return "", "缺少 message_id"
+        bot = getattr(event, "bot", None)
+        if bot is None:
+            return "", "当前平台不支持 OneBot 语音转文字"
+        params = {
+            "message_id": int(message_id)
+            if message_id.lstrip("-").isdigit()
+            else message_id
+        }
+        timeout = max(
+            3, min(30, int(self.conf.get("voice_qq_timeout_seconds") or 8))
+        )
+        try:
+            payload = await asyncio.wait_for(
+                bot.call_action("fetch_ptt_text", **params), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            return "", f"QQ 语音转文字超时（{timeout}s）"
+        except Exception as exc:
+            return "", str(exc)[:150] or type(exc).__name__
+        return extract_ptt_text(payload), ""
+
+    async def _voice_text(self, record: Record, event: AstrMessageEvent) -> str:
+        order = voice_stt_order(self.conf.get("voice_stt_backend"))
+        if "qq" in order:
+            text, error = await self._qq_voice_text(event)
+            if text:
+                logger.info(f"[{NAME}] 语音转写来源：QQ，{text[:80]}")
+                return voice_block(text)
+            if order == ("qq",):
+                logger.info(f"[{NAME}] QQ 语音转文字失败且未启用本地回退：{error}")
+                return voice_block("", "")
+            logger.info(f"[{NAME}] QQ 语音转文字不可用，回退本地：{error}")
         try:
             path = await record.convert_to_file_path()
         except Exception as exc:
@@ -218,7 +307,7 @@ class SnowMedia(Star):
             text = await self._transcribe(
                 wav, max(30, int(self.conf.get("voice_timeout_seconds") or 90))
             )
-            logger.info(f"[{NAME}] 语音转写：{text[:80]}")
+            logger.info(f"[{NAME}] 语音转写来源：本地 whisper，{text[:80]}")
             return voice_block(text)
         except Exception as exc:
             logger.info(f"[{NAME}] 语音识别失败：{exc}")
@@ -269,10 +358,22 @@ class SnowMedia(Star):
                     str(Path(workdir) / "audio.wav"),
                     audio_seconds,
                 )
-                transcript = await self._transcribe(
-                    wav,
-                    max(60, int(self.conf.get("video_asr_timeout_seconds") or 300)),
-                )
+                if await self._has_speech(wav) is False:
+                    logger.info(
+                        f"[{NAME}] 视频音频没有检测到人声，跳过转写：{name}"
+                    )
+                    transcript = ""
+                else:
+                    transcript = await self._transcribe(
+                        wav,
+                        max(
+                            60,
+                            int(
+                                self.conf.get("video_asr_timeout_seconds")
+                                or 300
+                            ),
+                        ),
+                    )
             except Exception as exc:
                 logger.info(f"[{NAME}] 视频音频转写失败：{exc}")
             block = video_block(
@@ -314,7 +415,7 @@ class SnowMedia(Star):
                 if isinstance(comp, Record) and bool(
                     self.conf.get("voice_enabled", True)
                 ) and self._mode_ok(event, "voice"):
-                    text = await self._voice_text(comp)
+                    text = await self._voice_text(comp, event)
                     comps[index] = Plain(text)
                     additions.append(text)
                     changed = True

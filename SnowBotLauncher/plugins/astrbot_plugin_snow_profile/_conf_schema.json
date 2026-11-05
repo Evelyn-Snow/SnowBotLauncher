@@ -4,11 +4,220 @@
     "type": "bool",
     "default": true
   },
+  "privacy_redact_ids": {
+    "description": "出站消息隐藏 QQ/群号",
+    "type": "bool",
+    "default": true,
+    "hint": "对非主人会话的回复做兜底：出现已知 QQ 号、群号或“QQ号/手机号”形式的号码就替换为“（不方便说）”"
+  },
+  "privacy_sanitize_context": {
+    "description": "发给模型前清理上下文号码",
+    "type": "bool",
+    "default": true,
+    "hint": "只处理本次请求的 system prompt 和历史上下文，把已知 QQ/群号换成称呼；画像、关系网、共享记忆文件里的原始数据保留"
+  },
   "profiles_dir": {
     "description": "画像存放目录",
     "type": "string",
     "default": "",
     "hint": "留空 = 插件数据目录 profiles/ 子目录；可填任意绝对路径（如 Obsidian 仓库下的「画像」文件夹），每个用户一个 <QQ号>.md"
+  },
+  "relation_enabled": {
+    "description": "启用用户关系网",
+    "type": "bool",
+    "default": true,
+    "hint": "所有群聊和私聊共用一张全局关系网；只记录能被原话证明的关系，私聊需点名已知用户才会记录"
+  },
+  "relations_dir": {
+    "description": "关系网存放目录",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 画像目录旁边的「关系」文件夹；单独存 relations.json，不写进任何人的画像文件"
+  },
+  "relation_min_messages": {
+    "description": "触发关系分析的最少新消息",
+    "type": "int",
+    "default": 40,
+    "hint": "同一群累计这么多条新消息且间隔够久，才调用一次模型"
+  },
+  "relation_keyword_trigger": {
+    "description": "出现关系词时提前分析",
+    "type": "bool",
+    "default": true,
+    "hint": "消息里出现「我妈/同事/分手」等词时，用更低的条数门槛触发"
+  },
+  "relation_keyword_min_messages": {
+    "description": "关键词触发的最少新消息",
+    "type": "int",
+    "default": 6
+  },
+  "relation_min_interval_minutes": {
+    "description": "同一群两次分析的间隔",
+    "type": "int",
+    "default": 180
+  },
+  "relation_max_per_day": {
+    "description": "同一群每天最多分析次数",
+    "type": "int",
+    "default": 6
+  },
+  "relation_min_confidence": {
+    "description": "记录关系的最低置信度",
+    "type": "float",
+    "default": 0.75,
+    "hint": "低于该值不记录；宁可不记，也不要瞎记"
+  },
+  "relation_buffer_size": {
+    "description": "每个群保留的待分析消息数",
+    "type": "int",
+    "default": 200
+  },
+  "relation_half_life_days": {
+    "description": "关系置信度衰减半衰期（天）",
+    "type": "int",
+    "default": 180,
+    "hint": "长期没有新证据的关系会慢慢变淡，但记录仍保留"
+  },
+  "relation_inject_max_edges": {
+    "description": "聊天时最多注入几条关系",
+    "type": "int",
+    "default": 6
+  },
+  "relation_inject_limit_chars": {
+    "description": "聊天时关系注入的最大字数",
+    "type": "int",
+    "default": 400
+  },
+  "gossip_enabled": {
+    "description": "向熟人打听可能的关系",
+    "type": "bool",
+    "default": true,
+    "hint": "只有对两人的关系有猜测、且对方熟悉度达到门槛时，才会私下问一句；默认每天最多一次"
+  },
+  "gossip_min_familiarity": {
+    "description": "打听对象的最低熟悉度",
+    "type": "int",
+    "default": 68,
+    "hint": "默认 68，约「好友」；低于该值不会向 TA 打听"
+  },
+  "gossip_min_suspect_confidence": {
+    "description": "触发打听的最低猜测置信度",
+    "type": "float",
+    "default": 0.5
+  },
+  "gossip_suspect_ttl_days": {
+    "description": "猜测的有效天数",
+    "type": "int",
+    "default": 30,
+    "hint": "超过这么久没有新线索就不再打听"
+  },
+  "gossip_max_asks_per_suspect": {
+    "description": "同一个猜测最多问几次",
+    "type": "int",
+    "default": 1
+  },
+  "gossip_max_per_day": {
+    "description": "每天最多打听几次",
+    "type": "int",
+    "default": 1
+  },
+  "gossip_cooldown_hours": {
+    "description": "两次打听的最小间隔（小时）",
+    "type": "int",
+    "default": 20
+  },
+  "gossip_check_minutes": {
+    "description": "打听检查间隔（分钟）",
+    "type": "int",
+    "default": 60
+  },
+  "gossip_windows": {
+    "description": "允许打听的时间窗",
+    "type": "string",
+    "default": "12:00-13:30,18:00-22:00",
+    "hint": "格式同主动聊天；留空 = 全天（仍受静默时段限制）"
+  },
+  "gossip_quiet_hours": {
+    "description": "打听静默时段",
+    "type": "string",
+    "default": "23-7"
+  },
+  "gossip_chance": {
+    "description": "每次检查命中概率",
+    "type": "float",
+    "default": 0.5
+  },
+  "gossip_active_days": {
+    "description": "打听对象最近活跃天数",
+    "type": "int",
+    "default": 14
+  },
+  "gossip_exclude_admins": {
+    "description": "不向管理员/主人打听",
+    "type": "bool",
+    "default": false
+  },
+  "shared_memory_enabled": {
+    "description": "启用跨会话共享记忆",
+    "type": "bool",
+    "default": true,
+    "hint": "把所有私聊/群聊里值得记的事压缩成带来源和分享评级的卡片，聊天时按相关性注入"
+  },
+  "shared_memory_dir": {
+    "description": "共享记忆存放目录",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 画像目录旁边的「共享记忆」文件夹；存 cards.json，不写进画像文件"
+  },
+  "shared_buffer_size": {
+    "description": "每个会话保留的待汇总对话数",
+    "type": "int",
+    "default": 40
+  },
+  "shared_min_exchanges": {
+    "description": "触发汇总的最少对话轮数",
+    "type": "int",
+    "default": 10
+  },
+  "shared_min_interval_minutes": {
+    "description": "同一会话两次汇总的最小间隔",
+    "type": "int",
+    "default": 60
+  },
+  "shared_max_calls_per_day": {
+    "description": "同一会话每天最多汇总次数",
+    "type": "int",
+    "default": 12
+  },
+  "shared_max_cards": {
+    "description": "共享记忆卡片总数上限",
+    "type": "int",
+    "default": 500
+  },
+  "shared_inject_top_k": {
+    "description": "每轮最多注入几张共享卡片",
+    "type": "int",
+    "default": 4
+  },
+  "shared_inject_limit_chars": {
+    "description": "共享记忆注入的最大字数",
+    "type": "int",
+    "default": 600
+  },
+  "shared_min_relevance": {
+    "description": "共享卡片的最低相关度",
+    "type": "float",
+    "default": 0.15
+  },
+  "shared_relation_min_confidence": {
+    "description": "判断「熟人可提」时的最低关系置信度",
+    "type": "float",
+    "default": 0.6
+  },
+  "shared_quiet_hours": {
+    "description": "共享记忆汇总的静默时段",
+    "type": "string",
+    "default": "0-7"
   },
   "include_groups": {
     "description": "为群成员也建画像",

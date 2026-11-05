@@ -1,8 +1,8 @@
 name: astrbot_plugin_snow_media
 display_name: 小雪看视频听语音
-desc: 群里发的视频文件会抽帧看画面并转写音频，语音消息会本地转写成文字再交给她理解
+desc: 群里发的视频文件会抽帧看画面并转写音频，语音消息优先用 QQ 转文字、失败回退本地 whisper
 help: 不需要指令：直接发视频或语音即可；群聊默认只处理 @/引用她的消息
-version: v0.1.0
+version: v0.2.1
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_media
 author: Evelyn-Snow
 support_platforms:

@@ -53,17 +53,17 @@ AstrBot + QQ 协议端（NapCat / SnowLuma）的 Windows 桌面统一控制台�
 | `search_manners` | 搜索礼仪：明确要求必搜并附来源，自发搜索限频 | [astrbot_plugin_search_manners](https://github.com/Evelyn-Snow/astrbot_plugin_search_manners) |
 | `share_card` | 分享卡片转文字：QQ 的 B站/网页 Json 卡片变成模型可见文本 | [astrbot_plugin_share_card](https://github.com/Evelyn-Snow/astrbot_plugin_share_card) |
 | `bili_vision` | B站视频理解：字幕 + 缩略图抽帧 + 视觉模型，不下载完整视频 | [astrbot_plugin_bili_vision](https://github.com/Evelyn-Snow/astrbot_plugin_bili_vision) |
-| `snow_media` | 视频/语音理解：群里视频抽帧看画面并转写音频，语音消息本地转文字 | [astrbot_plugin_snow_media](https://github.com/Evelyn-Snow/astrbot_plugin_snow_media) |
+| `snow_media` | 视频/语音理解：群里视频抽帧看画面并转写音频，语音消息优先 QQ 转文字、失败回退本地 | [astrbot_plugin_snow_media](https://github.com/Evelyn-Snow/astrbot_plugin_snow_media) |
 | `snow_reply` | 自主引用回复：话题乱/目标远时自己搜前文并引用，有冷却和频率上限 | [astrbot_plugin_snow_reply](https://github.com/Evelyn-Snow/astrbot_plugin_snow_reply) |
 | `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 | [astrbot_plugin_snow_imagebox](https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox) |
-| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
+| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与覆盖所有会话的自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
 | `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
 | `snow_experience` | 真实经历：自主读公版书/查资料/读论文（每周限次），经历注入聊天与日记 | [astrbot_plugin_snow_experience](https://github.com/Evelyn-Snow/astrbot_plugin_snow_experience) |
 | `snow_knowledge` | 知识库：把真实读过的书/资料/论文切片向量化，聊天时按话题检索引用 | [astrbot_plugin_snow_knowledge](https://github.com/Evelyn-Snow/astrbot_plugin_snow_knowledge) |
 | `snow_guard` | 安全守卫：出网白名单、内网/元数据/短链拦截、外部内容注入防护 | [astrbot_plugin_snow_guard](https://github.com/Evelyn-Snow/astrbot_plugin_snow_guard) |
 | `snow_balance` | 余额感知：对话/语音/视觉额度不足时用自己的口吻私聊主人（饿了/嗓子哑了/看不清） | [astrbot_plugin_snow_balance](https://github.com/Evelyn-Snow/astrbot_plugin_snow_balance) |
 | `snow_friend` | 好友申请：等级够高/有会员/老号才自动通过，其余挂起并通知主人 | [astrbot_plugin_snow_friend](https://github.com/Evelyn-Snow/astrbot_plugin_snow_friend) |
-| `snow_profile` | 画像与熟悉度：第一人称印象、印象分/道德分、按熟悉度主动私聊 | [astrbot_plugin_snow_profile](https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile) |
+| `snow_profile` | 画像与熟悉度：第一人称印象、印象分/道德分、按熟悉度主动私聊，跨群/私聊关系网，带分享评级的共享记忆卡片 | [astrbot_plugin_snow_profile](https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile) |
 | `snow_messenger` | 传话：让 Bot 私聊指定的 QQ 好友并转告回复 | [astrbot_plugin_snow_messenger](https://github.com/Evelyn-Snow/astrbot_plugin_snow_messenger) |
 
 > 18 个插件仓库均已创建并推送；插件市场提审按每批最多 3 个进行。

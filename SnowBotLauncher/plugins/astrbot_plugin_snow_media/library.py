@@ -232,6 +232,30 @@ def video_block(
     return "\n".join(parts)
 
 
+VOICE_STT_BACKENDS = ("auto", "qq", "local")
+
+
+def normalize_voice_stt_backend(value: str) -> str:
+    backend = str(value or "").strip().lower()
+    return backend if backend in VOICE_STT_BACKENDS else "auto"
+
+
+def voice_stt_order(value: str) -> tuple[str, ...]:
+    """返回识别顺序：auto 先 QQ 再本地，其余只走选定的一种。"""
+    backend = normalize_voice_stt_backend(value)
+    return ("qq", "local") if backend == "auto" else (backend,)
+
+
+def extract_ptt_text(payload) -> str:
+    """兼容 OneBot 客户端包装：直接 {text} 或 {data: {text}}。"""
+    if not isinstance(payload, dict):
+        return ""
+    text = payload.get("text")
+    if not text and isinstance(payload.get("data"), dict):
+        text = payload["data"].get("text")
+    return str(text or "").strip()
+
+
 def voice_block(text: str, name: str = "") -> str:
     body = strip_timestamps(text)
     head = "（语音消息）"

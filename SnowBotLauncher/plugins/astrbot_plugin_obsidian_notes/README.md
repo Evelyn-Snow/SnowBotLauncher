@@ -5,7 +5,7 @@
 ## 功能
 
 - 对它说「写进今天日记」「新建笔记 xxx」「找找笔记里关于……的内容」「读一下 xxx」即可
-- 自动日记：按频率限制主动把最近的对话总结成日记，素材按所有者私聊 / 群聊 / 其他私聊加权
+- 自动日记：按频率限制主动把最近的对话总结成日记；默认 `auto_diary_focus=global`，每个私聊/群聊轮流取样，不再只写所有者相关的事（可切回 `owner`）
 - **日记按月归档**：同一个月的日记写进一个 `YYYY-MM.md`，每天一个 `## YYYY-MM-DD` 小节；补写过去日期会按时间顺序插入
 - 会话作用域：笔记和日记可按会话分目录，也可以全局共享
 - 搜索与列出会遍历整个仓库（含所有会话目录）；读取时优先当前会话，找不到自动找全局
@@ -31,13 +31,14 @@
 | max_read_chars | 6000 | 单次读取笔记的最大字符数 |
 | note_scope_mode / diary_scope_mode | flat | `flat` 全局共享，`session` 按会话分目录 |
 | auto_diary_enabled | true | 自动日记总开关 |
+| auto_diary_focus | global | `global` 所有会话轮流取样；`owner` 只侧重所有者相关 |
 | auto_diary_min_interval_minutes | 120 | 两次自动日记最小间隔 |
 | auto_diary_max_per_day | 3 | 每天自动日记上限 |
 | auto_diary_min_exchanges | 3 | 至少多少轮对话才写 |
-| auto_diary_max_chars | 120 | 单篇日记字数上限（40–300） |
+| auto_diary_max_chars | 200 | 单篇日记字数上限（40–300） |
 | auto_diary_quiet_hours | 0-7 | 免打扰时段，不写日记 |
 | auto_diary_include_groups / include_other_private | true / true | 是否参考群聊 / 其他人的私聊 |
-| auto_diary_owner_weight / group_weight / other_weight | 3 / 2 / 1 | 自动日记素材的侧重权重 |
+| auto_diary_owner_weight / group_weight / other_weight | 3 / 2 / 1 | `owner` 模式下自动日记素材的侧重权重 |
 | auto_diary_per_scope | false | 每个会话各有独立频率限制并各自写会话日记 |
 
 ## 说明

@@ -7,7 +7,7 @@
 3. **优先取 B站字幕**（官方 / CC / AI 字幕，需要 Cookie）：按时间轴整理成文字
 4. 取**缩略图雪碧图**（默认 10x10 帧），抽 9 帧拼成带时间标签的 3x3 画面，交给视觉模型描述
 5. 返回给主模型，用她自己的口吻把台词内容和画面结合起来回应
-6. **没有字幕时**：先按画面回应；同时后台抽音频，用本地 faster-whisper 转写，完成后补一条听后感
+6. **没有字幕时**：先按画面回应；后台先用 Silero VAD 检测有没有人声，纯音乐/无台词视频直接跳过转写，有人声才用本地 faster-whisper 转写并补一条听后感
 
 没有字幕时先返回画面理解，音频在后台继续转写；没有画面时只返回字幕。两者都没有时只给标题简介，并明确不要编造。
 
@@ -33,6 +33,8 @@
 | bilibili_cookie | 空 | `{sessdata, id(bili_jct)}`，用于取字幕；只存本机，不写日志 |
 | max_subtitle_chars | 5000 | 字幕最多带多少字，超长保留开头 70% + 结尾 30% |
 | asr_enabled | false | 没有字幕时是否后台听音频 |
+| asr_vad_prescan | true | 转写前用 Silero VAD 检测有没有人声，纯音乐跳过 whisper |
+| asr_vad_min_seconds | 1.0 | 至少检测到几秒人声才转写 |
 | asr_python | 空 | 装了 faster-whisper 的解释器路径，留空用当前解释器 |
 | asr_model | small | Whisper 模型；CPU 上 small int8 实时率约 0.3~0.45 |
 | asr_threads | 2 | 转写线程数，留核给 AstrBot 和 QQ |

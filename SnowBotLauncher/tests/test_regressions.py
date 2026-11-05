@@ -124,6 +124,10 @@ from plugins.astrbot_plugin_snow_friend.library import (  # noqa: E402
     parse_owner_reply,
     parse_qq_list,
 )
+from plugins.astrbot_plugin_obsidian_notes.auto_diary import (
+    build_auto_diary_prompt,
+    select_diary_context,
+)
 from plugins.astrbot_plugin_obsidian_notes.recording import (
     append_diary_entry,
     merge_daily_diary,
@@ -141,6 +145,21 @@ from plugins.astrbot_plugin_snow_messenger.library import (  # noqa: E402
     platform_id_from_umo,
     relay_text,
 )
+from plugins.astrbot_plugin_snow_profile.privacy import (  # noqa: E402
+    build_id_map,
+    collect_ids,
+    redact_ids,
+    sanitize_context_text,
+)
+from plugins.astrbot_plugin_snow_profile.shared_memory import (  # noqa: E402
+    can_share,
+    clean_card,
+    format_shared_block,
+    load_relation_index,
+    merge_cards,
+    parse_cards_payload,
+    select_cards,
+)
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     PROFILE_SYSTEM_PROMPT,
     activity_allows_proactive,
@@ -149,21 +168,36 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     build_moral_section,
     build_profile_prompt,
     clean_llm_markdown,
+    clean_relation_item,
+    clean_suspicion_item,
     compute_familiarity,
     current_timeline_item,
+    effective_confidence,
+    evidence_speakers,
+    evidence_supported,
     extract_impression,
     extract_score,
     familiarity_guidance,
     familiarity_level,
+    gossip_candidates,
+    gossip_fallback_question,
+    has_relation_cue,
     in_time_windows,
     looks_like_profile,
     merge_name_history,
+    merge_relation_items,
+    merge_relation_suspects,
+    migrate_relations,
     moral_injection,
     moral_level,
     moral_section,
+    normalize_relation_type,
     parse_profile,
+    parse_relation_bundle,
+    parse_relation_payload,
     pick_today_plan,
     profile_summary,
+    relation_injection,
     render_profile,
     should_ignore,
     should_update,
@@ -178,11 +212,14 @@ from plugins.astrbot_plugin_snow_reply.library import (  # noqa: E402
     search_quote_target,
 )
 from plugins.astrbot_plugin_snow_media.library import (  # noqa: E402
+    extract_ptt_text,
     is_audio_name,
     is_video_name,
+    normalize_voice_stt_backend,
     sheet_rows,
     video_block,
     voice_block,
+    voice_stt_order,
 )
 from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     SUPPORTED_DOC_SUFFIXES,
@@ -618,6 +655,64 @@ class ObsidianScopeRegressionTests(unittest.TestCase):
         self.assertIn("# 2026-10", merged)
         self.assertIn("## 2026-10-30", merged)
         self.assertIn("## 2026-10-31", merged)
+
+    def test_auto_diary_global_sampling(self):
+        snapshot = []
+        for i in range(10):
+            snapshot.append(
+                {
+                    "scope": "所有者私聊",
+                    "scope_id": "私聊-1",
+                    "time": 100 + i,
+                    "weight": 3,
+                    "user": f"owner {i}",
+                    "assistant": "ok",
+                }
+            )
+        snapshot.append(
+            {
+                "scope": "群聊",
+                "scope_id": "群聊-2",
+                "time": 200,
+                "weight": 2,
+                "user": "群友",
+                "assistant": "ok",
+            }
+        )
+        snapshot.append(
+            {
+                "scope": "其他私聊",
+                "scope_id": "私聊-3",
+                "time": 210,
+                "weight": 1,
+                "user": "朋友",
+                "assistant": "ok",
+            }
+        )
+        global_selected = select_diary_context(
+            snapshot, "global", per_scope=2, total=6
+        )
+        scopes = {item["scope_id"] for item in global_selected}
+        self.assertEqual(scopes, {"私聊-1", "群聊-2", "私聊-3"})
+        self.assertLessEqual(len(global_selected), 6)
+        self.assertEqual(
+            [item["time"] for item in global_selected],
+            sorted(item["time"] for item in global_selected),
+        )
+        owner_selected = select_diary_context(snapshot, "owner")
+        self.assertTrue(
+            all(
+                item["scope"] in ("所有者私聊", "所有者参与的群聊")
+                for item in owner_selected[:8]
+            )
+        )
+
+    def test_auto_diary_prompts(self):
+        global_prompt = build_auto_diary_prompt("对话", 120, "global")
+        self.assertIn("按会话取样", global_prompt)
+        self.assertIn("不要求都和所有者有关", global_prompt)
+        owner_prompt = build_auto_diary_prompt("对话", 120, "owner")
+        self.assertIn("优先记录所有者", owner_prompt)
 
 
 class ContinuityRegressionTests(unittest.TestCase):
@@ -1193,12 +1288,12 @@ class MessengerTests(unittest.TestCase):
         {"qq": "10001", "name": "大肥鱼"},
         {"qq": "10002", "name": "小雪"},
         {"qq": "10003", "name": "雪豹"},
-        {"qq": "2663978299", "name": "路人甲"},
+        {"qq": "10002", "name": "路人甲"},
     ]
 
     def test_match_by_qq_and_name(self):
-        best, _ = match_person("2663978299", self.MEMBERS)
-        self.assertEqual(best["qq"], "2663978299")
+        best, _ = match_person("10002", self.MEMBERS)
+        self.assertEqual(best["qq"], "10002")
         best, _ = match_person("大肥鱼", self.MEMBERS)
         self.assertEqual(best["qq"], "10001")
         best, _ = match_person(" 雪豹 ", self.MEMBERS)
@@ -1258,10 +1353,10 @@ class MessengerTests(unittest.TestCase):
         AstrBot 报 cannot find platform，消息发不出去。
         """
         self.assertEqual(
-            platform_id_from_umo("napcat:FriendMessage:1282164886"), "napcat"
+            platform_id_from_umo("napcat:FriendMessage:10001"), "napcat"
         )
         self.assertEqual(
-            platform_id_from_umo("napcat:GroupMessage:1134086134"), "napcat"
+            platform_id_from_umo("napcat:GroupMessage:123456"), "napcat"
         )
         # 无冒号时回退
         self.assertEqual(platform_id_from_umo("weird", "webchat"), "webchat")
@@ -1521,6 +1616,386 @@ class ProfileTests(unittest.TestCase):
     def test_build_moral_section(self):
         section = build_moral_section(40, ["- [-25] 恶劣引导：『x』"])
         self.assertTrue(section.startswith("## 道德评价\n当前评分：40"))
+
+    def test_relation_type_and_cue(self):
+        self.assertEqual(normalize_relation_type("女友"), "情侣")
+        self.assertEqual(normalize_relation_type("舍友"), "室友")
+        self.assertEqual(normalize_relation_type("路人"), "")
+        self.assertTrue(has_relation_cue("他是我同事"))
+        self.assertFalse(has_relation_cue("今天天气不错"))
+
+    def test_relation_payload_and_evidence(self):
+        payload = parse_relation_payload(
+            "```json\n"
+            '{"relations":[{"a":"10001","b":"10002","type":"朋友",'
+            '"confidence":0.9,"evidence":"他是我朋友"}]}\n'
+            "```"
+        )
+        self.assertEqual(len(payload), 1)
+        transcript = "10001：他是我朋友，我们认识十年了"
+        item = clean_relation_item(payload[0], {"10001", "10002"}, transcript)
+        self.assertIsNotNone(item)
+        self.assertEqual(item["type"], "朋友")
+        self.assertIsNone(
+            clean_relation_item(
+                dict(payload[0], evidence="他是我老板"),
+                {"10001", "10002"},
+                transcript,
+            )
+        )
+        self.assertIsNone(
+            clean_relation_item(payload[0], {"10001"}, transcript)
+        )
+        self.assertIsNone(
+            clean_relation_item(
+                dict(payload[0], confidence=0.5), {"10001", "10002"}, transcript
+            )
+        )
+        self.assertTrue(evidence_supported("他是我朋友", transcript))
+        self.assertFalse(evidence_supported("他是我老板", transcript))
+        rows = [{"sender": "10001", "name": "小明", "text": "他是我朋友"}]
+        self.assertEqual(evidence_speakers("他是我朋友", rows), {"10001"})
+
+    def test_relation_merge_and_injection(self):
+        edges = []
+        names = {"10001": "小明", "10002": "小红"}
+        now = 1700000000.0
+        items = [
+            {
+                "a": "10001",
+                "b": "10002",
+                "type": "朋友",
+                "detail": "",
+                "action": "add",
+                "confidence": 0.9,
+                "evidence": "他是我朋友",
+            },
+            {
+                "a": "10002",
+                "b": "10001",
+                "type": "同事",
+                "detail": "",
+                "action": "add",
+                "confidence": 0.8,
+                "evidence": "我们一个公司的",
+            },
+        ]
+        remove_only = [dict(items[1], action="remove")]
+        self.assertEqual(merge_relation_items([], remove_only, names, now), 0)
+        self.assertEqual(merge_relation_items(edges, items, names, now), 2)
+        self.assertEqual(len(edges), 1)
+        self.assertEqual(set(edges[0]["types"]), {"朋友", "同事"})
+
+        merge_relation_items(
+            edges,
+            [
+                dict(
+                    items[0],
+                    action="confirm",
+                    confidence=0.95,
+                    evidence="我们还是朋友",
+                )
+            ],
+            names,
+            now + 1,
+        )
+        self.assertAlmostEqual(edges[0]["types"]["朋友"]["confidence"], 0.95)
+
+        data = {"edges": edges}
+        text = relation_injection(
+            data, {"10001", "10002"}, now + 60, focus_id="10001"
+        )
+        self.assertIn("小明", text)
+        self.assertIn("小红", text)
+        self.assertIn("朋友", text)
+        self.assertIn("同事", text)
+        self.assertNotIn("10001", text)
+        self.assertNotIn("10002", text)
+
+        merge_relation_items(
+            edges,
+            [dict(items[1], action="remove", evidence="我离职了")],
+            names,
+            now + 2,
+        )
+        self.assertIn("同事", edges[0]["ended"])
+        self.assertNotIn("同事", edges[0]["types"])
+        after = relation_injection(
+            data, {"10001", "10002"}, now + 3, focus_id="10001"
+        )
+        self.assertNotIn("同事", after)
+
+    def test_relation_suspicion_and_gossip(self):
+        payload = (
+            '{"relations":[],"suspicions":[{"a":"10001","b":"10002",'
+            '"type":"情侣","confidence":0.6,"evidence":"小红和我总互相@",'
+            '"reason":"互动很多"}]}'
+        )
+        relations, suspicions = parse_relation_bundle(payload)
+        self.assertEqual(relations, [])
+        self.assertEqual(len(suspicions), 1)
+        item = clean_suspicion_item(
+            suspicions[0],
+            {"10001", "10002"},
+            {"10001"},
+            {"10002": "小红"},
+            0.5,
+        )
+        self.assertIsNotNone(item)
+        self.assertEqual(item["type"], "情侣")
+        self.assertIsNone(
+            clean_suspicion_item(
+                dict(suspicions[0], confidence=0.4),
+                {"10001", "10002"},
+                {"10001"},
+                {"10002": "小红"},
+                0.5,
+            )
+        )
+        self.assertIsNone(
+            clean_suspicion_item(
+                suspicions[0],
+                {"10001", "10002"},
+                {"10009"},
+                {"10002": "小红"},
+                0.5,
+            )
+        )
+
+        edges = []
+        names = {"10001": "小明", "10002": "小红"}
+        now = 1700000000.0
+        self.assertEqual(
+            merge_relation_suspects(
+                edges, [item], names, now, scope="g1"
+            ),
+            1,
+        )
+        data = {
+            "edges": edges,
+            "scopes": {
+                "g1": {
+                    "kind": "group",
+                    "members": {
+                        "10001": "小明",
+                        "10002": "小红",
+                        "10003": "小刚",
+                    },
+                }
+            },
+        }
+        cands = gossip_candidates(data, now, min_confidence=0.5)
+        self.assertEqual(len(cands), 1)
+        self.assertEqual(cands[0]["scope"], "g1")
+        self.assertIn("在一起", gossip_fallback_question("小明", "小红", "情侣"))
+
+        edges[0]["suspects"]["情侣"]["asked"] = [
+            {"target": "10003", "time": now}
+        ]
+        self.assertEqual(gossip_candidates(data, now, min_confidence=0.5), [])
+
+        merge_relation_items(
+            edges,
+            [
+                {
+                    "a": "10001",
+                    "b": "10002",
+                    "type": "情侣",
+                    "detail": "",
+                    "action": "add",
+                    "confidence": 0.9,
+                    "evidence": "我们在一起了",
+                }
+            ],
+            names,
+            now,
+        )
+        self.assertNotIn("情侣", edges[0].get("suspects", {}))
+
+    def test_shared_memory_cards_and_sharing(self):
+        now = 1700000000.0
+        parsed = parse_cards_payload(
+            '[{"summary":"哥哥说他订的车到了，是红色的","topics":["车"],'
+            '"subjects":["10001"],"share_level":1,"reason":"私事"}]'
+        )
+        self.assertEqual(len(parsed), 1)
+        card = clean_card(parsed[0], {"10001"})
+        self.assertIsNotNone(card)
+        self.assertEqual(card["subjects"], ["10001"])
+        secret = clean_card(
+            {
+                "summary": "他说银行卡密码是 123456",
+                "topics": ["密码"],
+                "subjects": ["10001"],
+                "share_level": 3,
+            },
+            {"10001"},
+        )
+        self.assertEqual(secret["share_level"], 1)
+        source = {
+            "scope": "private:10001",
+            "kind": "private",
+            "label": "和哥哥的私聊",
+            "public_label": "一个私聊",
+        }
+        cards = []
+        self.assertEqual(merge_cards(cards, [card], source, now), 1)
+        self.assertEqual(len(cards), 1)
+        self.assertEqual(merge_cards(cards, [card], source, now + 1), 1)
+        self.assertEqual(len(cards), 1)
+
+        index = load_relation_index(
+            {
+                "edges": [
+                    {
+                        "a": "10002",
+                        "b": "10001",
+                        "types": {"朋友": {"confidence": 0.8}},
+                    }
+                ]
+            }
+        )
+        owner = {
+            "sender": "10001",
+            "scope": "private:10001",
+            "is_group": False,
+            "is_owner": True,
+            "group_members": {"10001"},
+        }
+        other = {
+            "sender": "10002",
+            "scope": "private:10002",
+            "is_group": False,
+            "is_owner": False,
+            "group_members": {"10002"},
+        }
+        self.assertTrue(can_share(card, owner))
+        self.assertFalse(can_share(card, other))
+
+        public_card = dict(cards[0], share_level=2)
+        self.assertTrue(can_share(public_card, other, index))
+        self.assertFalse(can_share(public_card, other, {}))
+        group_aud = {
+            "sender": "10002",
+            "scope": "group:2",
+            "is_group": True,
+            "is_owner": False,
+            "group_members": {"10001", "10002"},
+        }
+        self.assertTrue(can_share(public_card, group_aud, {}))
+        self.assertTrue(
+            can_share(dict(public_card, share_level=3), group_aud, {})
+        )
+
+        same_scope = dict(other, scope="private:10001")
+        self.assertEqual(
+            select_cards([public_card], "车", same_scope, index, now), []
+        )
+        selected = select_cards([public_card], "车", other, index, now)
+        self.assertEqual(len(selected), 1)
+        owner_text = format_shared_block([public_card], owner)
+        self.assertIn("和哥哥的私聊", owner_text)
+        other_text = format_shared_block([public_card], other)
+        self.assertIn("一个私聊", other_text)
+        self.assertNotIn("和哥哥的私聊", other_text)
+
+    def test_privacy_redact_ids(self):
+        ids = collect_ids(
+            owner_qq="10001",
+            admins=["111111"],
+            profile_stems=["222222"],
+            relations={"edges": [{"a": "333333", "b": "444444"}]},
+            cards=[{"subjects": ["555555"]}],
+            scopes={"napcat:GroupMessage:123456": {}},
+        )
+        self.assertTrue(
+            {"10001", "111111", "222222", "333333", "444444", "555555",
+             "123456"} <= ids
+        )
+        text = (
+            "我哥的QQ是10001，群号123456，"
+            "电话13800138000，朋友是222222"
+        )
+        redacted = redact_ids(text, ids)
+        self.assertNotIn("10001", redacted)
+        self.assertNotIn("123456", redacted)
+        self.assertNotIn("13800138000", redacted)
+        self.assertNotIn("222222", redacted)
+        self.assertIn("（不方便说）", redacted)
+
+    def test_sanitize_context_text(self):
+        id_map = build_id_map(
+            owner_qq="10001",
+            owner_name="哥哥",
+            profiles={"10002": "小明"},
+            relations={
+                "edges": [
+                    {
+                        "a": "10003",
+                        "b": "10004",
+                        "names": {"10003": "小红", "10004": "小刚"},
+                    }
+                ]
+            },
+            cards=[{"subjects": ["10005"]}],
+            scopes={"napcat:GroupMessage:123456": {}},
+        )
+        text = (
+            "回眸一号(ID:10001) 和 小明(ID:10002) 在聊天；"
+            "QQ号 10001；群号 123456；ID:10003；另外 10005；ID:999999"
+        )
+        out = sanitize_context_text(text, id_map)
+        for qq in ("10001", "10002", "10003", "10004", "10005", "123456"):
+            self.assertNotIn(qq, out)
+        self.assertIn("回眸一号", out)
+        self.assertIn("小明", out)
+        self.assertIn("（已隐藏）", out)
+        self.assertIn("（某位群友）", out)
+        self.assertEqual(sanitize_context_text("10001", id_map), "哥哥")
+
+    def test_relation_confidence_decays(self):
+        now = 1700000000.0
+        entry = {"confidence": 0.9, "last_seen": now}
+        self.assertAlmostEqual(effective_confidence(entry, now), 0.9)
+        faded = effective_confidence(entry, now + 180 * 86400)
+        self.assertLess(faded, 0.5)
+
+    def test_relation_migrate_v1_to_global(self):
+        v1 = {
+            "version": 1,
+            "groups": {
+                "g1": {
+                    "edges": [
+                        {
+                            "a": "10001",
+                            "b": "10002",
+                            "types": {
+                                "朋友": {"confidence": 0.8, "last_seen": 100}
+                            },
+                            "history": [],
+                        }
+                    ]
+                },
+                "g2": {
+                    "edges": [
+                        {
+                            "a": "10002",
+                            "b": "10001",
+                            "types": {
+                                "同事": {"confidence": 0.9, "last_seen": 200}
+                            },
+                            "history": [],
+                        }
+                    ]
+                },
+            },
+        }
+        data = migrate_relations(v1)
+        self.assertEqual(data["version"], 2)
+        self.assertEqual(len(data["edges"]), 1)
+        self.assertEqual(set(data["edges"][0]["types"]), {"朋友", "同事"})
+        self.assertEqual(set(data["edges"][0]["scopes"]), {"g1", "g2"})
+        self.assertNotIn("groups", data)
 
 
 EXPERIENCE_ATOM = """<?xml version='1.0' encoding='UTF-8'?>
@@ -2425,6 +2900,19 @@ class SnowMediaTests(unittest.TestCase):
         voice = voice_block("[00:01] 你好呀\n[00:03] 今天吃什么")
         self.assertNotIn("[00:01]", voice)
         self.assertIn("你好呀 今天吃什么", voice)
+
+    def test_voice_stt_backend(self):
+        self.assertEqual(normalize_voice_stt_backend("qq"), "qq")
+        self.assertEqual(normalize_voice_stt_backend(" LOCAL "), "local")
+        self.assertEqual(normalize_voice_stt_backend("bad"), "auto")
+        self.assertEqual(normalize_voice_stt_backend(""), "auto")
+        self.assertEqual(voice_stt_order("auto"), ("qq", "local"))
+        self.assertEqual(voice_stt_order("qq"), ("qq",))
+        self.assertEqual(voice_stt_order("local"), ("local",))
+        self.assertEqual(extract_ptt_text({"text": " 你好 "}), "你好")
+        self.assertEqual(extract_ptt_text({"data": {"text": "在吗"}}), "在吗")
+        self.assertEqual(extract_ptt_text({"text": ""}), "")
+        self.assertEqual(extract_ptt_text(None), "")
 
     def test_sheet_rows(self):
         self.assertEqual(sheet_rows(1, 3), 1)

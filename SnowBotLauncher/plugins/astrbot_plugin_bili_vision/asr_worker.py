@@ -21,14 +21,38 @@ def main() -> int:
     parser.add_argument("--language", default="")
     parser.add_argument("--initial-prompt", default="")
     parser.add_argument("--download-root", default="")
+    parser.add_argument("--check-speech", action="store_true")
+    parser.add_argument("--min-speech-seconds", type=float, default=1.0)
     args = parser.parse_args()
     try:
         import numpy as np
-        from faster_whisper import WhisperModel
 
         with wave.open(args.wav, "rb") as w:
             audio = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
             audio = audio.astype(np.float32) / 32768.0
+        if args.check_speech:
+            from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+            chunks = get_speech_timestamps(audio, VadOptions())
+            seconds = sum(
+                max(0.0, float(item.get("end", 0)) - float(item.get("start", 0)))
+                for item in chunks
+            )
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "has_speech": seconds >= max(0.0, args.min_speech_seconds),
+                        "speech_seconds": round(seconds, 2),
+                        "duration": round(len(audio) / 16000.0, 2),
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            return 0
+        from faster_whisper import WhisperModel
+
         kwargs = {}
         if args.download_root:
             kwargs["download_root"] = args.download_root
