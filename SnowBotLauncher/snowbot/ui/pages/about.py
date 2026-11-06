@@ -12,10 +12,7 @@ class AboutMixin:
         layout.setContentsMargins(8, 12, 8, 8)
         text = QPlainTextEdit()
         text.setReadOnly(True)
-        text.setStyleSheet(
-            'font-family: "Microsoft YaHei UI"; font-size: 13px; color:#cbd5e1;'
-            "background: #0a1020; border: 1px solid #1c2740; border-radius: 12px;"
-        )
+        text.setStyleSheet('font-family: "Microsoft YaHei UI"; font-size: 13px;')
         snow = str(self.cfg.get("qq_backend") or "napcat") == "snowluma"
         proto = "SnowLuma" if snow else "NapCat"
         proto_port = (

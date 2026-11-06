@@ -1,7 +1,9 @@
 """通用界面组件。"""
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QFrame,
+    QGraphicsDropShadowEffect,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -12,11 +14,18 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from snowbot.ui.theme import MUTED_COLOR, STATUS_COLORS, _darken
+
 
 class Card(QFrame):
     def __init__(self, accent: str, letter: str, title: str, subtitle: str):
         super().__init__()
         self.setObjectName("card")
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(26)
+        shadow.setOffset(0, 6)
+        shadow.setColor(QColor(15, 23, 42, 26))
+        self.setGraphicsEffect(shadow)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 18)
         layout.setSpacing(14)
@@ -27,7 +36,8 @@ class Card(QFrame):
         icon.setFixedSize(44, 44)
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet(
-            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {accent}, stop:1 #7c5cff);"
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+            f" stop:0 {accent}, stop:1 {_darken(accent)});"
             "border-radius: 12px; color: white; font-size: 21px; font-weight: 700;"
         )
         head.addWidget(icon)
@@ -44,7 +54,7 @@ class Card(QFrame):
         head.addStretch(1)
 
         self.status_dot = QLabel("●")
-        self.status_dot.setStyleSheet("color:#64748b; font-size: 14px;")
+        self.status_dot.setStyleSheet(f"color:{MUTED_COLOR}; font-size: 14px;")
         self.status_text = QLabel("已停止")
         self.status_text.setObjectName("muted")
         head.addWidget(self.status_dot)
@@ -71,14 +81,8 @@ class Card(QFrame):
         self.grid.setColumnStretch(1, 1)
 
     def set_status(self, kind: str, text: str):
-        colors = {
-            "on": "#22c55e",
-            "starting": "#f59e0b",
-            "off": "#64748b",
-            "error": "#ef4444",
-        }
         self.status_dot.setStyleSheet(
-            f"color:{colors.get(kind, '#64748b')}; font-size: 14px;"
+            f"color:{STATUS_COLORS.get(kind, MUTED_COLOR)}; font-size: 14px;"
         )
         self.status_text.setText(text)
         self.status_text.setObjectName("value" if kind == "on" else "muted")

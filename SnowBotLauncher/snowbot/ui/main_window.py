@@ -27,7 +27,7 @@ from snowbot.ui.pages.console import ConsoleMixin
 from snowbot.ui.pages.enhance import EnhanceTab
 from snowbot.ui.pages.packs import PacksMixin
 from snowbot.ui.pages.settings import SettingsMixin
-from snowbot.ui.theme import make_app_icon
+from snowbot.ui.theme import OK_COLOR, WARN_COLOR, make_app_icon
 from snowbot.ui.widgets import scroll_page
 
 
@@ -85,11 +85,16 @@ class LauncherWindow(
         outer.setSpacing(14)
 
         header = QHBoxLayout()
+        header.setSpacing(10)
+        brand = QLabel()
+        brand.setPixmap(make_app_icon().pixmap(42, 42))
+        brand.setFixedSize(42, 42)
+        header.addWidget(brand, 0, Qt.AlignmentFlag.AlignVCenter)
         titles = QVBoxLayout()
         titles.setSpacing(2)
         title = QLabel(APP_NAME)
         title.setObjectName("title")
-        sub = QLabel("AstrBot + NapCat 统一启停 / 配置包 / 增强配置 / 后台挂起")
+        sub = QLabel("AstrBot + QQ 协议端 统一启停 / 配置包 / 增强配置 / 后台挂起")
         sub.setObjectName("subtitle")
         titles.addWidget(title)
         titles.addWidget(sub)
@@ -127,6 +132,7 @@ class LauncherWindow(
             outer.addWidget(banner)
 
         self.tabs = QTabWidget()
+        self.tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         outer.addWidget(self.tabs, 1)
 
         self.tabs.addTab(self._build_console_tab(), "控制台")
@@ -247,7 +253,7 @@ class LauncherWindow(
     def _toast(self, msg: str, ok: bool = True):
         self.hint_lbl.setText(("✔ " if ok else "⚠ ") + msg)
         self.hint_lbl.setStyleSheet(
-            "color:#4ade80;" if ok else "color:#fbbf24;"
+            f"color:{OK_COLOR};" if ok else f"color:{WARN_COLOR};"
         )
         if self.tray and self.isHidden():
             self.tray.showMessage(

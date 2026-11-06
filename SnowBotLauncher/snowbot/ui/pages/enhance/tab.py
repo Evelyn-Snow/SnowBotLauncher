@@ -20,6 +20,7 @@ from .common import (
     scroll_page,
     urlsplit,
 )
+from snowbot.ui.theme import OK_COLOR, WARN_COLOR
 from .persona import PersonaMixin
 from .search import SearchMixin
 from .meme import MemeMixin
@@ -91,9 +92,9 @@ class EnhanceTab(
     def _set_status(self, text: str, ok: bool | None = None):
         self.status.setText(text)
         if ok is True:
-            self.status.setStyleSheet("color:#4ade80;")
+            self.status.setStyleSheet(f"color:{OK_COLOR};")
         elif ok is False:
-            self.status.setStyleSheet("color:#fbbf24;")
+            self.status.setStyleSheet(f"color:{WARN_COLOR};")
         else:
             self.status.setObjectName("muted")
             self.status.setStyleSheet("")
@@ -271,7 +272,7 @@ class EnhanceTab(
             ]
             self.conn_label.setText("已连接")
             self.conn_label.setToolTip("平台：" + (platforms[0] if platforms else "未找到"))
-            self.conn_label.setStyleSheet("color:#4ade80;")
+            self.conn_label.setStyleSheet(f"color:{OK_COLOR};")
             self.pw_edit.clear()
             self._load_owner_from_profile()
             self._populate_personas()

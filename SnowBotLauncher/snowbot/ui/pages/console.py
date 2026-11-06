@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from snowbot.core.config import is_admin
 from snowbot.core.paths import APP_NAME, LOG_DIR
 from snowbot.core.services import tail_text
+from snowbot.ui.theme import MUTED_COLOR, OK_COLOR, PILL_IDLE, PILL_OK, PILL_WARN, WARN_COLOR, pill_style
 from snowbot.ui.widgets import Card, link_button, scroll_page
 
 
@@ -37,7 +38,7 @@ class ConsoleMixin:
         top = QWidget()
         top_layout = QVBoxLayout(top)
         top_layout.setContentsMargins(0, 0, 0, 0)
-        top_layout.setSpacing(14)
+        top_layout.setSpacing(12)
 
         cards = QHBoxLayout()
         cards.setSpacing(14)
@@ -134,7 +135,12 @@ class ConsoleMixin:
             self.napcat_card.buttons.addWidget(b)
         cards.addWidget(self.napcat_card, 1)
 
-        top_layout.addLayout(cards)
+        cards_host = QWidget()
+        cards_host_layout = QVBoxLayout(cards_host)
+        cards_host_layout.setContentsMargins(0, 0, 0, 0)
+        cards_host_layout.addLayout(cards)
+        cards_host_layout.addStretch(1)
+        top_layout.addWidget(scroll_page(cards_host, 150), 1)
 
         quick = QHBoxLayout()
         quick.setSpacing(10)
@@ -153,12 +159,10 @@ class ConsoleMixin:
         self.hint_lbl.setWordWrap(True)
         quick.addWidget(self.hint_lbl, 1)
         top_layout.addLayout(quick)
-        top_layout.addStretch(1)
 
         splitter = QSplitter(Qt.Orientation.Vertical)
         splitter.setChildrenCollapsible(False)
-        splitter.addWidget(scroll_page(top, 320))
-
+        splitter.addWidget(top)
         bottom = QWidget()
         bottom_layout = QVBoxLayout(bottom)
         bottom_layout.setContentsMargins(0, 0, 0, 0)
@@ -184,15 +188,17 @@ class ConsoleMixin:
 
         self.log_tabs = QTabWidget()
         self.log_tabs.setMinimumHeight(180)
+        self.log_tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.astrbot_log_view = self._make_log_view()
         self.napcat_log_view = self._make_log_view()
+        qq_label = "SnowLuma" if self.cfg.get("qq_backend") == "snowluma" else "NapCat"
         self.log_tabs.addTab(self.astrbot_log_view, "AstrBot")
-        self.log_tabs.addTab(self.napcat_log_view, "NapCat")
+        self.log_tabs.addTab(self.napcat_log_view, qq_label)
         bottom_layout.addWidget(self.log_tabs, 1)
         splitter.addWidget(bottom)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([320, 220])
+        splitter.setSizes([360, 210])
         layout.addWidget(splitter, 1)
 
         return page
@@ -268,13 +274,13 @@ class ConsoleMixin:
                 pass
         if conn:
             self.conn_lbl.setText("已连接 AstrBot")
-            self.conn_lbl.setStyleSheet("color:#4ade80;")
+            self.conn_lbl.setStyleSheet(f"color:{OK_COLOR};")
         elif napcat_up:
             self.conn_lbl.setText("等待连接…")
-            self.conn_lbl.setStyleSheet("color:#f59e0b;")
+            self.conn_lbl.setStyleSheet(f"color:{WARN_COLOR};")
         else:
             self.conn_lbl.setText("未连接")
-            self.conn_lbl.setStyleSheet("color:#94a3b8;")
+            self.conn_lbl.setStyleSheet(f"color:{MUTED_COLOR};")
 
         token = st["token"] or "—"
         self._token = st["token"]
@@ -293,28 +299,16 @@ class ConsoleMixin:
         running = int(astrbot_up) + int(napcat_up)
         if running == 2 and conn:
             self.header_pill.setText("● 全部运行中 · 连接正常")
-            self.header_pill.setStyleSheet(
-                "background:#0e2a1c; color:#4ade80; border:1px solid #1a4a2e;"
-                "border-radius:14px; padding:5px 16px; font-weight:600;"
-            )
+            self.header_pill.setStyleSheet(pill_style(PILL_OK))
         elif running == 2:
             self.header_pill.setText("● 服务运行中 · 等待连接")
-            self.header_pill.setStyleSheet(
-                "background:#2a2210; color:#fcd34d; border:1px solid #6b5214;"
-                "border-radius:14px; padding:5px 16px; font-weight:600;"
-            )
+            self.header_pill.setStyleSheet(pill_style(PILL_WARN))
         elif running == 1:
             self.header_pill.setText("● 部分运行")
-            self.header_pill.setStyleSheet(
-                "background:#2a2210; color:#fcd34d; border:1px solid #6b5214;"
-                "border-radius:14px; padding:5px 16px; font-weight:600;"
-            )
+            self.header_pill.setStyleSheet(pill_style(PILL_WARN))
         else:
             self.header_pill.setText("● 全部已停止")
-            self.header_pill.setStyleSheet(
-                "background:#131c30; color:#9aa7bf; border:1px solid #263450;"
-                "border-radius:14px; padding:5px 16px; font-weight:600;"
-            )
+            self.header_pill.setStyleSheet(pill_style(PILL_IDLE))
 
         self.btn_start_all.setEnabled(running < 2)
         self.btn_stop_all.setEnabled(running > 0 or qq_running)

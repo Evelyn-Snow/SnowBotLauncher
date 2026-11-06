@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from snowbot.ui.theme import MUTED_COLOR
 from .common import (
     ApiError,
     APP_DIR,
@@ -76,7 +77,9 @@ class ExtendMixin:
         form.setSpacing(9)
         self._ext_rows: dict[str, tuple[QLabel, QPushButton]] = {}
         for name, display in EXT_PLUGINS:
-            name_label = QLabel(f"<b>{display}</b><br><span style='color:#8b93a7'>{name}</span>")
+            name_label = QLabel(
+                f"<b>{display}</b><br><span style='color:{MUTED_COLOR}'>{name}</span>"
+            )
             status = QLabel("未连接")
             status.setObjectName("muted")
             button = QPushButton("一键安装")
