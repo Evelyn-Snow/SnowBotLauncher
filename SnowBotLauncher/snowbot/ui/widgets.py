@@ -32,15 +32,11 @@ class Card(QFrame):
 
         head = QHBoxLayout()
         head.setSpacing(12)
-        icon = QLabel(letter)
-        icon.setFixedSize(44, 44)
-        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet(
-            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            f" stop:0 {accent}, stop:1 {_darken(accent)});"
-            "border-radius: 12px; color: white; font-size: 21px; font-weight: 700;"
-        )
-        head.addWidget(icon)
+        self.icon_label = QLabel(letter)
+        self.icon_label.setFixedSize(44, 44)
+        self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        head.addWidget(self.icon_label)
+        self.set_icon(letter, accent)
 
         titles = QVBoxLayout()
         titles.setSpacing(1)
@@ -72,6 +68,15 @@ class Card(QFrame):
         layout.addLayout(self.buttons)
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_icon(self, letter: str, accent: str):
+        """更新卡片图标字母与主色（协议端切换时用）。"""
+        self.icon_label.setText(letter)
+        self.icon_label.setStyleSheet(
+            f"background: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+            f" stop:0 {accent}, stop:1 {_darken(accent)});"
+            "border-radius: 12px; color: white; font-size: 21px; font-weight: 700;"
+        )
 
     def add_row(self, row: int, name: str, widget: QWidget):
         label = QLabel(name)

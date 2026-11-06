@@ -27,6 +27,12 @@ from snowbot.core.services import tail_text
 from snowbot.ui.theme import MUTED_COLOR, OK_COLOR, PILL_IDLE, PILL_OK, PILL_WARN, WARN_COLOR, pill_style
 from snowbot.ui.widgets import Card, link_button, scroll_page
 
+# 协议端卡片身份：(图标字母, 主色)
+QQ_CARD_BRANDS = {
+    "snowluma": ("S", "#0ea5e9"),
+    "napcat": ("N", "#10b981"),
+}
+
 
 class ConsoleMixin:
     def _build_console_tab(self):
@@ -81,8 +87,11 @@ class ConsoleMixin:
             self.astrbot_card.buttons.addWidget(b)
         cards.addWidget(self.astrbot_card, 1)
 
-        # NapCat 卡片
-        self.napcat_card = Card("#10b981", "N", "NapCat", "QQ 协议端（OneBot v11）")
+        # NapCat / SnowLuma 卡片
+        snowluma = str(self.cfg.get("qq_backend") or "napcat") == "snowluma"
+        letter, accent = QQ_CARD_BRANDS["snowluma" if snowluma else "napcat"]
+        qq_name = "SnowLuma" if snowluma else "NapCat"
+        self.napcat_card = Card(accent, letter, qq_name, "QQ 协议端（OneBot v11）")
         self.napcat_status_lbl = QLabel("—")
         self.napcat_status_lbl.setObjectName("value")
         self.napcat_card.add_row(0, "状态", self.napcat_status_lbl)
@@ -191,9 +200,8 @@ class ConsoleMixin:
         self.log_tabs.tabBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.astrbot_log_view = self._make_log_view()
         self.napcat_log_view = self._make_log_view()
-        qq_label = "SnowLuma" if self.cfg.get("qq_backend") == "snowluma" else "NapCat"
         self.log_tabs.addTab(self.astrbot_log_view, "AstrBot")
-        self.log_tabs.addTab(self.napcat_log_view, qq_label)
+        self.log_tabs.addTab(self.napcat_log_view, qq_name)
         bottom_layout.addWidget(self.log_tabs, 1)
         splitter.addWidget(bottom)
         splitter.setStretchFactor(0, 0)
@@ -225,6 +233,8 @@ class ConsoleMixin:
         webui = st.get("qq_webui") or f"http://127.0.0.1:{self.cfg['napcat_port']}"
         self.napcat_card.title_label.setText(backend_label)
         self.napcat_card.sub_label.setText("QQ 协议端（OneBot v11）")
+        letter, accent = QQ_CARD_BRANDS.get(backend, QQ_CARD_BRANDS["napcat"])
+        self.napcat_card.set_icon(letter, accent)
 
         self._check_qq_health(st, conn, napcat_up)
 
