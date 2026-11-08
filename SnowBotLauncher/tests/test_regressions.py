@@ -39,10 +39,12 @@ from plugins.astrbot_plugin_bili_vision.subtitles import (  # noqa: E402
 from plugins.astrbot_plugin_snow_burst.library import (  # noqa: E402
     chunk_parts,
     continuity_score,
+    face_label,
     group_parts,
     merge_contexts,
     merge_texts,
     merge_user_messages,
+    render_face_ids,
     should_extend,
 )
 from plugins.astrbot_plugin_share_card.library import (  # noqa: E402
@@ -2934,6 +2936,21 @@ class SnowBurstTests(unittest.TestCase):
     def test_merge_texts_dedupes_adjacent(self):
         self.assertEqual(merge_texts(["a", "", "a", "b"]), "a\nb")
         self.assertEqual(merge_texts(["  第一句  ", "第二句"]), "第一句\n第二句")
+
+    def test_face_labels(self):
+        self.assertEqual(face_label(13), "[表情:呲牙]")
+        self.assertEqual(face_label(14), "[表情:微笑]")
+        self.assertEqual(face_label(999), "[表情:999]")
+        self.assertEqual(face_label(None), "")
+        self.assertEqual(face_label("bad"), "")
+        self.assertEqual(render_face_ids([13, 14, 999]), "[表情:呲牙] [表情:微笑] [表情:999]")
+        self.assertEqual(render_face_ids([]), "")
+
+    def test_profile_face_label_matches(self):
+        from plugins.astrbot_plugin_snow_profile.library import face_label as pfl
+
+        self.assertEqual(pfl(13), face_label(13))
+        self.assertEqual(pfl(64), "[表情:心碎]")
 
     def test_merge_user_contexts(self):
         contexts = [

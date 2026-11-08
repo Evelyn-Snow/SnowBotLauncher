@@ -24,6 +24,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.message_components import (
     At,
+    Face,
     File,
     Image,
     Json,
@@ -39,6 +40,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from .library import (
     chunk_parts,
     continuity_score,
+    face_label,
     group_parts,
     merge_contexts,
     merge_texts,
@@ -47,7 +49,18 @@ from .library import (
 
 NAME = "astrbot_plugin_snow_burst"
 _MEDIA = (Image, Record, File, Video, Json)
-_KEEP = (Image, Record, File, Video, Json, At, Reply, Poke)
+_KEEP = (Image, Record, File, Video, Json, At, Reply, Poke, Face)
+
+
+def _face_text(event: AstrMessageEvent) -> str:
+    """把消息链里的 QQ 小黄脸渲染成 [表情:名]，message_str 不含它们。"""
+    components = getattr(event.message_obj, "message", None) or []
+    labels = [
+        face_label(comp.id)
+        for comp in components
+        if isinstance(comp, Face)
+    ]
+    return " ".join(labels)
 
 
 @dataclass
@@ -113,6 +126,10 @@ class SnowBurst(Star):
             return
 
         text = str(event.message_str or "").strip()
+        faces = _face_text(event)
+        if faces:
+            # message_str 不含表情：补进文本，纯表情消息才不会被当成空消息跳过
+            text = f"{text} {faces}".strip() if text else faces
         if text.startswith(("/", "！", "!")):
             return
         components = getattr(event.message_obj, "message", None) or []

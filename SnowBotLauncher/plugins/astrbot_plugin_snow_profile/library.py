@@ -258,6 +258,28 @@ def familiarity_guidance(level: str) -> str:
 INTRO_MARK = "[引荐]"
 VERIFY_MARK = "[身份核实]"
 
+# QQ 小黄脸常用 id → 名称（与 snow_burst 同一份经典段，两个插件独立部署不共享代码）。
+# AstrBot 的 message_str 不含 Face 组件，观察和验证都靠这里补全；没收录的按 id 渲染。
+FACE_NAMES = {
+    0: "惊讶", 1: "撇嘴", 2: "色", 3: "发呆", 4: "得意", 5: "流泪",
+    6: "害羞", 7: "闭嘴", 8: "睡", 9: "大哭", 10: "尴尬", 11: "发怒",
+    12: "调皮", 13: "呲牙", 14: "微笑", 15: "难过", 16: "酷", 17: "抓狂",
+    18: "吐", 19: "偷笑", 20: "可爱", 21: "白眼", 22: "傲慢", 23: "饥饿",
+    24: "困", 25: "惊恐", 26: "流汗", 27: "憨笑", 28: "悠闲", 29: "奋斗",
+    30: "咒骂", 31: "疑问", 32: "嘘", 33: "晕",
+    46: "委屈", 47: "快哭了", 49: "亲亲",
+    60: "玫瑰", 63: "爱心", 64: "心碎",
+}
+
+
+def face_label(face_id) -> str:
+    try:
+        face_id = int(face_id)
+    except (TypeError, ValueError):
+        return ""
+    name = FACE_NAMES.get(face_id)
+    return f"[表情:{name}]" if name else f"[表情:{face_id}]"
+
 _INTRO_TYPE_WORDS = (
     ("同事", "同事"),
     ("同学", "同学"),

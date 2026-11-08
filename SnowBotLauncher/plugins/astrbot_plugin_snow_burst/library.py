@@ -78,6 +78,45 @@ def merge_texts(texts: list[str]) -> str:
     return "\n".join(out)
 
 
+# ---------------- QQ 小黄脸表情 ----------------
+# AstrBot 的 message_str 不含 Face 组件：纯表情消息文本为空，主流程会当成
+# 空消息直接跳过 LLM。这里把常见表情渲染成 [表情:名]，让她能看见。
+# 映射只收录高置信的经典段；不在表里的表情按 [表情:id] 渲染，不猜名字。
+
+FACE_NAMES = {
+    0: "惊讶", 1: "撇嘴", 2: "色", 3: "发呆", 4: "得意", 5: "流泪",
+    6: "害羞", 7: "闭嘴", 8: "睡", 9: "大哭", 10: "尴尬", 11: "发怒",
+    12: "调皮", 13: "呲牙", 14: "微笑", 15: "难过", 16: "酷", 17: "抓狂",
+    18: "吐", 19: "偷笑", 20: "可爱", 21: "白眼", 22: "傲慢", 23: "饥饿",
+    24: "困", 25: "惊恐", 26: "流汗", 27: "憨笑", 28: "悠闲", 29: "奋斗",
+    30: "咒骂", 31: "疑问", 32: "嘘", 33: "晕",
+    46: "委屈", 47: "快哭了", 49: "亲亲",
+    60: "玫瑰", 63: "爱心", 64: "心碎",
+}
+
+
+def face_name(face_id) -> str:
+    try:
+        return FACE_NAMES.get(int(face_id), "")
+    except (TypeError, ValueError):
+        return ""
+
+
+def face_label(face_id) -> str:
+    try:
+        face_id = int(face_id)
+    except (TypeError, ValueError):
+        return ""
+    name = FACE_NAMES.get(face_id)
+    return f"[表情:{name}]" if name else f"[表情:{face_id}]"
+
+
+def render_face_ids(ids: list) -> str:
+    """把一串表情 id 渲染成人话文本；空列表返回空串。"""
+    labels = [face_label(fid) for fid in (ids or []) if face_label(fid)]
+    return " ".join(labels)
+
+
 def _content_parts(content) -> list[dict]:
     if isinstance(content, str):
         return [{"type": "text", "text": content}] if content else []

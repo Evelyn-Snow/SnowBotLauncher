@@ -24,7 +24,7 @@ from pathlib import Path
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.message_components import At, Plain
+from astrbot.api.message_components import At, Face, Plain
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -53,6 +53,7 @@ from .library import (
     evidence_speakers,
     extract_impression,
     extract_score,
+    face_label,
     familiarity_guidance,
     familiarity_level,
     find_relation_edge,
@@ -395,6 +396,10 @@ class SnowProfile(Star):
         if not self._enabled():
             return
         user_text = str(getattr(event, "message_str", "") or "").strip()
+        faces = self._face_text(event, user_text)
+        if faces:
+            # 合流消息的 message_str 已带表情渲染，这里只补漏（burst 关闭时）
+            user_text = f"{user_text} {faces}".strip() if user_text else faces
         reply_text = str(getattr(resp, "completion_text", "") or "").strip()
         if not user_text or not reply_text or user_text.startswith(("/", "！")):
             return
@@ -852,6 +857,18 @@ class SnowProfile(Star):
         logger.info(f"[{NAME}] 引荐生效：{rtype}「{name or qq}」已关联（{owner or '未配置 owner_session'}）")
 
     # ---------------- 关系网采集与推断 ----------------
+    @staticmethod
+    def _face_text(event: AstrMessageEvent, existing: str = "") -> str:
+        """把消息链里的 QQ 小黄脸渲染成 [表情:名]；message_str 不含它们。"""
+        components = getattr(event.message_obj, "message", None) or []
+        labels = []
+        for comp in components:
+            if isinstance(comp, Face):
+                label = face_label(comp.id)
+                if label and label not in existing:
+                    labels.append(label)
+        return " ".join(labels)
+
     @filter.event_message_type(
         filter.EventMessageType.ALL, priority=(1 << 31) + 20
     )
@@ -870,6 +887,9 @@ class SnowProfile(Star):
         ):
             return
         text = str(event.message_str or "").strip()
+        faces = self._face_text(event, text)
+        if faces:
+            text = f"{text} {faces}".strip() if text else faces
         if not text or text.startswith(("/", "！", "!")):
             return
         sender = str(event.get_sender_id() or "")
