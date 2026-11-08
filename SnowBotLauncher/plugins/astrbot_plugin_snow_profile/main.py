@@ -43,10 +43,12 @@ from .library import (
     clean_llm_markdown,
     clean_relation_item,
     clean_suspicion_item,
+    code_matches,
     compute_familiarity,
     current_timeline_item,
     activity_allows_proactive,
     activity_line,
+    detect_relation_claim,
     effective_confidence,
     evidence_speakers,
     extract_impression,
@@ -54,15 +56,12 @@ from .library import (
     familiarity_guidance,
     familiarity_level,
     find_relation_edge,
-    fresh_endorsements,
     gossip_candidates,
     gossip_fallback_question,
-    has_intro_cue,
     has_relation_cue,
     in_quiet_hours,
     in_time_windows,
     intro_injection,
-    intro_type_from_text,
     looks_like_profile,
     merge_name_history,
     merge_relation_items,
@@ -71,10 +70,12 @@ from .library import (
     moral_injection,
     moral_level,
     moral_section,
+    parse_owner_verify_reply,
     parse_profile,
     parse_relation_bundle,
     pick_today_plan,
     profile_summary,
+    rejected_injection,
     relation_injection,
     render_profile,
     should_ignore,
@@ -82,6 +83,7 @@ from .library import (
     smooth_score,
     split_moral_section,
     strip_impression,
+    verify_injection,
 )
 from .privacy import (
     build_id_map,
@@ -678,74 +680,176 @@ class SnowProfile(Star):
             max(120, int(self._cfg("shared_inject_limit_chars", 600))),
         )
 
-    # ---------------- 主人引荐 ----------------
-    def _observe_intro(self, sender: str, name: str, text: str, umo: str) -> None:
-        """管理员说「我朋友/同事来加你」记一条引荐；新人冒头时兑现成关系边。"""
-        state = self._load_state()
-        window = max(1, int(self._cfg("intro_window_days", 14)))
+    # ---------------- 新朋友身份核实 ----------------
+    # 替代旧的「时间窗自动信任」：新朋友要么对上哥哥的暗号，要么自称关系后
+    # 由管理员本人回复「同意 QQ号」核实，任一通过才标记为哥哥介绍的熟人。
+    VERIFY_MAX_ATTEMPTS = 8
+    VERIFY_TTL_SECONDS = 24 * 3600
+
+    def _owner_qq(self) -> str:
+        owner = str(self._cfg("owner_session", "") or "").strip()
+        return owner.rsplit(":", 1)[-1] if owner else ""
+
+    def _verify_of(self, qq: str) -> dict:
+        entry = (self._load_state().get("users") or {}).get(qq)
+        verify = entry.get("verify") if isinstance(entry, dict) else None
+        return verify if isinstance(verify, dict) else {}
+
+    def _is_verify_candidate(self, qq: str) -> bool:
+        """可验证对象：没有画像、没聊过天（state 里只有 verify 记录）的新人。"""
+        if (Path(self._profiles_dir()) / f"{qq}.md").exists():
+            return False
+        entry = (self._load_state().get("users") or {}).get(qq)
+        if isinstance(entry, dict) and (
+            entry.get("intro") or int(entry.get("total_messages") or 0) > 0
+        ):
+            return False
+        return True
+
+    def _observe_verify(self, sender: str, name: str, text: str, umo: str) -> None:
         if self._is_admin_qq(sender):
-            if not has_intro_cue(text):
-                return
-            rtype = intro_type_from_text(text)
-            pending = state.setdefault("intro_endorsements", [])
-            pending.append(
+            reply = parse_owner_verify_reply(text)
+            if reply:
+                action, target = reply
+                self._finish_verify(action, target, sender, umo)
+            return
+        if not self._is_verify_candidate(sender):
+            return
+        verify = self._verify_of(sender)
+        stage = str(verify.get("stage") or "")
+        now = time.time()
+        # 路径一：对暗号
+        code = str(self._cfg("intro_code", "") or "").strip()
+        if code and code_matches(code, text):
+            claim = str(verify.get("claim") or "") or detect_relation_claim(text)
+            self._link_intro(
                 {
-                    "type": rtype,
-                    "ts": time.time(),
-                    "owner": sender,
-                    "quote": text[:80],
-                    "scope": umo,
-                }
+                    "owner": self._owner_qq(),
+                    "type": claim or "朋友",
+                    "detail": "暗号对上，哥哥介绍来的",
+                    "quote": "新朋友说出了哥哥给的暗号（内容不记录）",
+                },
+                sender,
+                name,
+                umo,
             )
-            state["intro_endorsements"] = fresh_endorsements(
-                pending, time.time(), window
-            )[-10:]
+            self._user_state(sender)["verify"] = {
+                "stage": "passed",
+                "ts": now,
+                "claim": claim,
+            }
             self._save_state()
-            logger.info(f"[{NAME}] 记录主人引荐：{rtype}（{text[:40]}）")
+            logger.info(f"[{NAME}] 暗号验证通过：「{name or sender}」标记为哥哥介绍的熟人")
             return
-        # 非管理员：只对真正的新人兑现（没有画像文件、state 里还没有记录）
-        if state.get("users", {}).get(sender):
+        # 路径二：自称关系 → 转管理员核实
+        claim = detect_relation_claim(text)
+        if claim and stage not in ("asked", "await_owner"):
+            verify = {
+                "stage": "asked",
+                "claim": claim,
+                "ts": now,
+                "attempts": int(verify.get("attempts") or 0),
+                "owner_notified": False,
+            }
+            self._user_state(sender)["verify"] = verify
+            self._save_state()
+            logger.info(f"[{NAME}] 新朋友自称{claim}，待核实：「{name or sender}」")
+        if stage == "asked":
+            verify["attempts"] = int(verify.get("attempts") or 0) + 1
+            if (
+                verify["attempts"] > self.VERIFY_MAX_ATTEMPTS
+                or now - float(verify.get("ts") or now) > self.VERIFY_TTL_SECONDS
+            ):
+                verify["stage"] = "expired"
+                logger.info(f"[{NAME}] 身份核实超时：「{name or sender}」按陌生人处理")
+            self._save_state()
+        if (
+            isinstance(verify, dict)
+            and verify.get("stage") == "asked"
+            and not verify.get("owner_notified")
+        ):
+            verify["owner_notified"] = True
+            self._save_state()
+            asyncio.create_task(self._ask_owner_verify(sender, name, str(verify.get("claim") or "")))
+
+    async def _ask_owner_verify(self, qq: str, name: str, claim: str) -> None:
+        owner_umo = str(self._cfg("owner_session", "") or "").strip()
+        if not owner_umo:
             return
-        if (Path(self._profiles_dir()) / f"{sender}.md").exists():
-            return
-        pending = fresh_endorsements(
-            state.get("intro_endorsements") or [], time.time(), window
+        label = claim or "熟人"
+        text = (
+            f"【身份核实】有位新朋友「{name or qq}」（QQ：{qq}）自称是你的{label}。"
+            f"回复「同意 {qq}」确认，或「拒绝 {qq}」。"
         )
-        if not pending:
+        await self._send_proactive(owner_umo, text)
+
+    def _finish_verify(
+        self, action: str, qq: str, admin_qq: str, umo: str
+    ) -> None:
+        """管理员回复同意/拒绝，落定验证结果。"""
+        if not qq.isdigit() or not self._is_verify_candidate(qq):
             return
-        latest = max(pending, key=lambda p: float(p.get("ts") or 0))
-        self._link_intro(latest, sender, name, umo)
+        verify = self._verify_of(qq)
+        if action == "confirm":
+            claim = str(verify.get("claim") or "") or "朋友"
+            self._link_intro(
+                {
+                    "owner": admin_qq,
+                    "type": claim,
+                    "detail": "哥哥本人核实确认",
+                    "quote": "管理员回复确认了这层关系",
+                },
+                qq,
+                "",
+                umo,
+            )
+            self._user_state(qq)["verify"] = {
+                "stage": "passed",
+                "ts": time.time(),
+                "claim": claim,
+            }
+            logger.info(f"[{NAME}] 管理员核实通过：{qq} 标记为{claim}")
+        else:
+            self._user_state(qq)["verify"] = {
+                "stage": "rejected",
+                "ts": time.time(),
+            }
+            logger.info(f"[{NAME}] 管理员拒绝核实：{qq} 按陌生人处理")
+        self._save_state()
 
     def _link_intro(self, endorsement: dict, qq: str, name: str, umo: str) -> None:
-        """把引荐兑现成关系网边 + 用户标记，之后注入按熟人保底对待。"""
+        """验证通过后：写关系网边 + 打引荐标记，之后注入按熟人保底对待。"""
         owner = str(endorsement.get("owner") or "")
         rtype = str(endorsement.get("type") or "朋友")
-        if not owner or not qq.isdigit() or owner == qq:
+        if not qq.isdigit() or owner == qq:
             return
         now = time.time()
-        names = {owner: self._id_map().get(owner) or "哥哥"}
-        if str(name or "").strip():
-            names[qq] = str(name).strip()
-        item = {
-            "a": owner,
-            "b": qq,
-            "action": "confirm",
-            "type": rtype if rtype in RELATION_TYPES else "朋友",
-            "confidence": 0.85,
-            "detail": "哥哥亲自介绍认识的",
-            "evidence": str(endorsement.get("quote") or "哥哥介绍来加好友的"),
-        }
-        with self._rel_lock:
-            relations = self._relations()
-            merge_relation_items(relations["edges"], [item], names, now, scope=umo)
-            self._save_relations()
+        if owner and owner.isdigit():
+            names = {owner: self._id_map().get(owner) or "哥哥"}
+            if str(name or "").strip():
+                names[qq] = str(name).strip()
+            item = {
+                "a": owner,
+                "b": qq,
+                "action": "confirm",
+                "type": rtype if rtype in RELATION_TYPES else "朋友",
+                "confidence": 0.85,
+                "detail": str(endorsement.get("detail") or "哥哥亲自介绍认识的"),
+                "evidence": str(endorsement.get("quote") or "哥哥介绍来加好友的"),
+            }
+            with self._rel_lock:
+                relations = self._relations()
+                merge_relation_items(
+                    relations["edges"], [item], names, now, scope=umo
+                )
+                self._save_relations()
         self._user_state(qq)["intro"] = {
-            "type": item["type"],
+            "type": rtype if rtype in RELATION_TYPES else "朋友",
             "ts": now,
             "owner": owner,
         }
         self._save_state()
-        logger.info(f"[{NAME}] 引荐生效：{owner} 介绍的{item['type']}「{name or qq}」已关联")
+        logger.info(f"[{NAME}] 引荐生效：{rtype}「{name or qq}」已关联（{owner or '未配置 owner_session'}）")
 
     # ---------------- 关系网采集与推断 ----------------
     @filter.event_message_type(
@@ -778,9 +882,9 @@ class SnowProfile(Star):
             pass
         if bool(self._cfg("intro_enabled", True)):
             try:
-                self._observe_intro(sender, name, text, umo)
+                self._observe_verify(sender, name, text, umo)
             except Exception as exc:
-                logger.warning(f"[{NAME}] 主人引荐处理失败：{exc}")
+                logger.warning(f"[{NAME}] 身份核实处理失败：{exc}")
         if not bool(self._cfg("relation_enabled", True)):
             return
         rows = self._rel_buffers.setdefault(umo, [])
@@ -1912,6 +2016,19 @@ class SnowProfile(Star):
             req.system_prompt += "\n\n" + redact_ids(
                 intro_injection(str(intro.get("type") or "朋友")), ids
             )
+        elif not self._is_admin_qq(qq) and bool(self._cfg("intro_enabled", True)):
+            verify = self._verify_of(qq)
+            stage = str(verify.get("stage") or "")
+            if stage in ("asked", "await_owner"):
+                req.system_prompt += "\n\n" + redact_ids(
+                    verify_injection(
+                        str(verify.get("claim") or ""),
+                        bool(str(self._cfg("intro_code", "") or "").strip()),
+                    ),
+                    ids,
+                )
+            elif stage == "rejected":
+                req.system_prompt += "\n\n" + redact_ids(rejected_injection(), ids)
         if bool(self._cfg("relation_enabled", True)):
             umo = str(event.unified_msg_origin or "")
             if umo and not umo.startswith("webchat:") and (

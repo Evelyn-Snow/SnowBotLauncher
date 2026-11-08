@@ -149,6 +149,20 @@ class SettingsMixin:
         bform.addWidget(self.chk_autostart)
         bform.addWidget(self.chk_auto_services)
         bform.addWidget(self.chk_quick_login)
+
+        code_row = QHBoxLayout()
+        code_row.setSpacing(8)
+        code_lbl = QLabel("熟人暗号")
+        self.intro_code = QLineEdit(str(self.cfg.get("intro_code") or ""))
+        self.intro_code.setPlaceholderText("新朋友说出即通过身份验证")
+        self.intro_code.setMinimumWidth(160)
+        code_hint = QLabel("小雪会用它核实「哥哥介绍来的朋友」；连接 AstrBot 后保存自动同步给画像插件")
+        code_hint.setObjectName("muted")
+        code_hint.setWordWrap(True)
+        code_row.addWidget(code_lbl)
+        code_row.addWidget(self.intro_code, 1)
+        bform.addLayout(code_row)
+        bform.addWidget(code_hint)
         layout.addWidget(behavior)
 
         maintenance = QGroupBox("维护")
@@ -277,6 +291,7 @@ class SettingsMixin:
                 "snowluma_webui_port": int(self.port_snowluma.value()),
                 "node_exe": self.node_exe.text().strip(),
                 "qq_exe": self.qq_exe.text().strip(),
+                "intro_code": self.intro_code.text().strip(),
             }
         )
         want_autostart = self.chk_autostart.isChecked()
@@ -305,7 +320,25 @@ class SettingsMixin:
                 str(self.cfg.get("napcat_dir") or "")
             ) / "logs"
         self._toast("设置已保存")
+        self._sync_intro_code()
         self.refresh_status()
+
+    def _sync_intro_code(self):
+        """已连接 AstrBot 时把熟人暗号同步给画像插件；未连接只存本地。"""
+        enhance = getattr(self, "enhance", None)
+        client = getattr(enhance, "client", None) if enhance else None
+        if client is None:
+            self._toast("暗号已保存，连接 AstrBot 后自动同步", ok=True)
+            return
+        try:
+            config = client.get_plugin_config("astrbot_plugin_snow_profile")
+            if str(config.get("intro_code") or "") == self.cfg.get("intro_code", ""):
+                return
+            config["intro_code"] = self.cfg.get("intro_code", "")
+            client.put_plugin_config("astrbot_plugin_snow_profile", config)
+            self._toast("暗号已同步到小雪的画像插件", ok=True)
+        except Exception as exc:
+            self._toast(f"暗号同步失败：{str(exc)[:80]}", ok=False)
 
     def reset_settings(self):
         defaults = default_config()

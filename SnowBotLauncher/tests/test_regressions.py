@@ -180,10 +180,10 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     extract_score,
     familiarity_guidance,
     familiarity_level,
-    fresh_endorsements,
+    code_matches,
+    detect_relation_claim,
     gossip_candidates,
     gossip_fallback_question,
-    has_intro_cue,
     has_relation_cue,
     in_time_windows,
     intro_injection,
@@ -197,11 +197,13 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     moral_level,
     moral_section,
     normalize_relation_type,
+    parse_owner_verify_reply,
     parse_profile,
     parse_relation_bundle,
     parse_relation_payload,
     pick_today_plan,
     profile_summary,
+    rejected_injection,
     relation_injection,
     render_profile,
     should_ignore,
@@ -209,6 +211,7 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     smooth_score,
     split_moral_section,
     strip_impression,
+    verify_injection,
 )
 from plugins.astrbot_plugin_snow_reply.library import (  # noqa: E402
     bigram_score,
@@ -1633,28 +1636,49 @@ class ProfileTests(unittest.TestCase):
         self.assertFalse(has_relation_cue("今天天气不错"))
 
     def test_intro_cue_and_type(self):
-        self.assertTrue(has_intro_cue("我找了几个好友同事来加你"))
-        self.assertTrue(has_intro_cue("这是我同事，想认识你"))
-        self.assertTrue(has_intro_cue("介绍个朋友给你认识"))
-        self.assertFalse(has_intro_cue("我今天和朋友吃饭去了"))
-        self.assertFalse(has_intro_cue("同事说我坏话"))
         self.assertEqual(intro_type_from_text("我找了几个好友同事来加你"), "朋友")
         self.assertEqual(intro_type_from_text("我同事一会儿来加你"), "同事")
         self.assertEqual(intro_type_from_text("给你介绍个同学认识"), "同学")
         self.assertEqual(intro_type_from_text("有个人要来加你"), "朋友")
 
-    def test_fresh_endorsements_window(self):
-        now = 1_000_000.0
-        pending = [
-            {"type": "同事", "ts": now - 100},
-            {"type": "朋友", "ts": now - 20 * 86400},
-            "坏数据",
-            {"ts": 0},
-        ]
-        fresh = fresh_endorsements(pending, now, window_days=14)
-        self.assertEqual(len(fresh), 1)
-        self.assertEqual(fresh[0]["type"], "同事")
-        self.assertEqual(fresh_endorsements([], now, 14), [])
+    def test_detect_relation_claim(self):
+        self.assertEqual(detect_relation_claim("我是哥哥的同事，来加你了"), "同事")
+        self.assertEqual(detect_relation_claim("你主人是我同学呀"), "同学")
+        self.assertEqual(detect_relation_claim("我是你的朋友呀"), "朋友")
+        self.assertEqual(detect_relation_claim("我是来交朋友的"), "")  # 不提哥哥不算
+        self.assertEqual(detect_relation_claim("今天天气不错"), "")
+        self.assertEqual(detect_relation_claim(""), "")
+
+    def test_code_matches(self):
+        code = "211314"
+        self.assertTrue(code_matches(code, "暗号是211314"))
+        self.assertTrue(code_matches(code, "2 1 1 3 1 4 ！"))  # 标点空格不算
+        self.assertTrue(code_matches(code, "哥哥说的是２１１３１４吧"))  # 全角
+        self.assertTrue(code_matches(code, "是不是2113l4"))  # 差一个字符的模糊匹配
+        self.assertFalse(code_matches(code, "123456"))
+        self.assertFalse(code_matches(code, "我是来交朋友的"))
+        self.assertFalse(code_matches("", "211314"))
+        self.assertTrue(code_matches("暗号", "我们的暗号是：暗号"))  # 短码只认包含
+
+    def test_parse_owner_verify_reply(self):
+        self.assertEqual(parse_owner_verify_reply("同意 1157423659"), ("confirm", "1157423659"))
+        self.assertEqual(parse_owner_verify_reply("确认：1157423659"), ("confirm", "1157423659"))
+        self.assertEqual(parse_owner_verify_reply("拒绝 1157423659"), ("reject", "1157423659"))
+        self.assertEqual(parse_owner_verify_reply("不是 1157423659"), ("reject", "1157423659"))
+        self.assertIsNone(parse_owner_verify_reply("同意"))  # 不带号不处理，避免误伤
+        self.assertIsNone(parse_owner_verify_reply("帮我同意他"))
+        self.assertIsNone(parse_owner_verify_reply(""))
+
+    def test_verify_and_reject_injection(self):
+        text = verify_injection("同事", True)
+        self.assertIn("[身份核实]", text)
+        self.assertIn("同事", text)
+        self.assertIn("暗号", text)
+        self.assertNotIn("211314", text)  # 暗号内容绝不进提示词
+        no_code = verify_injection("", False)
+        self.assertIn("什么关系", no_code)
+        self.assertNotIn("暗号", no_code)
+        self.assertIn("[身份核实]", rejected_injection())
 
     def test_apply_intro_floor(self):
         self.assertEqual(apply_intro_floor(5, 40), 40)

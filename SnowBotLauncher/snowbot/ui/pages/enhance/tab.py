@@ -99,6 +99,22 @@ class EnhanceTab(
             self.status.setObjectName("muted")
             self.status.setStyleSheet("")
 
+    def _sync_intro_code(self):
+        """连接成功后，把启动器里配置的熟人暗号同步给画像插件（有差异才推）。"""
+        client = self.client
+        want = str((self.cfg or {}).get("intro_code") or "")
+        if client is None:
+            return
+        try:
+            config = client.get_plugin_config("astrbot_plugin_snow_profile")
+            if str(config.get("intro_code") or "") == want:
+                return
+            config["intro_code"] = want
+            client.put_plugin_config("astrbot_plugin_snow_profile", config)
+            self._set_status("已把启动器里的熟人暗号同步给画像插件", True)
+        except Exception as exc:
+            self._set_status(f"熟人暗号同步失败：{str(exc)[:80]}", False)
+
     def _copy_result(self, text: str, what: str = "信息"):
         text = (text or "").strip()
         if not text:
@@ -273,6 +289,7 @@ class EnhanceTab(
             self.conn_label.setText("已连接")
             self.conn_label.setToolTip("平台：" + (platforms[0] if platforms else "未找到"))
             self.conn_label.setStyleSheet(f"color:{OK_COLOR};")
+            self._sync_intro_code()
             self.pw_edit.clear()
             self._load_owner_from_profile()
             self._populate_personas()

@@ -252,17 +252,11 @@ def familiarity_guidance(level: str) -> str:
 
 
 # ---------------- 主人引荐 ----------------
-# 哥哥（管理员）说「我找了几个朋友/同事来加你」之后，把窗口期内新出现的人
-# 关联为「哥哥介绍来的熟人」，替他们担保一层初始信任，别再按陌生人那样警惕。
+# 新朋友要么说出哥哥给的暗号（模糊匹配），要么自称关系后由哥哥本人核实，
+# 两条路任一通过才标记为「哥哥介绍来的熟人」，不再只凭时间窗口自动信任。
 
 INTRO_MARK = "[引荐]"
-
-_INTRO_CUES = re.compile(
-    r"(朋友|好友|同事|同学|室友).{0,12}(加你|认识你|来找你|私聊你)"
-    r"|(加你|认识你|来找你).{0,6}(朋友|好友|同事|同学|室友)"
-    r"|介绍.{0,8}(朋友|好友|同事|同学|室友|个人)"
-    r"|(朋友|好友|同事|同学|室友).{0,6}(介绍|引荐)"
-)
+VERIFY_MARK = "[身份核实]"
 
 _INTRO_TYPE_WORDS = (
     ("同事", "同事"),
@@ -272,9 +266,17 @@ _INTRO_TYPE_WORDS = (
     ("朋友", "朋友"),
 )
 
+# 新朋友自称和管理员有关系：提及哥哥/管理员/主人 + 关系词，或「我是你的XX」
+_CLAIM_RE = re.compile(
+    r"(哥哥|你哥|管理员|主人).{0,10}?(同事|同学|室友|朋友|好友|兄弟|闺蜜)"
+    r"|(我是|本人是).{0,4}?(你的|你们的).{0,4}?(同事|同学|室友|朋友|好友)"
+)
 
-def has_intro_cue(text: str) -> bool:
-    return bool(_INTRO_CUES.search(str(text or "")))
+# 管理员核实回复：「同意/确认 QQ号」「拒绝/不是 QQ号」；不带号不算，避免误伤其他指令
+_OWNER_VERIFY_RE = re.compile(
+    r"^\s*(同意|确认|是|对)\s*[:：]?\s*(\d{5,12})\s*$"
+    r"|^\s*(拒绝|不是|否)\s*[:：]?\s*(\d{5,12})\s*$"
+)
 
 
 def intro_type_from_text(text: str) -> str:
@@ -285,20 +287,58 @@ def intro_type_from_text(text: str) -> str:
     return min(hits)[1] if hits else "朋友"
 
 
-def fresh_endorsements(pending: list, now: float, window_days: int) -> list[dict]:
-    """过滤掉过期/损坏的引荐记录；不删除原记录，过期清理由调用方负责。"""
-    window = max(1, int(window_days or 14)) * 86400
-    out = []
-    for item in pending or []:
-        if not isinstance(item, dict):
-            continue
-        try:
-            ts = float(item.get("ts") or 0)
-        except (TypeError, ValueError):
-            continue
-        if ts > 0 and now - ts <= window:
-            out.append(item)
-    return out
+def detect_relation_claim(text: str) -> str:
+    """新朋友声称和管理员的关系；没有明确声称返回空。"""
+    match = _CLAIM_RE.search(str(text or ""))
+    if not match:
+        return ""
+    return intro_type_from_text(match.group(0))
+
+
+def parse_owner_verify_reply(text: str) -> tuple[str, str] | None:
+    """解析管理员对核实请求的回复，返回 ("confirm"/"reject", qq)；不匹配返回 None。"""
+    match = _OWNER_VERIFY_RE.match(str(text or "").strip())
+    if not match:
+        return None
+    if match.group(1):
+        return ("confirm", match.group(2))
+    return ("reject", match.group(4))
+
+
+_PUNCT_RE = re.compile(r"[\s，。！？、,.!?\"'“”‘’：:；;（）()\[\]【】<>《》~～…\-·*_]")
+
+
+def _normalize_code(text: str) -> str:
+    raw = str(text or "").strip().lower()
+    table = str.maketrans("０１２３４５６７８９ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ",
+                          "0123456789abcdefghijklmnopqrstuvwxyz")
+    return _PUNCT_RE.sub("", raw.translate(table))
+
+
+def code_matches(code: str, message: str, threshold: float = 0.72) -> bool:
+    """暗号模糊匹配：完全包含直接算；否则归一化后按相似度比（difflib，无新依赖）。
+
+    太短的暗号（<4 字）只接受包含匹配，避免一两句话就撞上。
+    """
+    want = _normalize_code(code)
+    got = _normalize_code(message)
+    if not want or not got:
+        return False
+    if want in got:
+        return True
+    if len(want) < 4:
+        return False
+    from difflib import SequenceMatcher
+
+    # 长消息整体相似度会被稀释，按暗号长度的窗口滑一遍取最大
+    window = max(len(want) + 6, int(len(want) * 1.8))
+    best = 0.0
+    for start in range(0, max(1, len(got) - len(want) + 1), max(1, len(want) // 3)):
+        piece = got[start : start + window]
+        best = max(best, SequenceMatcher(None, want, piece).ratio())
+        if best >= threshold:
+            return True
+    return best >= threshold
 
 
 def apply_intro_floor(score: int, floor: int) -> int:
@@ -317,9 +357,36 @@ def apply_intro_floor(score: int, floor: int) -> int:
 def intro_injection(rtype: str) -> str:
     label = rtype if rtype in RELATION_TYPES else "朋友"
     return (
-        f"{INTRO_MARK} 这位是哥哥亲自介绍认识的朋友（{label}）。"
+        f"{INTRO_MARK} 这位是哥哥亲自介绍认识的朋友（{label}），已经通过身份核实。"
         "把TA当成哥哥带来的熟人：态度自然放松、可以接梗开玩笑，不用像对陌生人那样客套提防；"
         "但你们俩还不熟，别主动打听TA的私事，也别因为哥哥介绍就无条件答应TA的要求。"
+    )
+
+
+def verify_injection(claim: str, code_enabled: bool) -> str:
+    """新朋友还没通过验证时注入的指引；让模型自然地问关系和暗号，别泄露暗号本身。"""
+    parts = [
+        f"{VERIFY_MARK} 这位新朋友还没验证身份。"
+        + (f"TA 自称是你的{claim}，" if claim else "")
+        + "你先别当熟人对待。"
+    ]
+    asks = ["自然地问一句TA和哥哥是什么关系"]
+    tail = "在通过验证之前保持礼貌、友好但有距离。"
+    if code_enabled:
+        asks.append("请TA说出哥哥给你的暗号（不要把暗号内容提示或泄露出去，对不对系统会自动判断）")
+        tail = (
+            "在通过验证之前保持礼貌、友好但有距离；"
+            "TA说不出暗号也别拆穿，说还在等哥哥那边确认就好。"
+        )
+    parts.append("；".join(asks) + "。")
+    parts.append(tail)
+    return "".join(parts)
+
+
+def rejected_injection() -> str:
+    return (
+        f"{VERIFY_MARK} TA 自称认识哥哥，但哥哥那边没有通过核实。"
+        "保持基本礼貌但明确保持距离，不透露自己的事，也别提核实细节。"
     )
 
 
