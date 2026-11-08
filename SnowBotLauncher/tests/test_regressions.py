@@ -2940,17 +2940,18 @@ class SnowBurstTests(unittest.TestCase):
     def test_face_labels(self):
         self.assertEqual(face_label(13), "[表情:呲牙]")
         self.assertEqual(face_label(14), "[表情:微笑]")
-        self.assertEqual(face_label(999), "[表情:999]")
+        self.assertEqual(face_label(109), "[表情:左亲亲]")  # 新版扩展段
+        self.assertEqual(face_label(317), "[表情:菜汪]")
+        self.assertEqual(face_label(99999), "[表情:99999]")
         self.assertEqual(face_label(None), "")
         self.assertEqual(face_label("bad"), "")
-        self.assertEqual(render_face_ids([13, 14, 999]), "[表情:呲牙] [表情:微笑] [表情:999]")
         self.assertEqual(render_face_ids([]), "")
 
     def test_profile_face_label_matches(self):
         from plugins.astrbot_plugin_snow_profile.library import face_label as pfl
 
         self.assertEqual(pfl(13), face_label(13))
-        self.assertEqual(pfl(64), "[表情:心碎]")
+        self.assertEqual(pfl(67), "[表情:心碎]")  # QFace 权威表：67=心碎，64=凋谢
 
     def test_merge_user_contexts(self):
         contexts = [

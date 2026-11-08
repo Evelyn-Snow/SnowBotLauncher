@@ -49,17 +49,19 @@ from .library import (
 
 NAME = "astrbot_plugin_snow_burst"
 _MEDIA = (Image, Record, File, Video, Json)
-_KEEP = (Image, Record, File, Video, Json, At, Reply, Poke, Face)
+# Face 不进合流链：文本里已渲染 [表情:名]，链里再留原件会和文本重复
+_KEEP = (Image, Record, File, Video, Json, At, Reply, Poke)
 
 
-def _face_text(event: AstrMessageEvent) -> str:
-    """把消息链里的 QQ 小黄脸渲染成 [表情:名]，message_str 不含它们。"""
+def _face_text(event: AstrMessageEvent, existing: str = "") -> str:
+    """把消息链里的 QQ 小黄脸渲染成 [表情:名]；已有文本里出现过的不再重复。"""
     components = getattr(event.message_obj, "message", None) or []
-    labels = [
-        face_label(comp.id)
-        for comp in components
-        if isinstance(comp, Face)
-    ]
+    labels = []
+    for comp in components:
+        if isinstance(comp, Face):
+            label = face_label(comp.id)
+            if label and label not in existing:
+                labels.append(label)
     return " ".join(labels)
 
 
@@ -126,7 +128,7 @@ class SnowBurst(Star):
             return
 
         text = str(event.message_str or "").strip()
-        faces = _face_text(event)
+        faces = _face_text(event, text)
         if faces:
             # message_str 不含表情：补进文本，纯表情消息才不会被当成空消息跳过
             text = f"{text} {faces}".strip() if text else faces

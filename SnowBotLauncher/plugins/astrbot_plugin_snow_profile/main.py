@@ -701,7 +701,11 @@ class SnowProfile(Star):
         return verify if isinstance(verify, dict) else {}
 
     def _is_verify_candidate(self, qq: str) -> bool:
-        """可验证对象：没有画像、没聊过天（state 里只有 verify 记录）的新人。"""
+        """「主动问询/转管理员」路径的准入：没有画像、没聊过天的新人。
+
+        暗号和管理员「同意 QQ号」两条凭据路径不受此限制——已经聊过天的
+        老用户说出暗号或被哥哥点名确认，同样应该标记。
+        """
         if (Path(self._profiles_dir()) / f"{qq}.md").exists():
             return False
         entry = (self._load_state().get("users") or {}).get(qq)
@@ -718,12 +722,16 @@ class SnowProfile(Star):
                 action, target = reply
                 self._finish_verify(action, target, sender, umo)
             return
-        if not self._is_verify_candidate(sender):
-            return
+        entry = (self._load_state().get("users") or {}).get(sender)
+        if isinstance(entry, dict) and entry.get("intro"):
+            return  # 已经是哥哥介绍的熟人
         verify = self._verify_of(sender)
         stage = str(verify.get("stage") or "")
+        if stage == "rejected":
+            return  # 哥哥拒绝过，不再受理
+        fresh = self._is_verify_candidate(sender)
         now = time.time()
-        # 路径一：对暗号
+        # 路径一：对暗号（有画像的老用户也可以，暗号本身就是凭据）
         code = str(self._cfg("intro_code", "") or "").strip()
         if code and code_matches(code, text):
             claim = str(verify.get("claim") or "") or detect_relation_claim(text)
@@ -746,9 +754,9 @@ class SnowProfile(Star):
             self._save_state()
             logger.info(f"[{NAME}] 暗号验证通过：「{name or sender}」标记为哥哥介绍的熟人")
             return
-        # 路径二：自称关系 → 转管理员核实
+        # 路径二：自称关系 → 转管理员核实（只对全新人主动问询，避免骚扰老用户）
         claim = detect_relation_claim(text)
-        if claim and stage not in ("asked", "await_owner"):
+        if claim and fresh and stage not in ("asked", "await_owner"):
             verify = {
                 "stage": "asked",
                 "claim": claim,
@@ -791,9 +799,12 @@ class SnowProfile(Star):
     def _finish_verify(
         self, action: str, qq: str, admin_qq: str, umo: str
     ) -> None:
-        """管理员回复同意/拒绝，落定验证结果。"""
-        if not qq.isdigit() or not self._is_verify_candidate(qq):
+        """管理员回复同意/拒绝，落定验证结果（管理员点名操作，不限全新人）。"""
+        if not qq.isdigit() or qq == admin_qq:
             return
+        entry = (self._load_state().get("users") or {}).get(qq)
+        if isinstance(entry, dict) and entry.get("intro"):
+            return  # 已经标记过
         verify = self._verify_of(qq)
         if action == "confirm":
             claim = str(verify.get("claim") or "") or "朋友"
