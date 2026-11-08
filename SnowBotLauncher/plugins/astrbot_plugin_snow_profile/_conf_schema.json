@@ -28,6 +28,24 @@
     "default": true,
     "hint": "所有群聊和私聊共用一张全局关系网；只记录能被原话证明的关系，私聊需点名已知用户才会记录"
   },
+  "intro_enabled": {
+    "description": "启用主人引荐",
+    "type": "bool",
+    "default": true,
+    "hint": "管理员说「我找了几个朋友/同事来加你」后，窗口期内新出现的人自动关联为哥哥介绍的熟人，按保底熟悉度对待，不再当陌生人警惕"
+  },
+  "intro_floor": {
+    "description": "引荐保底熟悉度",
+    "type": "int",
+    "default": 40,
+    "hint": "0-94；被引荐的人熟悉度低于此值时按此值对待（40 = 熟人：客气但放松、能接梗），真实熟悉度超过后自然接管"
+  },
+  "intro_window_days": {
+    "description": "引荐有效期（天）",
+    "type": "int",
+    "default": 14,
+    "hint": "说完引荐话后这么多天内冒头的新人都算哥哥介绍的；过期自动失效"
+  },
   "relations_dir": {
     "description": "关系网存放目录",
     "type": "string",

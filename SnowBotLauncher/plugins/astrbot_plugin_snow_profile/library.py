@@ -251,6 +251,78 @@ def familiarity_guidance(level: str) -> str:
     return _FAMILIARITY_GUIDES.get(str(level or ""), _FAMILIARITY_GUIDES["陌生"])
 
 
+# ---------------- 主人引荐 ----------------
+# 哥哥（管理员）说「我找了几个朋友/同事来加你」之后，把窗口期内新出现的人
+# 关联为「哥哥介绍来的熟人」，替他们担保一层初始信任，别再按陌生人那样警惕。
+
+INTRO_MARK = "[引荐]"
+
+_INTRO_CUES = re.compile(
+    r"(朋友|好友|同事|同学|室友).{0,12}(加你|认识你|来找你|私聊你)"
+    r"|(加你|认识你|来找你).{0,6}(朋友|好友|同事|同学|室友)"
+    r"|介绍.{0,8}(朋友|好友|同事|同学|室友|个人)"
+    r"|(朋友|好友|同事|同学|室友).{0,6}(介绍|引荐)"
+)
+
+_INTRO_TYPE_WORDS = (
+    ("同事", "同事"),
+    ("同学", "同学"),
+    ("室友", "室友"),
+    ("好友", "朋友"),
+    ("朋友", "朋友"),
+)
+
+
+def has_intro_cue(text: str) -> bool:
+    return bool(_INTRO_CUES.search(str(text or "")))
+
+
+def intro_type_from_text(text: str) -> str:
+    """从引荐句里取最先出现的关系词做类型；只有笼统说法时算朋友。"""
+    raw = str(text or "")
+    hits = [(raw.find(word), rtype) for word, rtype in _INTRO_TYPE_WORDS if word in raw]
+    hits = [hit for hit in hits if hit[0] >= 0]
+    return min(hits)[1] if hits else "朋友"
+
+
+def fresh_endorsements(pending: list, now: float, window_days: int) -> list[dict]:
+    """过滤掉过期/损坏的引荐记录；不删除原记录，过期清理由调用方负责。"""
+    window = max(1, int(window_days or 14)) * 86400
+    out = []
+    for item in pending or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            ts = float(item.get("ts") or 0)
+        except (TypeError, ValueError):
+            continue
+        if ts > 0 and now - ts <= window:
+            out.append(item)
+    return out
+
+
+def apply_intro_floor(score: int, floor: int) -> int:
+    """引荐保底：真实熟悉度低于保底时按保底算，超过后自然接管。"""
+    try:
+        base = max(0, min(100, int(round(float(score)))))
+    except (TypeError, ValueError):
+        base = 0
+    try:
+        floor = max(0, min(94, int(floor)))
+    except (TypeError, ValueError):
+        floor = 0
+    return max(base, floor)
+
+
+def intro_injection(rtype: str) -> str:
+    label = rtype if rtype in RELATION_TYPES else "朋友"
+    return (
+        f"{INTRO_MARK} 这位是哥哥亲自介绍认识的朋友（{label}）。"
+        "把TA当成哥哥带来的熟人：态度自然放松、可以接梗开玩笑，不用像对陌生人那样客套提防；"
+        "但你们俩还不熟，别主动打听TA的私事，也别因为哥哥介绍就无条件答应TA的要求。"
+    )
+
+
 _IMPRESSION_RE = re.compile(r"印象评分[:：]\s*(\d{1,3})")
 
 

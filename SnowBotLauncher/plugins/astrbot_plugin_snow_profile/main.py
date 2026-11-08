@@ -32,7 +32,9 @@ from .library import (
     PROFILE_SYSTEM_PROMPT,
     RELATION_MARK,
     RELATION_SYSTEM_PROMPT,
+    RELATION_TYPES,
     SUMMARY_MARK,
+    apply_intro_floor,
     apply_moral_delta,
     build_gossip_prompt,
     build_moral_section,
@@ -50,12 +52,17 @@ from .library import (
     extract_impression,
     extract_score,
     familiarity_guidance,
+    familiarity_level,
     find_relation_edge,
+    fresh_endorsements,
     gossip_candidates,
     gossip_fallback_question,
+    has_intro_cue,
     has_relation_cue,
     in_quiet_hours,
     in_time_windows,
+    intro_injection,
+    intro_type_from_text,
     looks_like_profile,
     merge_name_history,
     merge_relation_items,
@@ -671,13 +678,82 @@ class SnowProfile(Star):
             max(120, int(self._cfg("shared_inject_limit_chars", 600))),
         )
 
+    # ---------------- 主人引荐 ----------------
+    def _observe_intro(self, sender: str, name: str, text: str, umo: str) -> None:
+        """管理员说「我朋友/同事来加你」记一条引荐；新人冒头时兑现成关系边。"""
+        state = self._load_state()
+        window = max(1, int(self._cfg("intro_window_days", 14)))
+        if self._is_admin_qq(sender):
+            if not has_intro_cue(text):
+                return
+            rtype = intro_type_from_text(text)
+            pending = state.setdefault("intro_endorsements", [])
+            pending.append(
+                {
+                    "type": rtype,
+                    "ts": time.time(),
+                    "owner": sender,
+                    "quote": text[:80],
+                    "scope": umo,
+                }
+            )
+            state["intro_endorsements"] = fresh_endorsements(
+                pending, time.time(), window
+            )[-10:]
+            self._save_state()
+            logger.info(f"[{NAME}] 记录主人引荐：{rtype}（{text[:40]}）")
+            return
+        # 非管理员：只对真正的新人兑现（没有画像文件、state 里还没有记录）
+        if state.get("users", {}).get(sender):
+            return
+        if (Path(self._profiles_dir()) / f"{sender}.md").exists():
+            return
+        pending = fresh_endorsements(
+            state.get("intro_endorsements") or [], time.time(), window
+        )
+        if not pending:
+            return
+        latest = max(pending, key=lambda p: float(p.get("ts") or 0))
+        self._link_intro(latest, sender, name, umo)
+
+    def _link_intro(self, endorsement: dict, qq: str, name: str, umo: str) -> None:
+        """把引荐兑现成关系网边 + 用户标记，之后注入按熟人保底对待。"""
+        owner = str(endorsement.get("owner") or "")
+        rtype = str(endorsement.get("type") or "朋友")
+        if not owner or not qq.isdigit() or owner == qq:
+            return
+        now = time.time()
+        names = {owner: self._id_map().get(owner) or "哥哥"}
+        if str(name or "").strip():
+            names[qq] = str(name).strip()
+        item = {
+            "a": owner,
+            "b": qq,
+            "action": "confirm",
+            "type": rtype if rtype in RELATION_TYPES else "朋友",
+            "confidence": 0.85,
+            "detail": "哥哥亲自介绍认识的",
+            "evidence": str(endorsement.get("quote") or "哥哥介绍来加好友的"),
+        }
+        with self._rel_lock:
+            relations = self._relations()
+            merge_relation_items(relations["edges"], [item], names, now, scope=umo)
+            self._save_relations()
+        self._user_state(qq)["intro"] = {
+            "type": item["type"],
+            "ts": now,
+            "owner": owner,
+        }
+        self._save_state()
+        logger.info(f"[{NAME}] 引荐生效：{owner} 介绍的{item['type']}「{name or qq}」已关联")
+
     # ---------------- 关系网采集与推断 ----------------
     @filter.event_message_type(
         filter.EventMessageType.ALL, priority=(1 << 31) + 20
     )
     async def observe_relations(self, event: AstrMessageEvent):
         """在高优先级记录群聊/私聊原文，供关系推断用；不拦截、不修改消息。"""
-        if not self._enabled() or not bool(self._cfg("relation_enabled", True)):
+        if not self._enabled():
             return
         if event.get_extra("_snow_burst_merged"):
             return
@@ -695,15 +771,22 @@ class SnowProfile(Star):
         sender = str(event.get_sender_id() or "")
         if not sender or sender == str(event.get_self_id() or ""):
             return
-        rows = self._rel_buffers.setdefault(umo, [])
-        mid = str(getattr(event.message_obj, "message_id", "") or "")
-        if mid and rows and str(rows[-1].get("id") or "") == mid:
-            return
         name = ""
         try:
             name = str(event.get_sender_name() or "").strip()
         except Exception:
             pass
+        if bool(self._cfg("intro_enabled", True)):
+            try:
+                self._observe_intro(sender, name, text, umo)
+            except Exception as exc:
+                logger.warning(f"[{NAME}] 主人引荐处理失败：{exc}")
+        if not bool(self._cfg("relation_enabled", True)):
+            return
+        rows = self._rel_buffers.setdefault(umo, [])
+        mid = str(getattr(event.message_obj, "message_id", "") or "")
+        if mid and rows and str(rows[-1].get("id") or "") == mid:
+            return
         rows.append(
             {
                 "id": mid,
@@ -1779,6 +1862,11 @@ class SnowProfile(Star):
         except Exception:
             md = ""
         ids = self._known_ids() | {qq}
+        intro = None
+        if bool(self._cfg("intro_enabled", True)):
+            entry = (self._load_state().get("users") or {}).get(qq)
+            if isinstance(entry, dict) and isinstance(entry.get("intro"), dict):
+                intro = entry["intro"]
         if md:
             level = (
                 self._level_of(qq, md)
@@ -1794,6 +1882,14 @@ class SnowProfile(Star):
                     is_webchat=str(event.get_platform_name() or "") == "webchat",
                 )
             )
+            if intro is not None:
+                # 哥哥亲自介绍的人：熟悉度按保底算（真实分超过后自然接管）
+                new_score = apply_intro_floor(
+                    fam_score, int(self._cfg("intro_floor", 40))
+                )
+                if new_score > fam_score:
+                    fam_score = new_score
+                    fam_level = familiarity_level(fam_score)
             summary = redact_ids(
                 profile_summary(md, int(self._cfg("inject_limit_chars", 400))),
                 ids,
@@ -1812,6 +1908,10 @@ class SnowProfile(Star):
                     ids,
                 )
                 req.system_prompt += "\n\n" + block
+        if intro is not None:
+            req.system_prompt += "\n\n" + redact_ids(
+                intro_injection(str(intro.get("type") or "朋友")), ids
+            )
         if bool(self._cfg("relation_enabled", True)):
             umo = str(event.unified_msg_origin or "")
             if umo and not umo.startswith("webchat:") and (

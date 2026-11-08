@@ -164,6 +164,7 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     PROFILE_SYSTEM_PROMPT,
     activity_allows_proactive,
     activity_line,
+    apply_intro_floor,
     apply_moral_delta,
     build_moral_section,
     build_profile_prompt,
@@ -179,10 +180,14 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     extract_score,
     familiarity_guidance,
     familiarity_level,
+    fresh_endorsements,
     gossip_candidates,
     gossip_fallback_question,
+    has_intro_cue,
     has_relation_cue,
     in_time_windows,
+    intro_injection,
+    intro_type_from_text,
     looks_like_profile,
     merge_name_history,
     merge_relation_items,
@@ -1626,6 +1631,65 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(normalize_relation_type("路人"), "")
         self.assertTrue(has_relation_cue("他是我同事"))
         self.assertFalse(has_relation_cue("今天天气不错"))
+
+    def test_intro_cue_and_type(self):
+        self.assertTrue(has_intro_cue("我找了几个好友同事来加你"))
+        self.assertTrue(has_intro_cue("这是我同事，想认识你"))
+        self.assertTrue(has_intro_cue("介绍个朋友给你认识"))
+        self.assertFalse(has_intro_cue("我今天和朋友吃饭去了"))
+        self.assertFalse(has_intro_cue("同事说我坏话"))
+        self.assertEqual(intro_type_from_text("我找了几个好友同事来加你"), "朋友")
+        self.assertEqual(intro_type_from_text("我同事一会儿来加你"), "同事")
+        self.assertEqual(intro_type_from_text("给你介绍个同学认识"), "同学")
+        self.assertEqual(intro_type_from_text("有个人要来加你"), "朋友")
+
+    def test_fresh_endorsements_window(self):
+        now = 1_000_000.0
+        pending = [
+            {"type": "同事", "ts": now - 100},
+            {"type": "朋友", "ts": now - 20 * 86400},
+            "坏数据",
+            {"ts": 0},
+        ]
+        fresh = fresh_endorsements(pending, now, window_days=14)
+        self.assertEqual(len(fresh), 1)
+        self.assertEqual(fresh[0]["type"], "同事")
+        self.assertEqual(fresh_endorsements([], now, 14), [])
+
+    def test_apply_intro_floor(self):
+        self.assertEqual(apply_intro_floor(5, 40), 40)
+        self.assertEqual(apply_intro_floor(60, 40), 60)  # 真实分更高：不降
+        self.assertEqual(apply_intro_floor(0, 40), 40)
+        self.assertEqual(apply_intro_floor(90, 99), 94)  # 保底封顶 94，不能到知己
+        self.assertEqual(apply_intro_floor("坏值", 40), 40)
+
+    def test_intro_injection_text(self):
+        text = intro_injection("同事")
+        self.assertIn("[引荐]", text)
+        self.assertIn("同事", text)
+        self.assertIn("哥哥", text)
+        self.assertIn("朋友", intro_injection("未知类型"))
+
+    def test_intro_endorsement_merges_edge(self):
+        edges = []
+        item = {
+            "a": "10001",
+            "b": "10002",
+            "action": "confirm",
+            "type": "同事",
+            "confidence": 0.85,
+            "detail": "哥哥亲自介绍认识的",
+            "evidence": "我找了几个好友同事来加你",
+        }
+        changed = merge_relation_items(
+            edges, [item], {"10001": "哥哥", "10002": "新人"}, 1000.0, scope="aiocqhttp:FriendMessage:10001"
+        )
+        self.assertEqual(changed, 1)
+        edge = edges[0]
+        self.assertEqual((edge["a"], edge["b"]), ("10001", "10002"))
+        self.assertEqual(edge["names"]["10002"], "新人")
+        self.assertEqual(edge["types"]["同事"]["detail"], "哥哥亲自介绍认识的")
+        self.assertEqual(edge["types"]["同事"]["confidence"], 0.85)
 
     def test_relation_payload_and_evidence(self):
         payload = parse_relation_payload(
