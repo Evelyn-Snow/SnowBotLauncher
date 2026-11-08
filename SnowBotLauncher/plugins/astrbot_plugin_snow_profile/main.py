@@ -54,6 +54,7 @@ from .library import (
     extract_impression,
     extract_score,
     face_label,
+    FACE_HINT,
     familiarity_guidance,
     familiarity_level,
     find_relation_edge,
@@ -1990,6 +1991,13 @@ class SnowProfile(Star):
         qq = str(getattr(event, "get_sender_id", lambda: "")() or "")
         if not qq:
             return
+        if (
+            str(event.get_platform_name() or "") == "aiocqhttp"
+            and FACE_HINT not in prompt
+        ):
+            # 教她发真表情：写 [表情:名]，出站由 snow_burst 转成 Face 组件
+            prompt = prompt + "\n\n" + FACE_HINT
+            req.system_prompt = prompt
         md = ""
         try:
             with open(self._profile_path(qq), encoding="utf-8") as f:

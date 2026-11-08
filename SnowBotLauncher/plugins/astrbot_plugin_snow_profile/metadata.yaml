@@ -2,7 +2,7 @@ name: astrbot_plugin_snow_profile
 display_name: Bot 印象笔记
 desc: 为每个聊天对象维护第一人称印象笔记与熟悉度，跨群聊/私聊积累全局关系网和带分享评级的共享记忆卡片，新朋友凭暗号或管理员核实成为熟人，并在请求与出站消息中隐藏 QQ/群号
 help: 不需要指令：正常聊天即可，画像、熟悉度、用户关系和共享记忆会持续更新；新朋友对上暗号（默认 211314）或管理员回复「同意 QQ号」核实后才当熟人；对它说「你对我了解多少」它会基于画像回答
-version: v0.7.2
+version: v0.7.3
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile
 author: Evelyn-Snow
 support_platforms:

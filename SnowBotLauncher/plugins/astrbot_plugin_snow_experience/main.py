@@ -44,6 +44,7 @@ from .library import (
     scan_library,
     title_from_book_name,
     topic_pool,
+    topic_to_en,
     week_key,
 )
 
@@ -484,9 +485,35 @@ class SnowExperience(Star):
         logger.info(f"[{NAME}] 已下载并读出论文 PDF：{path.name}（{len(text)} 字）")
         return text
 
+    async def _translate_topic(self, topic: str) -> str:
+        """没有内置映射的话题，让模型翻一个英文检索词；失败返回空串。"""
+        provider = await self._provider()
+        if provider is None:
+            return ""
+        try:
+            result = await asyncio.wait_for(
+                provider.text_chat(
+                    prompt=(
+                        f"把「{topic}」翻译成适合在 arXiv 学术检索用的英文关键词或短语，"
+                        "只输出英文，不要解释。"
+                    ),
+                    system_prompt="只输出英文检索词，不要解释，不要加标点以外的符号。",
+                ),
+                timeout=30,
+            )
+        except Exception:
+            return ""
+        text = str(getattr(result, "completion_text", "") or "").strip()
+        text = re.sub(r"[^A-Za-z ]", "", text).strip()
+        return " ".join(text.split())[:60]
+
     async def _do_paper(self) -> tuple[str, str, str]:
         topic = random.choice(self._topics())
-        query = urllib.parse.quote(topic)
+        # arXiv 只认英文检索词；内置映射优先，没有的现场让模型翻一次
+        en_query = topic_to_en(topic) or (await self._translate_topic(topic))
+        if not en_query:
+            raise RuntimeError(f"「{topic}」翻不出可用的英文检索词")
+        query = urllib.parse.quote(en_query)
         url = f"{ARXIV_API}?search_query=all:{query}&max_results=5&sortBy=submittedDate&sortOrder=descending"
         timeout = aiohttp.ClientTimeout(total=60)
         async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -498,7 +525,9 @@ class SnowExperience(Star):
         used = set(state.get("arxiv_titles") or [])
         paper = pick_arxiv_paper(entries, used)
         if paper is None:
-            raise RuntimeError(f"arXiv 上没有找到「{topic}」的新论文")
+            raise RuntimeError(
+                f"arXiv 上没有找到「{topic}」({en_query}) 的新论文"
+            )
         pdf_text = ""
         try:
             pdf_text = await self._download_paper_pdf(paper)

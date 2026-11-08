@@ -2,7 +2,7 @@ name: astrbot_plugin_snow_burst
 display_name: 小雪消息合流
 desc: 把连续发来的几句话合成一次理解和回复，减少碎片化回应
 help: 私聊里连续发消息时，她会等一个很短的窗口，把这几句看成一整段再回
-version: v0.2.1
+version: v0.3.0
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_burst
 author: Evelyn-Snow
 support_platforms:

@@ -203,6 +203,36 @@ def render_face_ids(ids: list) -> str:
     return " ".join(labels)
 
 
+# 名称 → id 反查（同名取最小 id），供模型用 [表情:名] 标记发真表情
+FACE_IDS: dict[str, int] = {}
+for _fid, _name in FACE_NAMES.items():
+    FACE_IDS.setdefault(_name, _fid)
+
+FACE_MARK_RE = re.compile(r"\[表情[:：]\s*([^\[\]]{1,12}?)\s*\]")
+
+
+def split_face_markers(text: str) -> list[tuple[str, int | None]]:
+    """把文本按 [表情:名] 标记切开，返回 [(文本段, None) / ("", 表情id), ...]。
+
+    认不出的名字保持原样（fid=None 且文本段保留整个标记），不吞字。
+    """
+    raw = str(text or "")
+    out: list[tuple[str, int | None]] = []
+    pos = 0
+    for match in FACE_MARK_RE.finditer(raw):
+        if match.start() > pos:
+            out.append((raw[pos : match.start()], None))
+        fid = FACE_IDS.get(match.group(1).strip())
+        if fid is None:
+            out.append((match.group(0), None))
+        else:
+            out.append(("", fid))
+        pos = match.end()
+    if pos < len(raw):
+        out.append((raw[pos:], None))
+    return out or ([(raw, None)] if raw else [])
+
+
 def _content_parts(content) -> list[dict]:
     if isinstance(content, str):
         return [{"type": "text", "text": content}] if content else []

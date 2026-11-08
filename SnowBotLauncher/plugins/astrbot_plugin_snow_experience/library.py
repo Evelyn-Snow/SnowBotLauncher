@@ -345,6 +345,24 @@ DEFAULT_TOPIC_POOL = (
     "经典文学", "人工智能", "经济学", "植物学", "科幻小说",
 )
 
+# arXiv 只认英文检索词：中文话题直接查永远 0 结果
+TOPIC_EN = {
+    "天文学": "astronomy",
+    "中世纪史": "medieval history",
+    "心理学": "psychology",
+    "航海技术": "marine engineering",
+    "游戏设计": "game design",
+    "经典文学": "literature",
+    "人工智能": "artificial intelligence",
+    "经济学": "economics",
+    "植物学": "botany",
+    "科幻小说": "science fiction",
+}
+
+
+def topic_to_en(topic: str) -> str:
+    return TOPIC_EN.get(str(topic or "").strip(), "")
+
 
 def topic_pool(topics_cfg: str) -> list[str]:
     items = [t.strip() for t in re.split(r"[,，]", str(topics_cfg or "")) if t.strip()]

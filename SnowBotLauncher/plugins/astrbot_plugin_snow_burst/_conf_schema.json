@@ -64,5 +64,11 @@
     "type": "bool",
     "default": true,
     "hint": "把对话历史中相邻的 user 消息并成一条再交给模型，减少旧碎片造成的理解跳跃"
+  },
+  "face_markers_enabled": {
+    "description": "回复里的 [表情:名] 标记转成真表情",
+    "type": "bool",
+    "default": true,
+    "hint": "她回复时写 [表情:呲牙] 这类标记，出站前自动替换成对应的 QQ 小黄脸；认不出的名字按原文本发出"
   }
 }

@@ -45,6 +45,7 @@ from .library import (
     merge_contexts,
     merge_texts,
     should_extend,
+    split_face_markers,
 )
 
 NAME = "astrbot_plugin_snow_burst"
@@ -298,6 +299,37 @@ class SnowBurst(Star):
                     f"[{NAME}] 历史合并 user 消息 {len(contexts)} → {len(merged)}"
                 )
             req.contexts = merged
+
+    @filter.on_decorating_result()
+    async def emit_face_markers(self, event: AstrMessageEvent):
+        """把回复里的 [表情:名] 标记转成真的 QQ 表情，她说发就真能发出来。"""
+        if not bool(self.conf.get("face_markers_enabled", True)):
+            return
+        if event.get_platform_name() != "aiocqhttp":
+            return
+        result = event.get_result()
+        if result is None or not getattr(result, "chain", None):
+            return
+        chain = list(result.chain)
+        new_chain: list = []
+        changed = False
+        for comp in chain:
+            if (
+                isinstance(comp, Plain)
+                and "[表情" in str(getattr(comp, "text", ""))
+            ):
+                pieces = split_face_markers(getattr(comp, "text", ""))
+                if any(fid is not None for _, fid in pieces):
+                    for text_part, fid in pieces:
+                        if text_part:
+                            new_chain.append(Plain(text_part))
+                        if fid is not None:
+                            new_chain.append(Face(id=fid))
+                    changed = True
+                    continue
+            new_chain.append(comp)
+        if changed:
+            result.chain = new_chain
 
     async def terminate(self) -> None:
         """插件被禁用/重载时，把还没到时间的 burst 立刻放行，别吞消息。"""

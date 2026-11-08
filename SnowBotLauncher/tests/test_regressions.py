@@ -46,6 +46,7 @@ from plugins.astrbot_plugin_snow_burst.library import (  # noqa: E402
     merge_user_messages,
     render_face_ids,
     should_extend,
+    split_face_markers,
 )
 from plugins.astrbot_plugin_share_card.library import (  # noqa: E402
     extract_share_text,
@@ -250,6 +251,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     render_event_record,
     scan_library,
     title_from_book_name,
+    topic_to_en,
     week_key,
 )
 
@@ -2262,6 +2264,12 @@ class ExperienceTests(unittest.TestCase):
         self.assertEqual(pick_arxiv_paper(entries, {first["title"]})["title"], "Duplicate Skip Test")
         self.assertEqual(parse_arxiv_entries("not xml"), [])
 
+    def test_topic_to_en(self):
+        self.assertEqual(topic_to_en("人工智能"), "artificial intelligence")
+        self.assertEqual(topic_to_en("科幻小说"), "science fiction")
+        self.assertEqual(topic_to_en("自选话题"), "")  # 没映射的走 LLM 翻译
+        self.assertEqual(topic_to_en(""), "")
+
     def test_monthly_event_name_and_heading(self):
         self.assertEqual(
             monthly_event_name("2026-11-04", "book"), "2026-11-book.md"
@@ -2946,6 +2954,23 @@ class SnowBurstTests(unittest.TestCase):
         self.assertEqual(face_label(None), "")
         self.assertEqual(face_label("bad"), "")
         self.assertEqual(render_face_ids([]), "")
+
+    def test_split_face_markers(self):
+        self.assertEqual(
+            split_face_markers("哈哈[表情:呲牙]被你发现了"),
+            [("哈哈", None), ("", 13), ("被你发现了", None)],
+        )
+        self.assertEqual(split_face_markers("纯文本"), [("纯文本", None)])
+        self.assertEqual(
+            split_face_markers("[表情：偷笑]"),
+            [("", 20)],
+        )
+        # 认不出的名字保持原样，不吞字
+        self.assertEqual(
+            split_face_markers("[表情:不存在的表情]"),
+            [("[表情:不存在的表情]", None)],
+        )
+        self.assertEqual(split_face_markers(""), [])
 
     def test_profile_face_label_matches(self):
         from plugins.astrbot_plugin_snow_profile.library import face_label as pfl
