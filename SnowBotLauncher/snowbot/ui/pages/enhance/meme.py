@@ -74,14 +74,21 @@ class MemeMixin:
         bottom = QHBoxLayout()
         set_default = QPushButton("设为默认")
         set_default.clicked.connect(self.set_selected_meme_default)
-        multi = QPushButton("同时使用勾选的套装")
+        multi = QPushButton("保存使用列表（勾选=启用）")
+        multi.setToolTip("勾选的套装参与表情选取；取消勾选并保存即停用该套装")
         multi.clicked.connect(self.apply_meme_multi)
+        uninstall = QPushButton("卸载所选")
+        uninstall.setObjectName("danger")
+        uninstall.clicked.connect(self.uninstall_selected_meme)
         bottom.addWidget(set_default)
         bottom.addWidget(multi)
+        bottom.addWidget(uninstall)
         bottom.addStretch(1)
         layout.addLayout(bottom)
 
-        self.meme_status = QLabel("表情包功能依赖 meme_manager 插件。")
+        self.meme_status = QLabel(
+            "表情包功能依赖 meme_manager 插件。勾选=参与使用；卸载会删除该套装的全部图片文件。"
+        )
         self.meme_status.setObjectName("muted")
         self.meme_status.setWordWrap(True)
         layout.addWidget(self.meme_status)
@@ -146,7 +153,9 @@ class MemeMixin:
                     Qt.CheckState.Checked if pid in ids else Qt.CheckState.Unchecked
                 )
                 self.meme_list.addItem(item)
-            self.meme_status.setText(f"已安装 {self.meme_list.count()} 套表情包；勾选后可同时使用。")
+            self.meme_status.setText(
+                f"已安装 {self.meme_list.count()} 套表情包；勾选=启用，取消勾选并点「保存使用列表」=停用。"
+            )
             self._set_status(f"表情包：已安装 {self.meme_list.count()} 套", True)
 
         self._run_task(task, done, "正在读取表情包列表…")
@@ -234,6 +243,36 @@ class MemeMixin:
             self.refresh_meme_packs()
 
         self._run_task(task, done, f"正在设置默认表情包「{pid}」…")
+
+    def uninstall_selected_meme(self):
+        if not self._need_meme():
+            return
+        item = self.meme_list.currentItem()
+        if not item:
+            QMessageBox.information(self, "未选择", "请先选中要卸载的表情包。")
+            return
+        pid = item.data(Qt.ItemDataRole.UserRole)
+        answer = QMessageBox.question(
+            self,
+            "确认卸载",
+            f"确定卸载表情包「{item.text()}」？\n该操作会删除这套表情包的全部图片文件，不可恢复。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        def task():
+            result = self.client.request(
+                "POST", f"{MEME_EXT}/packs/uninstall", body={"pack_id": pid}
+            )
+            if not self.client.ok(result):
+                raise ApiError(self.client.message(result))
+
+        def done(_result):
+            self._set_status(f"已卸载表情包「{pid}」", True)
+            self.refresh_meme_packs()
+
+        self._run_task(task, done, f"正在卸载表情包「{pid}」…")
 
     def apply_meme_multi(self):
         if not self._need_meme():
