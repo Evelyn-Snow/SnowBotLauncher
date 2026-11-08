@@ -58,6 +58,6 @@
   "inject_limit_chars": {
     "description": "聊天注入经历的最大字数",
     "type": "int",
-    "default": 300
+    "default": 380
   }
 }

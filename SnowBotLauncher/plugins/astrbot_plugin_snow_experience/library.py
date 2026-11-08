@@ -11,6 +11,7 @@ import hashlib
 import html as _html
 import re
 import zipfile
+from pathlib import Path
 from xml.etree import ElementTree
 
 SUPPORTED_DOC_SUFFIXES = (".txt", ".epub", ".pdf", ".docx", ".md", ".html", ".htm")
@@ -133,6 +134,67 @@ READ_CHUNK = 6000
 def book_shelf_entry(name: str, index: dict) -> dict:
     entry = (index or {}).get(name)
     return entry if isinstance(entry, dict) else {}
+
+
+def scan_library(root: Path) -> tuple[list[dict], list[str]]:
+    """递归扫描书库目录，返回 (可读书, 读不了的其它文件)。
+
+    书名用相对路径（posix 风格）：跨子目录唯一，同系列自然排在一起；
+    根目录文件的相对路径就是文件名，旧阅读进度 key 保持兼容。
+    解压开的 epub 目录（内有 mimetype）整体跳过，章节碎片不算书。
+    """
+    root = Path(root)
+    books: list[dict] = []
+    others: list[str] = []
+    if not root.is_dir():
+        return books, others
+    # 解压开的 epub（根部有 mimetype 文件）：所在目录整棵跳过，章节碎片不算书
+    container_roots = {p.parent for p in root.rglob("mimetype") if p.is_file()}
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.name.startswith(".") or path.name == "mimetype":
+            continue
+        if any(parent in container_roots for parent in path.parents):
+            continue
+        rel = path.relative_to(root).as_posix()
+        if path.suffix.lower() in SUPPORTED_DOC_SUFFIXES:
+            books.append({"name": rel, "path": str(path)})
+        else:
+            others.append(rel)
+    return books, others
+
+
+def title_from_book_name(name: str) -> str:
+    """从书名 key（相对路径）取展示标题：去目录、去扩展名。"""
+    stem = Path(str(name or "").replace("\\", "/")).name
+    return re.sub(r"\.(txt|epub|pdf|docx|md|html?)$", "", stem, flags=re.IGNORECASE)
+
+
+def now_reading_summary(index: dict, limit: int = 2) -> str:
+    """从阅读进度里挑最近在读的书，造一段「在读」状态文本，供聊天注入。
+
+    只统计真实读过（offset>0）且未读完的书，按最近阅读时间排序；
+    记录过全书字数的附上进度百分比，没有就说刚开始读。
+    """
+    entries = []
+    for name, entry in (index or {}).items():
+        if not isinstance(entry, dict) or entry.get("finished"):
+            continue
+        try:
+            offset = int(entry.get("offset") or 0)
+        except (TypeError, ValueError):
+            continue
+        if offset <= 0:
+            continue
+        try:
+            chars = int(entry.get("chars") or 0)
+        except (TypeError, ValueError):
+            chars = 0
+        percent = min(100, offset * 100 // chars) if chars > 0 else 0
+        where = f"读到约 {percent}%" if percent else "刚开始读"
+        entries.append((entry.get("last_ts") or 0, name, where))
+    entries.sort(key=lambda item: item[0], reverse=True)
+    lines = [f"《{title_from_book_name(name)}》{where}" for _, name, where in entries[:limit]]
+    return "；".join(lines)
 
 
 def pick_book(files: list[dict], index: dict) -> dict | None:

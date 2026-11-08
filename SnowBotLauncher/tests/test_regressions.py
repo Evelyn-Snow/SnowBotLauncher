@@ -229,6 +229,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     experience_summary,
     extract_book_text,
     monthly_event_name,
+    now_reading_summary,
     parse_arxiv_entries,
     pick_arxiv_paper,
     pick_book,
@@ -237,6 +238,8 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     quota_allow,
     quota_record,
     render_event_record,
+    scan_library,
+    title_from_book_name,
     week_key,
 )
 
@@ -2090,6 +2093,74 @@ class ExperienceTests(unittest.TestCase):
         chunk, offset = book_chunk(text, offset, chunk=60)
         self.assertEqual(len(chunk), 40)
         self.assertEqual(offset, 100)
+
+    def test_scan_library_recursive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "西遊記.txt").write_text("正文", encoding="utf-8")
+            series = root / "【轻小说】狼与香辛料"
+            series.mkdir()
+            (series / "狼与辛香料 Ⅰ.epub").write_bytes(b"PK")
+            deep = series / "番外"
+            deep.mkdir()
+            (deep / "短篇.md").write_text("正文", encoding="utf-8")
+            # 解压开的 epub：根部有 mimetype，里面的章节碎片不算书
+            unpacked = root / "坏掉的epub"
+            unpacked.mkdir()
+            (unpacked / "mimetype").write_text("application/epub+zip", encoding="utf-8")
+            (unpacked / "chapter1.html").write_text("<p>章节</p>", encoding="utf-8")
+            (unpacked / "cover.jpg").write_bytes(b"jpg")
+            (root / "插图.jpg").write_bytes(b"jpg")
+
+            books, others = scan_library(root)
+            names = [b["name"] for b in books]
+            self.assertIn("西遊記.txt", names)  # 根目录文件：相对路径=文件名，旧进度 key 兼容
+            self.assertIn("【轻小说】狼与香辛料/狼与辛香料 Ⅰ.epub", names)
+            self.assertIn("【轻小说】狼与香辛料/番外/短篇.md", names)
+            self.assertNotIn("坏掉的epub/chapter1.html", names)  # 解压 epub 整体跳过
+            self.assertNotIn("坏掉的epub/cover.jpg", names)
+            self.assertEqual(others, ["插图.jpg"])
+            paths = {b["name"]: b["path"] for b in books}
+            self.assertTrue(Path(paths["西遊記.txt"]).is_absolute())
+
+    def test_scan_library_missing_dir(self):
+        books, others = scan_library(Path("Z:/不存在的书库"))
+        self.assertEqual((books, others), ([], []))
+
+    def test_title_from_book_name(self):
+        self.assertEqual(title_from_book_name("西遊記.txt"), "西遊記")
+        self.assertEqual(
+            title_from_book_name("【轻小说】86/86-不存在的战区 Ep1.epub"),
+            "86-不存在的战区 Ep1",
+        )
+        self.assertEqual(title_from_book_name("book.PDF"), "book")
+        self.assertEqual(title_from_book_name(""), "")
+
+    def test_now_reading_summary(self):
+        index = {
+            "西遊記.txt": {
+                "offset": 12000,
+                "finished": False,
+                "chars": 1_000_000,
+                "last_ts": 100,
+            },
+            "蛊真人.epub": {"offset": 0, "finished": False, "chars": 100, "last_ts": 200},
+            "旧书.txt": {"offset": 500, "finished": True, "chars": 1000, "last_ts": 300},
+            "无进度.txt": {"finished": False},
+        }
+        text = now_reading_summary(index)
+        self.assertIn("《西遊記》", text)
+        self.assertIn("读到约 1%", text)  # 12000/1000000
+        self.assertNotIn("蛊真人", text)  # offset 0：还没真正读
+        self.assertNotIn("旧书", text)  # 读完的不再报
+        self.assertNotIn("无进度", text)
+        # limit 生效：最近读的排前面
+        index["新书.txt"] = {"offset": 50, "finished": False, "chars": 100, "last_ts": 999}
+        text = now_reading_summary(index, limit=1)
+        self.assertIn("《新书》", text)
+        self.assertNotIn("《西遊記》", text)
+        self.assertEqual(now_reading_summary({}), "")
+        self.assertEqual(now_reading_summary({"坏条目": "x"}), "")
 
     def test_parse_arxiv_and_pick(self):
         entries = parse_arxiv_entries(EXPERIENCE_ATOM)
