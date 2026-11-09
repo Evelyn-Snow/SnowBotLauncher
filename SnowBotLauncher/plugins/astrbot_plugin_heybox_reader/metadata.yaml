@@ -1,0 +1,10 @@
+name: astrbot_plugin_heybox_reader
+display_name: 小黑盒阅读
+desc: 读群聊/私聊分享的小黑盒帖子与视频（分享摘要、接口正文、画面与语音），游戏卡片补充 Steam 信息
+help: 发小黑盒链接或分享卡片时她会先读再聊；接口要验证码时按分享摘要和封面来，不硬编；游戏卡片会补 Steam 类型/发售/价格/简介
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_heybox_reader
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
+  - webchat

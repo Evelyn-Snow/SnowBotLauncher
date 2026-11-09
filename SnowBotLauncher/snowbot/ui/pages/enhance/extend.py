@@ -25,6 +25,7 @@ EXT_PLUGINS = (
     ("astrbot_plugin_share_card", "分享卡片转文字"),
     ("astrbot_plugin_bili_vision", "B站视频画面理解"),
     ("astrbot_plugin_xhs_reader", "小红书笔记阅读"),
+    ("astrbot_plugin_heybox_reader", "小黑盒内容阅读"),
     ("astrbot_plugin_snow_sleep", "小雪作息"),
     ("astrbot_plugin_snow_continuity", "连续对话接话"),
     ("astrbot_plugin_snow_burst", "消息合流"),
