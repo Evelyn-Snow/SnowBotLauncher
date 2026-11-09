@@ -23,7 +23,7 @@ for _d in (DATA_DIR, LOG_DIR, PACKS_DIR, BACKUPS_DIR):
         pass
 
 APP_NAME = "SnowBotLauncher"
-APP_VERSION = "1.5.55"
+APP_VERSION = "1.5.56"
 AUTOSTART_TASK = "SnowBotLauncher"
 # 语音消息发送需要 ffmpeg（wav 转码）；放在启动器组件目录，随启动器统一管理。
 FFMPEG_BIN_DIR = Path.home() / ".astrbot_launcher" / "components" / "ffmpeg" / "bin"

@@ -90,17 +90,19 @@ def _initial_state(page: str) -> dict:
 
 
 def _note_from_state(state: dict) -> dict:
-    note_root = (state.get("note") or {}) if isinstance(state, dict) else {}
-    detail_map = note_root.get("noteDetailMap") or {}
-    if not isinstance(detail_map, dict):
+    """兼容两种页面结构：PC 的 note.noteDetailMap 和手机分享页的 noteData.data.noteData。"""
+    if not isinstance(state, dict):
         return {}
-    for value in detail_map.values():
-        if not isinstance(value, dict):
-            continue
-        note = value.get("note")
-        if isinstance(note, dict) and note:
-            return note
-    return {}
+    detail_map = (state.get("note") or {}).get("noteDetailMap") or {}
+    if isinstance(detail_map, dict):
+        for value in detail_map.values():
+            if not isinstance(value, dict):
+                continue
+            note = value.get("note")
+            if isinstance(note, dict) and note:
+                return note
+    mobile = ((state.get("noteData") or {}).get("data") or {}).get("noteData")
+    return mobile if isinstance(mobile, dict) and mobile else {}
 
 
 def normalize_image_url(url: str) -> str:
@@ -126,7 +128,9 @@ def _image_urls(note: dict) -> list[str]:
     for image in note.get("imageList") or []:
         if not isinstance(image, dict):
             continue
-        url = str(image.get("urlDefault") or image.get("urlPre") or "").strip()
+        url = str(
+            image.get("urlDefault") or image.get("urlPre") or image.get("url") or ""
+        ).strip()
         if not url:
             infos = image.get("infoList") or []
             url = next(
@@ -183,7 +187,11 @@ def parse_note_html(page: str) -> dict:
             "note_id": str(note.get("noteId") or note.get("id") or ""),
             "title": sanitize_text(note.get("title") or "", MAX_TITLE),
             "desc": sanitize_text(note.get("desc") or "", MAX_DESC),
-            "author": str((note.get("user") or {}).get("nickname") or "").strip(),
+            "author": str(
+                (note.get("user") or {}).get("nickname")
+                or (note.get("user") or {}).get("nickName")
+                or ""
+            ).strip(),
             "tags": tags,
             "images": images,
             "video": video,

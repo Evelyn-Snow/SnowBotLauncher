@@ -3321,6 +3321,38 @@ class XhsReaderTests(unittest.TestCase):
         self.assertEqual(info["source"], "meta")
         self.assertFalse(info["has_video"])
 
+    MOBILE_STATE = {
+        "noteData": {
+            "data": {
+                "noteData": {
+                    "noteId": "mobile1",
+                    "title": "十六张实况图",
+                    "desc": "原创素材",
+                    "type": "normal",
+                    "user": {"nickName": "小曦"},
+                    "tagList": [{"name": "实况图"}],
+                    "imageList": [
+                        {"url": f"http://sns-webpic-qc.xhscdn.com/{i}.jpg"}
+                        for i in range(16)
+                    ],
+                }
+            }
+        }
+    }
+
+    def test_parse_mobile_note_state(self):
+        html = (
+            "<html><script>window.__INITIAL_STATE__="
+            + json.dumps(self.MOBILE_STATE, ensure_ascii=False)
+            + "</script></html>"
+        )
+        info = parse_note_html(html)
+        self.assertEqual(info["title"], "十六张实况图")
+        self.assertEqual(info["author"], "小曦")
+        self.assertEqual(len(info["images"]), 16)
+        self.assertTrue(info["images"][0].startswith("https://sns-webpic"))
+        self.assertEqual(info["source"], "state")
+
     def test_parse_note_empty(self):
         self.assertEqual(parse_note_html("<html>404</html>"), {})
 
