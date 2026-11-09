@@ -7,7 +7,7 @@
   "allow_hosts": {
     "description": "允许访问的域名白名单",
     "type": "text",
-    "default": "bilibili.com\nb23.tv\nhdslb.com\nbilivideo.com\ngutenberg.org\ngutendex.com\narxiv.org\ndeepseek.com\nbigmodel.cn\ngithub.com\nwikipedia.org\nzhihu.com\ndouban.com\nbing.com",
+    "default": "bilibili.com\nb23.tv\nhdslb.com\nbilivideo.com\ngutenberg.org\ngutendex.com\narxiv.org\ndeepseek.com\nbigmodel.cn\ngithub.com\nwikipedia.org\nzhihu.com\ndouban.com\nbing.com\nxiaohongshu.com\nxhslink.com\nxhs.cn\nxiaoheihe.cn\napi.xiaoheihe.cn\nmax-c.com\nstore.steampowered.com\nsteampowered.com",
     "hint": "每行一个；匹配自身与所有子域（bilibili.com 也允许 api.bilibili.com）。不在名单里的链接一律拦截并告知用户"
   },
   "allow_dns_private": {

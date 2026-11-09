@@ -103,6 +103,24 @@ def _note_from_state(state: dict) -> dict:
     return {}
 
 
+def normalize_image_url(url: str) -> str:
+    """小红书图片地址可能带 ci.xiaohongshu.com/ 代理前缀或裸 http://，统一成直连 https。"""
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    # 形如 https://ci.xiaohongshu.com/http://sns-webpic...：取真正的图片地址
+    pos = raw.find("http://", 8)
+    if pos < 0:
+        pos = raw.find("https://", 8)
+    if pos > 0:
+        raw = raw[pos:]
+    if raw.startswith("//"):
+        raw = "https:" + raw
+    if raw.startswith("http://"):
+        raw = "https://" + raw[len("http://"):]
+    return raw
+
+
 def _image_urls(note: dict) -> list[str]:
     urls = []
     for image in note.get("imageList") or []:
@@ -119,8 +137,9 @@ def _image_urls(note: dict) -> list[str]:
                 ),
                 "",
             )
-        if url and url not in urls:
-            urls.append(url)
+        norm = normalize_image_url(url)
+        if norm and norm not in urls:
+            urls.append(norm)
     return urls
 
 
@@ -193,7 +212,7 @@ def parse_note_html(page: str) -> dict:
             metas.get("og:description") or metas.get("description") or "", MAX_DESC
         )
     if not info.get("images"):
-        image = metas.get("og:image") or ""
+        image = normalize_image_url(metas.get("og:image") or "")
         info["images"] = [image] if image.startswith("http") else []
     if not info.get("video"):
         video = metas.get("og:video") or ""
