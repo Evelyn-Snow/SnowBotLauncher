@@ -22,7 +22,7 @@ _URL_RE = re.compile(
     re.IGNORECASE,
 )
 _ANY_URL_RE = re.compile(r"https?://[^\s\"'<>\\）)]+", re.IGNORECASE)
-_LINK_ID_RE = re.compile(r"(?:link_id=|/app/bbs/link/|/bbs/post[_-]share\?link_id=)(\d{5,})")
+_LINK_ID_RE = re.compile(r"(?:link_id=|/app/bbs/link/|/bbs/post[_-]share\?link_id=)([0-9a-zA-Z]{5,})")
 _GAME_ID_RE = re.compile(r"/games?/detail/(\d{3,})")
 _STEAM_APP_RE = re.compile(r"steam(?:community|store)?[^\d]{0,20}(?:app/)?(\d{4,8})", re.I)
 
@@ -98,7 +98,10 @@ def parse_link_id(url: str) -> str:
             value = str((link or {}).get(key) or "").strip()
             if value.isdigit():
                 return value
-    match = re.search(r"(\d{6,})", raw)
+    match = re.search(r"link_id=([0-9a-zA-Z]{5,})", raw)
+    if match:
+        return match.group(1)
+    match = re.search(r"([0-9a-f]{12,})", raw, re.I)
     return match.group(1) if match else ""
 
 
@@ -182,7 +185,12 @@ def extract_card_info(data) -> dict:
             found = _ANY_URL_RE.search(text)
             if found:
                 info["url"] = found.group(0)
-        if not info["link_id"] and k in _LINK_ID_KEYS and text.isdigit():
+        if (
+            not info["link_id"]
+            and k in _LINK_ID_KEYS
+            and 5 <= len(text) <= 64
+            and text.isalnum()
+        ):
             info["link_id"] = text
         if not info["steam_appid"] and k in ("steam_appid", "steamappid", "steam_id"):
             appid = parse_steam_appid(text)
@@ -333,7 +341,13 @@ def parse_tree_payload(payload: dict) -> dict:
         return {}
     title = sanitize_text(link.get("title") or "", 120)
     desc = sanitize_text(link.get("description") or link.get("desc") or "")
-    blocks = link.get("content") or link.get("blocks") or []
+    blocks = link.get("text") or link.get("content") or link.get("blocks") or []
+    if isinstance(blocks, str):
+        # 新版接口把正文块序列化成 JSON 字符串：文本块 type=text，图片块 type=img
+        try:
+            blocks = json.loads(blocks)
+        except Exception:
+            blocks = [{"type": "text", "text": blocks}]
     texts = [desc] if desc else []
     images, video = [], str(link.get("video_url") or "")
     for block in blocks if isinstance(blocks, list) else []:
@@ -341,19 +355,34 @@ def parse_tree_payload(payload: dict) -> dict:
             continue
         kind = str(block.get("type") or block.get("block_type") or "").lower()
         text = _block_text(block)
-        if text and kind not in ("image", "video"):
-            texts.append(text)
+        url = ""
         for key in ("url", "src", "image", "image_url"):
-            url = str(block.get(key) or "")
-            if _is_video(url) and not video:
-                video = url
-            elif _is_image(url) and url not in images:
+            candidate = str(block.get(key) or "").strip()
+            if candidate.startswith("http"):
+                url = candidate
+                break
+        if kind in ("img", "image") and url:
+            if url not in images:
                 images.append(url)
+            continue
+        if kind in ("video", "video_url") and url:
+            if not video:
+                video = url
+            continue
+        if text and kind not in ("img", "image", "video"):
+            if text not in desc and (not desc or desc not in text):
+                texts.append(text)
+        if url and _is_video(url) and not video:
+            video = url
+        elif url and _is_image(url) and url not in images:
+            images.append(url)
     if not images:
         for key in ("image_list", "images", "image_urls"):
             for url in link.get(key) or []:
                 if isinstance(url, str) and _is_image(url) and url not in images:
                     images.append(url)
+    if not video and isinstance(link.get("video"), dict):
+        video = str(link["video"].get("url") or link["video"].get("video_url") or "")
     user = link.get("user") or {}
     game = link.get("game") or {}
     return {
@@ -362,7 +391,7 @@ def parse_tree_payload(payload: dict) -> dict:
         "author": str(user.get("username") or user.get("nickname") or "").strip(),
         "images": images[:9],
         "video": video,
-        "has_video": bool(video),
+        "has_video": bool(video) or bool(link.get("has_video")),
         "game": str(game.get("name") or "").strip() if isinstance(game, dict) else "",
         "source": "api",
     }

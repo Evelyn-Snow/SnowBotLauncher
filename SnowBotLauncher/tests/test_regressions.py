@@ -3449,6 +3449,44 @@ class HeyboxReaderTests(unittest.TestCase):
         self.assertEqual(info["video"], "https://video.example.com/a.mp4")
         self.assertEqual(info["images"], ["https://img.example.com/v.jpg"])
 
+    def test_hex_link_id_and_text_blocks(self):
+        url = (
+            "https://api.xiaoheihe.cn/v3/bbs/app/api/web/share?"
+            "h_camp=link&h_session_id=abc&link_id=556a72cc8e29&new_post_share_style_v2=1"
+        )
+        self.assertEqual(parse_link_id(url), "556a72cc8e29")
+        blocks = json.dumps(
+            [
+                {"type": "text", "text": "正文第一段"},
+                {
+                    "type": "img",
+                    "text": "/data/user/0/cache/1.jpg",
+                    "url": "https://imgheybox1.max-c.com/a.jpg",
+                    "height": "357",
+                },
+            ],
+            ensure_ascii=False,
+        )
+        payload = {
+            "status": "ok",
+            "result": {
+                "link": {
+                    "linkid": 196533068,
+                    "title": "标题",
+                    "description": "正文第一段",
+                    "has_video": 0,
+                    "text": blocks,
+                    "user": {"username": "作者"},
+                }
+            },
+        }
+        info = parse_tree_payload(payload)
+        self.assertEqual(info["title"], "标题")
+        self.assertIn("正文第一段", info["desc"])
+        self.assertTrue(info["desc"].count("正文第一段") == 1)  # 描述和文本块去重
+        self.assertEqual(info["images"], ["https://imgheybox1.max-c.com/a.jpg"])
+        self.assertFalse(info["has_video"])
+
     def test_hkey_matches_reference(self):
         # 与参考 JS 实现（luckylca/xhhBackCrack Hkey.js）同输入同输出
         self.assertEqual(
