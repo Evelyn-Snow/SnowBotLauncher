@@ -1,0 +1,114 @@
+{
+  "enabled": {
+    "description": "启用小红书笔记阅读",
+    "type": "bool",
+    "default": true
+  },
+  "max_images": {
+    "description": "图文笔记最多看几张图",
+    "type": "int",
+    "default": 6,
+    "hint": "1-9；图片会拼成一张对比图交给视觉模型，太多会变糊"
+  },
+  "vision_provider_id": {
+    "description": "视觉模型 id",
+    "type": "string",
+    "default": "",
+    "hint": "留空用当前对话模型；看图/看视频画面需要支持图片的模型"
+  },
+  "video_enabled": {
+    "description": "视频笔记抽画面",
+    "type": "bool",
+    "default": true
+  },
+  "video_max_mb": {
+    "description": "视频大小上限（MB）",
+    "type": "int",
+    "default": 80
+  },
+  "video_max_seconds": {
+    "description": "视频最长处理时长（秒）",
+    "type": "int",
+    "default": 300
+  },
+  "video_inline_seconds": {
+    "description": "最多转写前多少秒语音",
+    "type": "int",
+    "default": 120
+  },
+  "frame_count": {
+    "description": "视频抽几帧",
+    "type": "int",
+    "default": 9
+  },
+  "grid_cols": {
+    "description": "拼图列数",
+    "type": "int",
+    "default": 3
+  },
+  "asr_enabled": {
+    "description": "转写视频语音",
+    "type": "bool",
+    "default": false,
+    "hint": "开启后需要配置 asr_python（装了 faster-whisper 的解释器），和 bili_vision 的配置方式一致"
+  },
+  "asr_python": {
+    "description": "ASR 解释器路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 当前 AstrBot 的 Python；打包版启动器里必须显式填写"
+  },
+  "asr_model": {
+    "description": "Whisper 模型",
+    "type": "string",
+    "default": "small"
+  },
+  "asr_threads": {
+    "description": "ASR 线程数",
+    "type": "int",
+    "default": 2
+  },
+  "asr_compute_type": {
+    "description": "ASR 计算精度",
+    "type": "string",
+    "default": "int8"
+  },
+  "asr_language": {
+    "description": "ASR 语言",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动识别；中文可填 zh"
+  },
+  "asr_initial_prompt": {
+    "description": "ASR 初始提示词",
+    "type": "string",
+    "default": ""
+  },
+  "asr_download_root": {
+    "description": "Whisper 模型缓存目录",
+    "type": "string",
+    "default": ""
+  },
+  "asr_timeout_seconds": {
+    "description": "语音转写超时（秒）",
+    "type": "int",
+    "default": 300
+  },
+  "ffmpeg": {
+    "description": "ffmpeg 路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动找启动器自带或系统 PATH"
+  },
+  "ffprobe": {
+    "description": "ffprobe 路径",
+    "type": "string",
+    "default": "",
+    "hint": "留空自动找"
+  },
+  "request_timeout_seconds": {
+    "description": "抓取笔记页超时（秒）",
+    "type": "int",
+    "default": 30
+  }
+}
