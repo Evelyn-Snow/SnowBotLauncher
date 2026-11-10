@@ -22,6 +22,7 @@ virtual_life 升级改了文案也不会丢：找不到原句时会追加一段�
 | soften_virtual_life | true | 改写「必须符合当前状态」为对话优先 |
 | active_window_minutes / min_turns | 10 / 2 | 普通会话连续判定 |
 | owner_window_minutes / owner_min_turns | 5 / 1 | 主人私聊连续判定 |
+| mixed_media_hint | true | 文字+图片混发时提醒两边都看 |
 
 ## 说明
 

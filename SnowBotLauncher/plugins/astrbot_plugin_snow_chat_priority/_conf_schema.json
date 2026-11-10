@@ -29,5 +29,11 @@
     "description": "主人私聊触发所需消息数",
     "type": "int",
     "default": 1
+  },
+  "mixed_media_hint": {
+    "description": "文字+图片混发时提醒两边都看",
+    "type": "bool",
+    "default": true,
+    "hint": "给模型加一句：文字是对方的话、图片是补充，不要只描述图片或只回文字"
   }
 }

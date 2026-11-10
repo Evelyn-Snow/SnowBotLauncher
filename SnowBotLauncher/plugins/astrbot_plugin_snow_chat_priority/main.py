@@ -13,6 +13,7 @@ import time
 
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.message_components import Image
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
 
@@ -132,6 +133,19 @@ class SnowChatPriority(Star):
                     prompt = prompt + "\n\n" + SOFT_FALLBACK
                     changed = True
                     logger.info(f"[{NAME}] 已追加日程背景说明")
+
+        # 文字 + 图片混发时，提醒两边都要看
+        if bool(self._cfg("mixed_media_hint", True)) and "[多模态]" not in prompt:
+            components = getattr(event.message_obj, "message", None) or []
+            has_image = any(isinstance(comp, Image) for comp in components)
+            if has_image and str(getattr(event, "message_str", "") or "").strip():
+                prompt = prompt + (
+                    chr(10) * 2
+                    + "[多模态] 这条消息里文字和图片是一起的：文字是对方的话，图片是补充。"
+                    "回答时两部分都要看，不要只描述图片或只回文字。"
+                )
+                changed = True
+                logger.info(f"[{NAME}] 已追加多模态提示（文字+图片）")
 
         # D：连续聊天时明确要求先别收尾
         turns, window = self._track_turns(event)

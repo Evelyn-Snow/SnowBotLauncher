@@ -1,0 +1,9 @@
+name: astrbot_plugin_snow_forward
+display_name: 合并转发阅读
+desc: 把群聊/私聊收到的合并转发消息展开成文本（支持多层嵌套），让她能读到转发里的内容
+help: 无需指令；收到合并转发时自动展开，转发里的文字、图片占位、表情都会进入上下文
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_forward
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp

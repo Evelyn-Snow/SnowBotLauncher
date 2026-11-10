@@ -291,6 +291,12 @@ from plugins.astrbot_plugin_xhs_reader.library import (  # noqa: E402
     sanitize_text,
 )
 
+from plugins.astrbot_plugin_snow_forward.library import (  # noqa: E402
+    flatten_nodes,
+    nested_forward_ids,
+    segment_text,
+)
+
 from plugins.astrbot_plugin_snow_status.library import (  # noqa: E402
     build_signature_prompt,
     clean_signature,
@@ -3740,6 +3746,52 @@ class BrowsingTests(unittest.TestCase):
         self.assertEqual(
             browse_hkey("/bbs/app/link/tree", 1760000000, "ABC123DEF456"), "TYI2W14"
         )
+
+
+class SnowForwardTests(unittest.TestCase):
+    MESSAGES = [
+        {
+            "sender": {"nickname": "小明"},
+            "message": [
+                {"type": "text", "data": {"text": "你看这个"}},
+                {"type": "image", "data": {"file": "a.jpg"}},
+            ],
+        },
+        {
+            "sender": {"card": "小红"},
+            "message": [
+                {"type": "text", "data": {"text": "哈哈"}},
+                {"type": "face", "data": {"id": 13}},
+            ],
+        },
+        {
+            "sender": {"nickname": "嵌套"},
+            "message": [
+                {"type": "forward", "data": {"id": "nested-1"}},
+            ],
+        },
+    ]
+
+    def test_segment_text(self):
+        self.assertEqual(segment_text({"type": "text", "data": {"text": "hi"}}), "hi")
+        self.assertEqual(segment_text({"type": "image", "data": {}}), "[图片]")
+        self.assertEqual(segment_text({"type": "face", "data": {"id": 13}}), "[表情:13]")
+        self.assertEqual(segment_text({"type": "video", "data": {}}), "[视频]")
+        self.assertEqual(segment_text({"type": "forward", "data": {"id": "x"}}), "[嵌套转发]")
+        self.assertEqual(segment_text("bad"), "")
+
+    def test_flatten_nodes(self):
+        text = flatten_nodes(self.MESSAGES)
+        self.assertIn("小明：你看这个[图片]", text)
+        self.assertIn("小红：哈哈[表情:13]", text)
+        self.assertIn("嵌套：[嵌套转发]", text)
+        self.assertEqual(flatten_nodes([]), "")
+        self.assertIn("已截断", flatten_nodes(self.MESSAGES, limit_chars=5))
+
+    def test_nested_forward_ids(self):
+        self.assertEqual(nested_forward_ids(self.MESSAGES), ["nested-1"])
+        self.assertEqual(nested_forward_ids([]), [])
+        self.assertEqual(nested_forward_ids([{"message": [{"type": "text"}]}]), [])
 
 
 if __name__ == "__main__":

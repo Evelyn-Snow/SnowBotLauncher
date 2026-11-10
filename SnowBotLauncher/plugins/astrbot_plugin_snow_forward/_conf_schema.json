@@ -1,0 +1,23 @@
+{
+  "enabled": {
+    "description": "启用合并转发阅读",
+    "type": "bool",
+    "default": true
+  },
+  "max_depth": {
+    "description": "最多展开几层嵌套",
+    "type": "int",
+    "default": 3,
+    "hint": "0 表示只看最外层；层数越深请求越多"
+  },
+  "max_nodes": {
+    "description": "每层最多读多少条节点",
+    "type": "int",
+    "default": 60
+  },
+  "max_chars": {
+    "description": "展开后的最大字数",
+    "type": "int",
+    "default": 6000
+  }
+}
