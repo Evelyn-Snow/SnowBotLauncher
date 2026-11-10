@@ -71,7 +71,7 @@ def event_time_for_date(
 
 # ---------------- 每周配额 ----------------
 
-_EVENT_TYPES = ("book", "research", "paper")
+_EVENT_TYPES = ("book", "research", "paper", "writing")
 
 
 def quota_used(quotas: dict, week: str, event_type: str) -> int:
@@ -445,7 +445,7 @@ def pick_arxiv_paper(entries: list[dict], used_titles: set[str]) -> dict | None:
 
 # ---------------- 记录与注入 ----------------
 
-_EVENT_TYPE_NAMES = {"book": "读书", "research": "查资料", "paper": "读论文"}
+_EVENT_TYPE_NAMES = {"book": "读书", "research": "查资料", "paper": "读论文", "writing": "写作"}
 
 
 def event_type_name(event_type: str) -> str:
@@ -486,3 +486,37 @@ def experience_summary(
     if limit > 0 and len(text) > limit:
         text = text[:limit] + "…"
     return text
+
+
+# ---------------- 写作事件 ----------------
+
+def build_writing_prompt(topic: str, min_chars: int = 900, max_chars: int = 1200) -> str:
+    """让模型真的写一篇课程小论文；第一行是 Markdown 标题，正文不含伪造引用。"""
+    return chr(10).join(
+        [
+            f"你是一名大学生，正在写一门课的结课论文，主题是「{topic}」。",
+            f"请用中文写一篇 {min_chars}-{max_chars} 字的短文：",
+            "第一行用 Markdown 标题（以 # 开头，15 字以内）；",
+            "正文包含引言、2-3 个分析段落、结论，段落之间空一行。",
+            "要求：观点清楚、有自己的判断和取舍；不要伪造参考文献、数据或引文；",
+            "不要用表格；不要写“作为 AI”“希望对你有帮助”这类话；",
+            "像认真写完的课程作业，语气自然但不口语化。只输出文章本身。",
+        ]
+    )
+
+
+def writing_title_and_body(text: str, fallback_topic: str) -> tuple[str, str]:
+    """从模型输出里取标题与正文；没有标题时用话题当标题。"""
+    body = str(text or "").strip()
+    title = ""
+    lines = body.splitlines()
+    if lines and lines[0].lstrip().startswith("#"):
+        title = lines[0].lstrip("#").strip()
+        body = chr(10).join(lines[1:]).strip()
+    title = title or str(fallback_topic or "").strip() or "随笔"
+    return title[:60], body
+
+
+def writing_filename(day: str, title: str) -> str:
+    safe = re.sub(r'[\/:*?"<>|]', "_", str(title or "随笔")).strip()[:40] or "随笔"
+    return f"{str(day or '')[:10]} {safe}.md"

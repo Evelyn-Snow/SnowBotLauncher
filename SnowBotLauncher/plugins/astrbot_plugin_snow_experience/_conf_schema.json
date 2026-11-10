@@ -59,5 +59,16 @@
     "description": "聊天注入经历的最大字数",
     "type": "int",
     "default": 380
+  },
+  "writing_dir": {
+    "description": "文章保存目录",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 插件数据目录 writings/；写作事件会在这里生成 Markdown 文件，之后可以通过发文件功能发给你"
+  },
+  "weekly_writing": {
+    "description": "每周写作事件上限",
+    "type": "int",
+    "default": 2
   }
 }

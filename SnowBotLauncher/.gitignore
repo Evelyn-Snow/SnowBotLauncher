@@ -26,3 +26,5 @@ scripts/archive/
 *~
 .idea/
 .vscode/
+
+/data/

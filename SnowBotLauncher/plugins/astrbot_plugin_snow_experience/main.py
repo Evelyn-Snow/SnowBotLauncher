@@ -44,6 +44,9 @@ from .library import (
     scan_library,
     title_from_book_name,
     topic_pool,
+    build_writing_prompt,
+    writing_filename,
+    writing_title_and_body,
     topic_to_en,
     week_key,
 )
@@ -224,6 +227,7 @@ class SnowExperience(Star):
             "book": int(self._cfg("weekly_book", 2)),
             "research": int(self._cfg("weekly_research", 3)),
             "paper": int(self._cfg("weekly_paper", 1)),
+            "writing": int(self._cfg("weekly_writing", 2)),
         }
         event_type = pick_event_type(state.setdefault("quotas", {}), week, weekly, random.random())
         if not event_type:
@@ -282,6 +286,8 @@ class SnowExperience(Star):
             return await self._do_research()
         if event_type == "paper":
             return await self._do_paper()
+        if event_type == "writing":
+            return await self._do_writing()
         raise RuntimeError(f"未知事件类型：{event_type}")
 
     async def _provider(self):
@@ -506,6 +512,48 @@ class SnowExperience(Star):
         text = str(getattr(result, "completion_text", "") or "").strip()
         text = re.sub(r"[^A-Za-z ]", "", text).strip()
         return " ".join(text.split())[:60]
+
+    def _writing_dir(self) -> Path:
+        raw = str(self._cfg("writing_dir", "") or "").strip()
+        path = Path(os.path.expandvars(raw)) if raw else self._data_dir() / "writings"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    async def _do_writing(self) -> tuple[str, str, str]:
+        topic = random.choice(self._topics())
+        provider = await self._provider()
+        if provider is None:
+            raise RuntimeError("没有可用模型写文章")
+        result = await provider.text_chat(
+            prompt=build_writing_prompt(topic),
+            system_prompt="你正在写自己的课程作业，用中文认真写完，只输出文章。",
+        )
+        raw = str(getattr(result, "completion_text", "") or "").strip()
+        if len(raw) < 400:
+            raise RuntimeError("文章太短，视为写作失败")
+        title, body = writing_title_and_body(raw, topic)
+        if len(body) < 350:
+            raise RuntimeError("文章正文太短，视为写作失败")
+        today = datetime.date.today().isoformat()
+        path = self._writing_dir() / writing_filename(today, title)
+        if path.exists():
+            path = path.with_name(f"{path.stem} {time.strftime('%H%M%S')}.md")
+        content = chr(10).join(
+            [
+                f"# {title}",
+                "",
+                f"- 日期：{today}",
+                f"- 主题：{topic}",
+                "",
+                body.strip(),
+                "",
+            ]
+        )
+        path.write_text(content, encoding="utf-8")
+        logger.info(f"[{NAME}] 写作完成：{path.name}（{len(body)} 字）")
+        gist = body.replace(chr(10), " ").split("。")[0][:80]
+        self._last_material = None
+        return f"写了《{title}》", gist or f"写了一篇关于{topic}的文章", body
 
     async def _do_paper(self) -> tuple[str, str, str]:
         topic = random.choice(self._topics())

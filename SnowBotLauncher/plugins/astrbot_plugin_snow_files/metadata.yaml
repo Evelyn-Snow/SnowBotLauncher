@@ -1,0 +1,9 @@
+name: astrbot_plugin_snow_files
+display_name: 发文件
+desc: 让她把自己的文章/图片等文件发到聊天里；只允许配置目录、拒绝隐私与账号相关文件
+help: 对她说「把你写的论文发我看看」，她会从自己的文件夹里找并发送；画像、日记、配置、含账号或密钥的文件会被拒绝
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_files
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp

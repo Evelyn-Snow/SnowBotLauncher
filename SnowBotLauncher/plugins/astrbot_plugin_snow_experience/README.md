@@ -11,6 +11,7 @@
 | 读书 | 优先读电子书库里没读完的书（续读到上次位置）；书库空了才从古腾堡公版书自动下载（**仅限 txt 格式**、中文优先、≤8MB，失败不耗次数） | 2 次/周 |
 | 查资料 | 按兴趣关键词池用 DeepSeek 搜索并整理成笔记 | 3 次/周 |
 | 读论文 | arXiv 按关键词检索，下载 **PDF 正文**阅读（失败退回摘要）后写中文笔记，PDF 存进 `papers_dir` | 1 次/周 |
+| 写作 | 按兴趣话题真的写一篇 900-1200 字课程小论文，存成 Markdown（`writing_dir`），之后可以通过发文件功能发给你 | 2 次/周 |
 
 ## 支持阅读的文件
 
@@ -51,7 +52,8 @@
 | topics | 空 | 兴趣关键词池（逗号分隔） |
 | event_window | 10:00-21:00 | 事件触发时段 |
 | event_chance | 0.7 | 每天触发概率 |
-| weekly_book / weekly_research / weekly_paper | 2 / 3 / 1 | 每周各类型上限 |
+| weekly_book / weekly_research / weekly_paper / weekly_writing | 2 / 3 / 1 / 2 | 每周各类型上限 |
+| writing_dir | 空 | 写作事件保存目录；留空 = 插件数据目录 writings/ |
 | inject_limit_chars | 380 | 聊天注入经历的最大字数 |
 
 ## 依赖

@@ -1,0 +1,46 @@
+{
+  "enabled": {
+    "description": "启用发文件",
+    "type": "bool",
+    "default": true
+  },
+  "allow_dirs": {
+    "description": "允许发送的目录",
+    "type": "text",
+    "default": "",
+    "hint": "每行一个绝对路径；留空 = 插件数据目录 share/。建议只填她自己的写作/分享目录，不要填 C:/Evelyn_Snow 根目录"
+  },
+  "allowed_ext": {
+    "description": "允许的文件类型",
+    "type": "string",
+    "default": "md,txt,pdf,docx,pptx,xlsx,jpg,jpeg,png,gif,webp,zip",
+    "hint": "逗号分隔；不在名单里的后缀一律拒绝"
+  },
+  "deny_keywords": {
+    "description": "隐私关键词（文件名/路径）",
+    "type": "text",
+    "default": "",
+    "hint": "留空用内置列表（画像、关系、日记、配置、密码、token 等）；命中就拒绝"
+  },
+  "max_mb": {
+    "description": "单个文件大小上限（MB）",
+    "type": "int",
+    "default": 20
+  },
+  "max_per_hour": {
+    "description": "每小时最多发送几次",
+    "type": "int",
+    "default": 3
+  },
+  "list_limit": {
+    "description": "list_my_files 最多列几个",
+    "type": "int",
+    "default": 50
+  },
+  "scan_text": {
+    "description": "扫描文本内容里的账号/密钥",
+    "type": "bool",
+    "default": true,
+    "hint": "对 md/txt 读取前 512KB，命中已知 QQ/管理员账号或密码/token 特征就拒绝"
+  }
+}
