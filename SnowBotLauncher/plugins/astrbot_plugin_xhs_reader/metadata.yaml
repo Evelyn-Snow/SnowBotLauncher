@@ -2,7 +2,7 @@ name: astrbot_plugin_xhs_reader
 display_name: 小红书阅读
 desc: 分享小红书笔记链接时抓取正文、图片和视频内容（画面 + 语音转写），让她真的读过再聊
 help: 群里或私聊发小红书笔记链接（含分享卡片、xhslink 短链），她会读正文、看图/看视频后自然回应；也可以直接问她“这个笔记讲了什么”
-version: v0.1.2
+version: v0.1.3
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_xhs_reader
 author: Evelyn-Snow
 support_platforms:

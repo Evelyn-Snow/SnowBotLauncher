@@ -110,5 +110,17 @@
     "description": "抓取笔记页超时（秒）",
     "type": "int",
     "default": 30
+  },
+  "prefetch_video": {
+    "description": "视频笔记预取画面",
+    "type": "bool",
+    "default": true,
+    "hint": "消息里出现视频笔记时，先下载并抽帧让视觉模型看一遍再回复；关闭则只读正文，画面交给工具按需处理"
+  },
+  "prefetch_video_timeout": {
+    "description": "预取视频画面超时（秒）",
+    "type": "int",
+    "default": 75,
+    "hint": "超时就只读正文，不阻塞回复；视频较大或网络慢时可调高"
   }
 }
