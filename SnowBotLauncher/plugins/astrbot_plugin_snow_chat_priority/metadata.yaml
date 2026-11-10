@@ -1,0 +1,10 @@
+name: astrbot_plugin_snow_chat_priority
+display_name: 对话优先
+desc: 软化虚拟人生“必须符合当前状态”的硬约束，并在连续聊天时明确要求她先别主动结束对话
+help: 无需指令；正常聊天即可，日程只当背景，聊起来不会被“我在忙”频繁打断
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_chat_priority
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
+  - webchat

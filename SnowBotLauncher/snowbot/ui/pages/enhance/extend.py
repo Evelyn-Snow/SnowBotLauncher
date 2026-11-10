@@ -36,6 +36,7 @@ EXT_PLUGINS = (
     ("astrbot_plugin_snow_experience", "Bot 真实经历"),
     ("astrbot_plugin_snow_files", "发文件"),
     ("astrbot_plugin_snow_status", "QQ 签名与状态"),
+    ("astrbot_plugin_snow_chat_priority", "对话优先"),
     ("astrbot_plugin_snow_knowledge", "Bot 知识库"),
     ("astrbot_plugin_snow_guard", "Bot 安全守卫"),
     ("astrbot_plugin_snow_balance", "Bot 余额感知"),

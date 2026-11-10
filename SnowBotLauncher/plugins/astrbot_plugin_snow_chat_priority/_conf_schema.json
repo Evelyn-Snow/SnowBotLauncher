@@ -1,0 +1,33 @@
+{
+  "enabled": {
+    "description": "启用对话优先",
+    "type": "bool",
+    "default": true
+  },
+  "soften_virtual_life": {
+    "description": "软化虚拟人生的状态约束",
+    "type": "bool",
+    "default": true,
+    "hint": "把“普通回复必须与当前状态保持一致”换成“状态只作背景、对话优先”，不改第三方源码"
+  },
+  "active_window_minutes": {
+    "description": "连续对话判定窗口（分钟）",
+    "type": "int",
+    "default": 10
+  },
+  "min_turns": {
+    "description": "普通会话触发所需消息数",
+    "type": "int",
+    "default": 2
+  },
+  "owner_window_minutes": {
+    "description": "主人私聊判定窗口（分钟）",
+    "type": "int",
+    "default": 5
+  },
+  "owner_min_turns": {
+    "description": "主人私聊触发所需消息数",
+    "type": "int",
+    "default": 1
+  }
+}

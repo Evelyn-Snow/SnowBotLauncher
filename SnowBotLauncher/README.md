@@ -63,6 +63,7 @@ AstrBot + QQ 协议端（NapCat / SnowLuma）的 Windows 桌面统一控制台�
 | `snow_experience` | 真实经历：自主读公版书/查资料/读论文/写课程小论文（每周限次），经历注入聊天与日记 | [astrbot_plugin_snow_experience](https://github.com/Evelyn-Snow/astrbot_plugin_snow_experience) |
 | `snow_files` | 发文件：把她自己文件夹里的文章/图片发到聊天；只允许配置目录，拒绝画像/日记/配置与含账号密钥的文件 | [astrbot_plugin_snow_files](https://github.com/Evelyn-Snow/astrbot_plugin_snow_files) |
 | `snow_status` | 状态：按虚拟日程和心情自动更新 QQ 签名与在线状态，静默时段不动 | [astrbot_plugin_snow_status](https://github.com/Evelyn-Snow/astrbot_plugin_snow_status) |
+| `snow_chat_priority` | 对话优先：软化虚拟人生的状态约束，连续聊天时先别主动结束对话 | [astrbot_plugin_snow_chat_priority](https://github.com/Evelyn-Snow/astrbot_plugin_snow_chat_priority) |
 | `snow_knowledge` | 知识库：把真实读过的书/资料/论文切片向量化，聊天时按话题检索引用 | [astrbot_plugin_snow_knowledge](https://github.com/Evelyn-Snow/astrbot_plugin_snow_knowledge) |
 | `snow_guard` | 安全守卫：出网白名单、内网/元数据/短链拦截、外部内容注入防护 | [astrbot_plugin_snow_guard](https://github.com/Evelyn-Snow/astrbot_plugin_snow_guard) |
 | `snow_balance` | 余额感知：对话/语音/视觉额度不足时用自己的口吻私聊主人（饿了/嗓子哑了/看不清） | [astrbot_plugin_snow_balance](https://github.com/Evelyn-Snow/astrbot_plugin_snow_balance) |
@@ -70,7 +71,7 @@ AstrBot + QQ 协议端（NapCat / SnowLuma）的 Windows 桌面统一控制台�
 | `snow_profile` | 画像与熟悉度：第一人称印象、印象分/道德分、按熟悉度主动私聊，跨群/私聊关系网，带分享评级的共享记忆卡片 | [astrbot_plugin_snow_profile](https://github.com/Evelyn-Snow/astrbot_plugin_snow_profile) |
 | `snow_messenger` | 传话：让 Bot 私聊指定的 QQ 好友并转告回复 | [astrbot_plugin_snow_messenger](https://github.com/Evelyn-Snow/astrbot_plugin_snow_messenger) |
 
-> 22 个插件仓库中 18 个已创建并推送（xhs_reader / heybox_reader / snow_files / snow_status 待建）；插件市场提审按每批最多 3 个进行。
+> 23 个插件仓库中 18 个已创建并推送（xhs_reader / heybox_reader / snow_files / snow_status / snow_chat_priority 待建）；插件市场提审按每批最多 3 个进行。
 
 插件发布流程见 [docs/publishing.md](docs/publishing.md)；配置包格式说明见 [docs/pack-schema.md](docs/pack-schema.md)。
 
@@ -115,7 +116,7 @@ snowbot/
       │  └─ extend.py
       ├─ settings.py
       └─ about.py
-plugins/                     # 22 个随包分发的 AstrBot 插件源码
+plugins/                     # 23 个随包分发的 AstrBot 插件源码
 tests/                       # 不依赖运行中服务的回归测试
 scripts/                     # 开发/发布脚本；一次性迁移脚本在 archive/
 ```
@@ -132,7 +133,7 @@ scripts/                     # 开发/发布脚本；一次性迁移脚本在 ar
 | AstrBot | 机器人核心：接入大模型、插件、WebUI | [GitHub](https://github.com/AstrBotDevs/AstrBot) · [文档](https://docs.astrbot.app/) |
 | NapCat（可选） | QQ 协议端：把 QQ 消息接入 AstrBot | [GitHub](https://github.com/NapNeko/NapCatQQ) · [Releases](https://github.com/NapNeko/NapCatQQ/releases) · [文档](https://napneko.github.io/) |
 | SnowLuma（可选） | 另一套 QQ 协议端，NapCat 频繁掉线时替代 | [GitHub](https://github.com/SnowLuma/SnowLuma) · [Releases](https://github.com/SnowLuma/SnowLuma/releases) · [文档](https://snowluma.github.io) |
-| 本机扩展插件 | 22 个自研插件，随安装包分发，也可从各自仓库安装 | 见下方[本机扩展插件](#本机扩展插件)表 |
+| 本机扩展插件 | 23 个自研插件，随安装包分发，也可从各自仓库安装 | 见下方[本机扩展插件](#本机扩展插件)表 |
 
 > **协议端选择建议**：先用 NapCat；如果反复被踢下线，再换 SnowLuma。SnowLuma Lite 需要 **Node.js 24+**，采用源码可见非商业许可，本项目不打包/不再分发它的本体。
 
@@ -236,7 +237,7 @@ build.bat
 installer\output\SnowBotLauncher-Setup-<版本>.exe
 ```
 
-安装前请先按[前置准备](#前置准备)装好 AstrBot 和一个 QQ 协议端；安装包只包含控制台、22 个插件源码和文档，**不包含 AstrBot、QQ、协议端本体或模型 API Key**。
+安装前请先按[前置准备](#前置准备)装好 AstrBot 和一个 QQ 协议端；安装包只包含控制台、23 个插件源码和文档，**不包含 AstrBot、QQ、协议端本体或模型 API Key**。
 
 - 默认安装到 `C:\Program Files\SnowBotLauncher`，创建开始菜单与桌面快捷方式
 - 安装与运行都需要管理员权限（NapCat/SnowLuma 需要向 QQ 注入引导模块）
