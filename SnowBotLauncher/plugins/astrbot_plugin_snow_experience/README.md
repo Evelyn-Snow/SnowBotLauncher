@@ -12,6 +12,7 @@
 | 查资料 | 按兴趣关键词池用 DeepSeek 搜索并整理成笔记 | 3 次/周 |
 | 读论文 | arXiv 按关键词检索，下载 **PDF 正文**阅读（失败退回摘要）后写中文笔记，PDF 存进 `papers_dir` | 1 次/周 |
 | 写作 | 按兴趣话题真的写一篇 900-1200 字课程小论文，存成 Markdown（`writing_dir`），之后可以通过发文件功能发给你 | 2 次/周 |
+| 刷手机 | 刷 B站热门和小黑盒信息流，挑没见过的 1-2 条写一段第一人称记录，存进 `browsing_dir` 并注入聊天 | 3 次/周 |
 
 ## 支持阅读的文件
 
@@ -54,6 +55,8 @@
 | event_chance | 0.7 | 每天触发概率 |
 | weekly_book / weekly_research / weekly_paper / weekly_writing | 2 / 3 / 1 / 2 | 每周各类型上限 |
 | writing_dir | 空 | 写作事件保存目录；留空 = 插件数据目录 writings/ |
+| browsing_dir | 空 | 刷手机记录目录；留空 = 插件数据目录 browsing/ |
+| weekly_browsing / browsing_items / browsing_minutes | 3 / 2 / 15 | 每周次数、每条数、每次时长 |
 | inject_limit_chars | 380 | 聊天注入经历的最大字数 |
 
 ## 依赖

@@ -71,7 +71,7 @@ def event_time_for_date(
 
 # ---------------- 每周配额 ----------------
 
-_EVENT_TYPES = ("book", "research", "paper", "writing")
+_EVENT_TYPES = ("book", "research", "paper", "writing", "browsing")
 
 
 def quota_used(quotas: dict, week: str, event_type: str) -> int:
@@ -445,7 +445,7 @@ def pick_arxiv_paper(entries: list[dict], used_titles: set[str]) -> dict | None:
 
 # ---------------- 记录与注入 ----------------
 
-_EVENT_TYPE_NAMES = {"book": "读书", "research": "查资料", "paper": "读论文", "writing": "写作"}
+_EVENT_TYPE_NAMES = {"book": "读书", "research": "查资料", "paper": "读论文", "writing": "写作", "browsing": "刷手机"}
 
 
 def event_type_name(event_type: str) -> str:

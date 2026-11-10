@@ -50,6 +50,15 @@ from .library import (
     topic_to_en,
     week_key,
 )
+from .browsing import (
+    browsing_filename,
+    build_browsing_prompt,
+    heybox_feed_params,
+    parse_bili_popular,
+    parse_heybox_feeds,
+    pick_fresh,
+    trim_seen,
+)
 
 NAME = "astrbot_plugin_snow_experience"
 VLF_PLUGIN = "astrbot_plugin_virtual_life"
@@ -228,6 +237,7 @@ class SnowExperience(Star):
             "research": int(self._cfg("weekly_research", 3)),
             "paper": int(self._cfg("weekly_paper", 1)),
             "writing": int(self._cfg("weekly_writing", 2)),
+            "browsing": int(self._cfg("weekly_browsing", 3)),
         }
         event_type = pick_event_type(state.setdefault("quotas", {}), week, weekly, random.random())
         if not event_type:
@@ -288,6 +298,8 @@ class SnowExperience(Star):
             return await self._do_paper()
         if event_type == "writing":
             return await self._do_writing()
+        if event_type == "browsing":
+            return await self._do_browsing()
         raise RuntimeError(f"未知事件类型：{event_type}")
 
     async def _provider(self):
@@ -554,6 +566,90 @@ class SnowExperience(Star):
         gist = body.replace(chr(10), " ").split("。")[0][:80]
         self._last_material = None
         return f"写了《{title}》", gist or f"写了一篇关于{topic}的文章", body
+
+    def _browsing_dir(self) -> Path:
+        raw = str(self._cfg("browsing_dir", "") or "").strip()
+        path = Path(os.path.expandvars(raw)) if raw else self._data_dir() / "browsing"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    async def _fetch_browse_items(self) -> list[dict]:
+        timeout = aiohttp.ClientTimeout(total=30)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+            "Referer": "https://www.bilibili.com/",
+        }
+        items: list[dict] = []
+        async with aiohttp.ClientSession(timeout=timeout, headers=headers) as session:
+            try:
+                async with session.get(
+                    "https://api.bilibili.com/x/web-interface/popular?ps=20&pn=1"
+                ) as resp:
+                    items.extend(parse_bili_popular(await resp.json(content_type=None)))
+            except Exception as exc:
+                logger.info(f"[{NAME}] 刷手机：B站热门拉取失败：{exc}")
+            try:
+                params = heybox_feed_params()
+                async with session.get(
+                    "https://api.xiaoheihe.cn/bbs/app/feeds", params=params
+                ) as resp:
+                    items.extend(parse_heybox_feeds(await resp.json(content_type=None)))
+            except Exception as exc:
+                logger.info(f"[{NAME}] 刷手机：小黑盒信息流拉取失败：{exc}")
+        return items
+
+    async def _do_browsing(self) -> tuple[str, str, str]:
+        items = await self._fetch_browse_items()
+        if not items:
+            raise RuntimeError("B站和小黑盒都没有刷到内容")
+        state = self._load_state()
+        seen = set(state.get("browsing_seen") or [])
+        picked = pick_fresh(
+            items, seen, max(1, int(self._cfg("browsing_items", 2)))
+        )
+        if not picked:
+            raise RuntimeError("刷到的内容都看过了，换一次再刷")
+        provider = await self._provider()
+        if provider is None:
+            raise RuntimeError("没有可用模型写刷手机记录")
+        result = await provider.text_chat(
+            prompt=build_browsing_prompt(
+                picked, max(5, int(self._cfg("browsing_minutes", 15)))
+            ),
+            system_prompt="你正在记自己刷手机看到的东西，用第一人称、口语，只写正文。",
+        )
+        body = str(getattr(result, "completion_text", "") or "").strip()
+        if not body:
+            raise RuntimeError("刷手机记录生成失败")
+        today = datetime.date.today().isoformat()
+        path = self._browsing_dir() / browsing_filename(today)
+        stamp = time.strftime("%H:%M")
+        lines = [f"## {stamp} 刷手机", ""]
+        for item in picked:
+            lines.append(
+                f"- [{item.get('platform')}]《{item.get('title')}》"
+                f"（{item.get('author') or '未知'}）{item.get('url') or ''}"
+            )
+        lines += ["", body.strip(), ""]
+        block = chr(10).join(lines)
+        if path.exists():
+            path.write_text(
+                path.read_text(encoding="utf-8").rstrip() + chr(10) * 2 + block,
+                encoding="utf-8",
+            )
+        else:
+            path.write_text(f"# {today[:7]} 刷手机" + chr(10) * 2 + block, encoding="utf-8")
+        state["browsing_seen"] = trim_seen(
+            list(seen) + [str(item["id"]) for item in picked]
+        )
+        self._save_state()
+        platforms = "、".join(sorted({str(item.get("platform")) for item in picked}))
+        gist = body.replace(chr(10), " ").split("。")[0][:80]
+        self._last_material = None
+        title = f"刷了会儿手机（{platforms}）"
+        logger.info(f"[{NAME}] 刷手机完成：{path.name}，{len(picked)} 条")
+        return title, gist or title, body
 
     async def _do_paper(self) -> tuple[str, str, str]:
         topic = random.choice(self._topics())

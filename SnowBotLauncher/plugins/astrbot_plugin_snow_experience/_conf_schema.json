@@ -70,5 +70,27 @@
     "description": "每周写作事件上限",
     "type": "int",
     "default": 2
+  },
+  "browsing_dir": {
+    "description": "刷手机记录目录",
+    "type": "string",
+    "default": "",
+    "hint": "留空 = 插件数据目录 browsing/；按天存 Markdown，记录刷到的东西和她的感想"
+  },
+  "weekly_browsing": {
+    "description": "每周刷手机事件上限",
+    "type": "int",
+    "default": 3
+  },
+  "browsing_items": {
+    "description": "每次刷几条内容",
+    "type": "int",
+    "default": 2,
+    "hint": "B站热门 + 小黑盒信息流里挑没见过的；默认 2 条，控制花销"
+  },
+  "browsing_minutes": {
+    "description": "刷手机时长（分钟）",
+    "type": "int",
+    "default": 15
   }
 }

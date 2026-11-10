@@ -163,6 +163,16 @@ from plugins.astrbot_plugin_snow_profile.shared_memory import (  # noqa: E402
     parse_cards_payload,
     select_cards,
 )
+from plugins.astrbot_plugin_snow_experience.browsing import (  # noqa: E402
+    build_browsing_prompt,
+    browsing_filename,
+    generate_hkey as browse_hkey,
+    parse_bili_popular,
+    parse_heybox_feeds,
+    pick_fresh,
+    trim_seen,
+)
+
 from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     PROFILE_SYSTEM_PROMPT,
     activity_allows_proactive,
@@ -3662,6 +3672,74 @@ class SnowStatusTests(unittest.TestCase):
         self.assertIn("20 个汉字", prompt)
         self.assertNotEqual(fallback_signature(0), "")
         self.assertEqual(fallback_signature(0), fallback_signature(5))
+
+
+class BrowsingTests(unittest.TestCase):
+    BILI = {
+        "code": 0,
+        "data": {
+            "list": [
+                {
+                    "bvid": "BV1xx",
+                    "title": "一个视频",
+                    "desc": "简介",
+                    "owner": {"name": "UP"},
+                    "duration": 120,
+                    "pic": "https://i0.hdslb.com/a.jpg",
+                }
+            ]
+        },
+    }
+    HEYBOX = {
+        "status": "ok",
+        "result": {
+            "links": [
+                {
+                    "linkid": 123456,
+                    "title": "一个帖子",
+                    "description": "帖子摘要",
+                    "has_video": 0,
+                    "user": {"username": "盒友"},
+                }
+            ]
+        },
+    }
+
+    def test_parse_feeds(self):
+        bili = parse_bili_popular(self.BILI)
+        self.assertEqual(len(bili), 1)
+        self.assertEqual(bili[0]["title"], "一个视频")
+        self.assertEqual(bili[0]["url"], "https://www.bilibili.com/video/BV1xx")
+        hey = parse_heybox_feeds(self.HEYBOX)
+        self.assertEqual(len(hey), 1)
+        self.assertEqual(hey[0]["platform"], "小黑盒")
+        self.assertIn("123456", hey[0]["url"])
+        self.assertEqual(parse_bili_popular({}), [])
+
+    def test_pick_fresh_and_seen(self):
+        items = [
+            {"id": "a", "platform": "B站", "has_video": False},
+            {"id": "b", "platform": "小黑盒", "has_video": True},
+            {"id": "c", "platform": "B站", "has_video": False},
+        ]
+        picked = pick_fresh(items, {"a"}, 2)
+        self.assertEqual([item["id"] for item in picked], ["c", "b"])
+        self.assertEqual(pick_fresh(items, {"a", "b", "c"}, 2), [])
+        self.assertEqual(trim_seen(["a", "a", "b"]), ["a", "b"])
+
+    def test_browsing_prompt_and_filename(self):
+        prompt = build_browsing_prompt(
+            [{"platform": "B站", "title": "标题", "author": "UP", "desc": "简介"}], 10
+        )
+        self.assertIn("刷了 10 分钟手机", prompt)
+        self.assertIn("《标题》", prompt)
+        self.assertIn("200 字", prompt)
+        self.assertTrue(browsing_filename("2026-11-10").endswith("刷手机.md"))
+
+    def test_browse_hkey_reference(self):
+        self.assertEqual(
+            browse_hkey("/bbs/app/link/tree", 1760000000, "ABC123DEF456"), "TYI2W14"
+        )
 
 
 if __name__ == "__main__":
