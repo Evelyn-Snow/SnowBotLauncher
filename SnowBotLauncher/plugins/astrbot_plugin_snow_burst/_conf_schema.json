@@ -14,31 +14,31 @@
   "wait_seconds": {
     "description": "基础等待秒数",
     "type": "float",
-    "default": 1.8,
+    "default": 3.0,
     "hint": "每条新消息都会把窗口刷新到这个值；太小合不上，太大影响响应速度"
   },
   "max_wait_seconds": {
     "description": "私聊最长等待秒数",
     "type": "float",
-    "default": 5.0,
+    "default": 12.0,
     "hint": "私聊连续追问最多延长到这个上限，避免一直等"
   },
   "group_wait_seconds": {
     "description": "群聊基础等待秒数",
     "type": "float",
-    "default": 1.2,
+    "default": 2.0,
     "hint": "群聊节奏更快，默认比私聊短；@ 机器人后连续补充几句也能合上"
   },
   "group_max_wait_seconds": {
     "description": "群聊最长等待秒数",
     "type": "float",
-    "default": 3.0,
+    "default": 8.0,
     "hint": "群聊连续追问最多延长到这个上限"
   },
   "max_messages": {
     "description": "一次最多合几条",
     "type": "int",
-    "default": 6,
+    "default": 8,
     "hint": "超过这个条数就立刻分组处理，防止一大段话等太久"
   },
   "continuity_threshold": {
@@ -76,5 +76,11 @@
     "type": "bool",
     "default": true,
     "hint": "告诉模型这些是对方连续发的几条、当成一次表达整体回应，不要逐条回答"
+  },
+  "coalesce_block": {
+    "description": "一整块只回一次",
+    "type": "bool",
+    "default": true,
+    "hint": "同一块连续消息不再按 2 秒间隔拆成多组、不再逐块回复；整块只触发一次 LLM 和一条回复"
   }
 }

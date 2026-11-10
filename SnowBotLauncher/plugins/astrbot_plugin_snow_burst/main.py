@@ -102,19 +102,19 @@ class SnowBurst(Star):
 
     def _wait(self, private: bool = True) -> float:
         key = "wait_seconds" if private else "group_wait_seconds"
-        default = 1.8 if private else 1.2
+        default = 3.0 if private else 2.0
         return max(0.5, float(self.conf.get(key) or default))
 
     def _max_wait(self, private: bool = True) -> float:
         key = "max_wait_seconds" if private else "group_max_wait_seconds"
-        default = 5.0 if private else 3.0
+        default = 12.0 if private else 8.0
         return max(self._wait(private), float(self.conf.get(key) or default))
 
     def _threshold(self) -> float:
         return float(self.conf.get("continuity_threshold") or 0.18)
 
     def _max_messages(self) -> int:
-        return max(1, int(self.conf.get("max_messages") or 6))
+        return max(1, int(self.conf.get("max_messages") or 8))
 
     @filter.event_message_type(
         filter.EventMessageType.ALL, priority=(1 << 31)
@@ -193,6 +193,25 @@ class SnowBurst(Star):
             {"event": part.event, "text": part.text, "ts": part.ts}
             for part in burst.parts
         ]
+        if bool(self.conf.get("coalesce_block", True)):
+            try:
+                await self._dispatch(parts)
+            except Exception as exc:
+                logger.warning(f"[{NAME}] 整块合流派发失败，回退最后一条：{exc}")
+                last = parts[-1]["event"]
+                try:
+                    last.continue_event()
+                    last.clear_result()
+                    last.set_extra("_snow_burst_merged", True)
+                    queue = self._event_queue()
+                    if queue is None:
+                        raise RuntimeError("找不到事件队列")
+                    queue.put_nowait(last)
+                except Exception as fallback_exc:
+                    logger.error(
+                        f"[{NAME}] 回退派发也失败，消息丢失：{fallback_exc}"
+                    )
+            return
         groups = group_parts(
             parts,
             gap_seconds=2.0,
