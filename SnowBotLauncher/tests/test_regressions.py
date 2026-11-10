@@ -281,6 +281,13 @@ from plugins.astrbot_plugin_xhs_reader.library import (  # noqa: E402
     sanitize_text,
 )
 
+from plugins.astrbot_plugin_snow_status.library import (  # noqa: E402
+    build_signature_prompt,
+    clean_signature,
+    fallback_signature,
+    pick_status,
+)
+
 from plugins.astrbot_plugin_snow_files.library import (  # noqa: E402
     ext_allowed,
     format_file_list,
@@ -3626,6 +3633,36 @@ class SnowFilesTests(unittest.TestCase):
             text = format_file_list(rows)
             self.assertIn("u/a.md", text)
             self.assertEqual(format_file_list([]), "我这边的文件夹里没有能发的文件。")
+
+class SnowStatusTests(unittest.TestCase):
+    def test_clean_signature(self):
+        self.assertEqual(clean_signature("“今天也要加油呀”"), "今天也要加油呀")
+        self.assertEqual(
+            clean_signature("# 慢慢来" + chr(10) + "比较快"), "慢慢来 比较快"
+        )
+        self.assertEqual(clean_signature("  风很轻。  "), "风很轻")
+        self.assertEqual(clean_signature(""), "")
+        self.assertEqual(len(clean_signature("字" * 40, 24)), 24)
+
+    def test_pick_status(self):
+        self.assertEqual(pick_status("赶课程论文", "focus"), "肝作业")
+        self.assertEqual(pick_status("图书馆看书", "focus"), "学习中")
+        self.assertEqual(pick_status("午休", "sleep"), "睡觉中")
+        self.assertEqual(pick_status("追剧", "social"), "追剧中")
+        self.assertEqual(pick_status("散步消食", "transit"), "悠哉哉")
+        self.assertEqual(pick_status("发呆", "available"), "想静静")
+        self.assertEqual(pick_status("", "available"), "在线")
+        self.assertEqual(pick_status("", ""), "在线")
+
+    def test_signature_prompt_and_fallback(self):
+        prompt = build_signature_prompt("赶课程论文", "宿舍", "focus", 15)
+        self.assertIn("赶课程论文", prompt)
+        self.assertIn("宿舍", prompt)
+        self.assertIn("下午", prompt)
+        self.assertIn("20 个汉字", prompt)
+        self.assertNotEqual(fallback_signature(0), "")
+        self.assertEqual(fallback_signature(0), fallback_signature(5))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,38 @@
+{
+  "enabled": {
+    "description": "启用自动状态/签名",
+    "type": "bool",
+    "default": true
+  },
+  "signature_enabled": {
+    "description": "自动更新 QQ 签名",
+    "type": "bool",
+    "default": true
+  },
+  "status_enabled": {
+    "description": "自动更新在线状态",
+    "type": "bool",
+    "default": true
+  },
+  "min_interval_hours": {
+    "description": "最短更新间隔（小时）",
+    "type": "int",
+    "default": 4
+  },
+  "max_interval_hours": {
+    "description": "最长更新间隔（小时）",
+    "type": "int",
+    "default": 8
+  },
+  "quiet_hours": {
+    "description": "静默时段",
+    "type": "string",
+    "default": "23-8",
+    "hint": "这段时间不更新签名/状态；支持跨午夜，如 23-8"
+  },
+  "max_chars": {
+    "description": "签名最大字数",
+    "type": "int",
+    "default": 24
+  }
+}
