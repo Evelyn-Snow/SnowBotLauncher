@@ -70,5 +70,11 @@
     "type": "bool",
     "default": true,
     "hint": "她回复时写 [表情:呲牙] 这类标记，出站前自动替换成对应的 QQ 小黄脸；认不出的名字按原文本发出"
+  },
+  "merge_hint": {
+    "description": "合流时提示这是连续消息",
+    "type": "bool",
+    "default": true,
+    "hint": "告诉模型这些是对方连续发的几条、当成一次表达整体回应，不要逐条回答"
   }
 }

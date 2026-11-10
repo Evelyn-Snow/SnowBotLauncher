@@ -44,6 +44,7 @@ from plugins.astrbot_plugin_snow_burst.library import (  # noqa: E402
     merge_contexts,
     merge_texts,
     merge_user_messages,
+    merged_messages_hint,
     render_face_ids,
     should_extend,
     split_face_markers,
@@ -3026,6 +3027,16 @@ class SnowBurstTests(unittest.TestCase):
         self.assertEqual(face_label(None), "")
         self.assertEqual(face_label("bad"), "")
         self.assertEqual(render_face_ids([]), "")
+
+    def test_merged_messages_hint(self):
+        text = merged_messages_hint(3, 2)
+        self.assertIn("连续发了 3 条", text)
+        self.assertIn("2 张图片", text)
+        self.assertIn("不要只回文字", text)
+        self.assertIn("不要逐条回答", text)
+        plain = merged_messages_hint(2)
+        self.assertIn("连续发了 2 条", plain)
+        self.assertNotIn("张图片", plain)
 
     def test_split_face_markers(self):
         self.assertEqual(

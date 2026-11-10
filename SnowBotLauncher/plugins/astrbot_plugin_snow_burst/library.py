@@ -341,3 +341,21 @@ def chunk_parts(parts: list[dict], max_messages: int) -> list[list[dict]]:
     """组内再按条数切块，避免一次塞太多。"""
     size = max(1, int(max_messages or 1))
     return [list(parts[i : i + size]) for i in range(0, len(parts), size)]
+
+
+def merged_messages_hint(count: int, image_count: int = 0) -> str:
+    """合流多条消息时给模型的说明：文字和图片当成一次表达，别逐条回答。"""
+    count = max(2, int(count or 0))
+    image_count = max(0, int(image_count or 0))
+    if image_count:
+        return (
+            f"[连续消息] 对方刚才连续发了 {count} 条消息，其中包含 {image_count} 张图片；"
+            "上面的文字是连在一起的同一段话，图片按原顺序附在消息里。"
+            "请把文字和图片当成一次完整表达：按顺序对应着一起理解，"
+            "不要只回文字、也不要只描述图片；不要逐条回答，也不要说“你发了好多条”。"
+        )
+    return (
+        f"[连续消息] 对方刚才连续发了 {count} 条消息，"
+        "上面用换行连在一起的是同一段话。请把它们当成一次表达，整体理解、一次回应；"
+        "不要逐条回答，也不要说“你发了好多条”。如果中间夹着图片或表情，按顺序一起理解。"
+    )

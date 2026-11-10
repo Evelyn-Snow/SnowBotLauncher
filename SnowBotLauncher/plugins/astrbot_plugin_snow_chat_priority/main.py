@@ -135,7 +135,11 @@ class SnowChatPriority(Star):
                     logger.info(f"[{NAME}] 已追加日程背景说明")
 
         # 文字 + 图片混发时，提醒两边都要看
-        if bool(self._cfg("mixed_media_hint", True)) and "[多模态]" not in prompt:
+        if (
+            bool(self._cfg("mixed_media_hint", True))
+            and "[多模态]" not in prompt
+            and "[连续消息]" not in prompt
+        ):
             components = getattr(event.message_obj, "message", None) or []
             has_image = any(isinstance(comp, Image) for comp in components)
             if has_image and str(getattr(event, "message_str", "") or "").strip():

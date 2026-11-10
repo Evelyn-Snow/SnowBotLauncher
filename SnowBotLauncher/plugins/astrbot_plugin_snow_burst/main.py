@@ -44,6 +44,7 @@ from .library import (
     group_parts,
     merge_contexts,
     merge_texts,
+    merged_messages_hint,
     should_extend,
     split_face_markers,
 )
@@ -272,12 +273,46 @@ class SnowBurst(Star):
         event.message_obj.message = chain
         event.set_extra("_snow_burst_merged", True)
         event.set_extra("_snow_burst_count", len(parts))
+        event.set_extra(
+            "_snow_burst_image_count",
+            sum(
+                1
+                for part in parts
+                for comp in getattr(part["event"].message_obj, "message", None) or []
+                if isinstance(comp, Image)
+            ),
+        )
         queue = self._event_queue()
         if queue is None:
             logger.warning(f"[{NAME}] 找不到事件队列，消息未重新入队")
             return
         queue.put_nowait(event)
         logger.info(f"[{NAME}] 合流 {len(parts)} 条 → {text[:80]!r}")
+
+    @filter.on_llm_request()
+    async def hint_merged_messages(self, event: AstrMessageEvent, req):
+        if not bool(self.conf.get("enabled", False)):
+            return
+        if not bool(self.conf.get("merge_hint", True)):
+            return
+        if not event.get_extra("_snow_burst_merged"):
+            return
+        try:
+            count = int(event.get_extra("_snow_burst_count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count < 2:
+            return
+        prompt = str(getattr(req, "system_prompt", "") or "")
+        if "[连续消息]" in prompt:
+            return
+        try:
+            image_count = int(event.get_extra("_snow_burst_image_count") or 0)
+        except (TypeError, ValueError):
+            image_count = 0
+        req.system_prompt = (
+            prompt + chr(10) * 2 + merged_messages_hint(count, image_count)
+        )
 
     @filter.on_llm_request()
     async def merge_history(self, event: AstrMessageEvent, req):
