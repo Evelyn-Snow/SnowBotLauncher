@@ -157,32 +157,36 @@ def pick_fresh(
     seen: set[str],
     limit: int,
     interests: list[str] | None = None,
+    vector_scores: dict[str, float] | None = None,
 ) -> list[dict]:
-    """挑没见过的条目；有兴趣词时按相关度优先，否则优先非视频。"""
+    """挑没见过的条目；有语义分数时优先语义，其次关键词，最后非视频/平台偏好。"""
     fresh = [item for item in items if str(item.get("id")) not in seen]
-    if interests:
-        words = [str(word).strip() for word in interests if str(word).strip()][:20]
+    words = [
+        str(word).strip() for word in (interests or []) if str(word).strip()
+    ][:20]
 
-        def score(item: dict) -> int:
-            title = str(item.get("title") or "")
-            desc = str(item.get("desc") or "")
-            return sum(
-                2 if word in title else 1
-                for word in words
-                if word in title or word in desc
-            )
+    def keyword_score(item: dict) -> int:
+        title = str(item.get("title") or "")
+        desc = str(item.get("desc") or "")
+        return sum(
+            2 if word in title else 1
+            for word in words
+            if word in title or word in desc
+        )
 
-        fresh.sort(
-            key=lambda item: (
-                -score(item),
-                bool(item.get("has_video")),
-                item.get("platform") != "B站",
-            )
+    def combined(item: dict) -> float:
+        vector = 0.0
+        if vector_scores:
+            vector = float(vector_scores.get(str(item.get("id") or ""), 0.0))
+        return vector * 10.0 + keyword_score(item)
+
+    fresh.sort(
+        key=lambda item: (
+            -combined(item),
+            bool(item.get("has_video")),
+            item.get("platform") != "B站",
         )
-    else:
-        fresh.sort(
-            key=lambda item: (bool(item.get("has_video")), item.get("platform") != "B站")
-        )
+    )
     return fresh[: max(1, int(limit))]
 
 
@@ -214,3 +218,32 @@ def browsing_filename(day: str) -> str:
 def sanitize_title(text: str, limit: int = 80) -> str:
     value = re.sub(r"[\r\n\t]+", " ", str(text or "")).strip()
     return value[:limit]
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """两个向量的余弦相似度；维度不一致或空向量返回 0。"""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = sum(float(x) * float(y) for x, y in zip(a, b))
+    na = sum(float(x) * float(x) for x in a) ** 0.5
+    nb = sum(float(y) * float(y) for y in b) ** 0.5
+    if na <= 0 or nb <= 0:
+        return 0.0
+    return dot / (na * nb)
+
+
+def semantic_item_scores(
+    items: list[dict],
+    item_vectors: list[list[float]],
+    interest_vectors: list[list[float]],
+) -> dict[str, float]:
+    """每条内容取与所有兴趣词的最大余弦相似度。"""
+    scores = {}
+    for index, item in enumerate(items):
+        if index >= len(item_vectors):
+            continue
+        best = 0.0
+        for vector in interest_vectors:
+            best = max(best, cosine_similarity(item_vectors[index], vector))
+        scores[str(item.get("id") or index)] = best
+    return scores

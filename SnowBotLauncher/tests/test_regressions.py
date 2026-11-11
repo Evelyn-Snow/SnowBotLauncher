@@ -169,8 +169,10 @@ from plugins.astrbot_plugin_snow_experience.browsing import (  # noqa: E402
     browsing_filename,
     generate_hkey as browse_hkey,
     parse_bili_popular,
+    cosine_similarity,
     parse_heybox_feeds,
     pick_fresh,
+    semantic_item_scores,
     trim_seen,
 )
 
@@ -3818,6 +3820,30 @@ class BrowsingTests(unittest.TestCase):
         ]
         picked = pick_fresh(themed, set(), 1, ["人工智能"])
         self.assertEqual([item["id"] for item in picked], ["y"])
+
+    def test_semantic_scores(self):
+        self.assertAlmostEqual(cosine_similarity([1, 0], [1, 0]), 1.0)
+        self.assertEqual(cosine_similarity([1, 0], [0, 1]), 0.0)
+        self.assertEqual(cosine_similarity([], [1]), 0.0)
+        items = [{"id": "a"}, {"id": "b"}]
+        scores = semantic_item_scores(
+            items,
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 0.0], [0.0, 1.0]],
+        )
+        self.assertAlmostEqual(scores["a"], 1.0)
+        self.assertAlmostEqual(scores["b"], 1.0)
+        picked = pick_fresh(
+            [
+                {"id": "a", "platform": "B站", "title": "无关", "desc": ""},
+                {"id": "b", "platform": "B站", "title": "也无关", "desc": ""},
+            ],
+            set(),
+            1,
+            ["人工智能"],
+            {"a": 0.1, "b": 0.9},
+        )
+        self.assertEqual(picked[0]["id"], "b")
 
     def test_browsing_prompt_and_filename(self):
         prompt = build_browsing_prompt(

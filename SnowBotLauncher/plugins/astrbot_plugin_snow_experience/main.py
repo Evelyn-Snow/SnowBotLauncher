@@ -59,6 +59,7 @@ from .browsing import (
     parse_bili_popular,
     parse_heybox_feeds,
     pick_fresh,
+    semantic_item_scores,
     trim_seen,
 )
 
@@ -741,17 +742,65 @@ class SnowExperience(Star):
                 logger.info(f"[{NAME}] 刷手机：小黑盒信息流拉取失败：{exc}")
         return items
 
+    def _embedding_provider(self):
+        provider_id = str(
+            self._cfg("embedding_provider_id", "snowbot-memory") or ""
+        ).strip()
+        if not provider_id:
+            return None
+        try:
+            provider = self.context.get_provider_by_id(provider_id)
+        except Exception:
+            provider = None
+        if provider is not None and hasattr(provider, "get_embeddings"):
+            return provider
+        return None
+
+    async def _semantic_browse_scores(
+        self, items: list[dict], interests: list[str]
+    ) -> dict[str, float]:
+        """用本地 bge-m3 给信息流条目算语义相关度；失败返回空，走关键词兜底。"""
+        if not bool(self._cfg("semantic_browse", True)) or not items or not interests:
+            return {}
+        provider = self._embedding_provider()
+        if provider is None:
+            return {}
+        texts = [
+            f"{item.get('title') or ''} {item.get('desc') or ''}".strip()[:200]
+            for item in items
+        ]
+        query_texts = [str(word)[:80] for word in interests if str(word).strip()][:8]
+        if not query_texts:
+            return {}
+        try:
+            timeout = max(5, int(self._cfg("embedding_timeout_seconds", 20)))
+            item_vectors = await asyncio.wait_for(
+                provider.get_embeddings(texts), timeout=timeout
+            )
+            interest_vectors = await asyncio.wait_for(
+                provider.get_embeddings(query_texts), timeout=timeout
+            )
+        except Exception as exc:
+            logger.info(f"[{NAME}] 语义兴趣计算失败，退回关键词：{exc}")
+            return {}
+        if not item_vectors or not interest_vectors:
+            return {}
+        return semantic_item_scores(items, item_vectors, interest_vectors)
+
     async def _do_browsing(self) -> tuple[str, str, str]:
         items = await self._fetch_browse_items()
         if not items:
             raise RuntimeError("B站和小黑盒都没有刷到内容")
         state = self._load_state()
         seen = set(state.get("browsing_seen") or [])
+        interests = self._browsing_interests()
+        vector_scores = await self._semantic_browse_scores(items, interests)
         picked = pick_fresh(
             items,
             seen,
             max(1, int(self._cfg("browsing_items", 2))),
-            self._browsing_interests(),
+            interests,
+            vector_scores,
         )
         if not picked:
             raise RuntimeError("刷到的内容都看过了，换一次再刷")

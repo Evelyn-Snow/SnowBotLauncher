@@ -126,5 +126,22 @@
     "type": "float",
     "default": 2.0,
     "hint": "未读完的书权重是未读的多少倍；2.0 表示略微更倾向续读，而不是永远只读没读过的"
+  },
+  "semantic_browse": {
+    "description": "刷手机用语义向量筛选",
+    "type": "bool",
+    "default": true,
+    "hint": "用本地 bge-m3 给 B站/小黑盒条目算相关度；失败自动退回关键词，不产生 API 费用"
+  },
+  "embedding_provider_id": {
+    "description": "语义向量提供商",
+    "type": "string",
+    "default": "snowbot-memory",
+    "hint": "默认用本地 Ollama bge-m3；留空或不可用时退回关键词匹配"
+  },
+  "embedding_timeout_seconds": {
+    "description": "向量计算超时（秒）",
+    "type": "int",
+    "default": 20
   }
 }
