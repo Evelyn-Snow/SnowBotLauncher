@@ -2,7 +2,7 @@ name: astrbot_plugin_snow_status
 display_name: 小雪状态
 desc: 让她按虚拟日程和心情自己更新 QQ 签名与在线状态（低频、静默时段不打扰）
 help: 无需指令；她会隔几小时看看当前在做什么，换一句签名和对应的在线状态；也可以在聊天里让她改
-version: v0.1.0
+version: v0.1.1
 repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_status
 author: Evelyn-Snow
 support_platforms:

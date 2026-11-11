@@ -54,6 +54,8 @@
 | event_window | 10:00-21:00 | 事件触发时段 |
 | event_chance | 0.7 | 每天触发概率 |
 | weekly_book / weekly_research / weekly_paper / weekly_writing | 2 / 3 / 1 / 2 | 每周各类型上限 |
+| share_events_to_qzone | true | 刷手机/写作完成后按概率发一条说说（需安装 qzone 插件） |
+| qzone_share_chance / qzone_share_daily_limit / qzone_share_types | 0.5 / 1 / browsing,writing | 发说说概率、每天上限、允许分享的事件 |
 | writing_dir | 空 | 写作事件保存目录；留空 = 插件数据目录 writings/ |
 | browsing_dir | 空 | 刷手机记录目录；留空 = 插件数据目录 browsing/ |
 | weekly_browsing / browsing_items / browsing_minutes | 3 / 2 / 15 | 每周次数、每条数、每次时长 |

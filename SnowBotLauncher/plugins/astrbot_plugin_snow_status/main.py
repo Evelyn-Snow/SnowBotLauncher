@@ -174,6 +174,28 @@ class SnowStatus(Star):
         except Exception:
             return None
 
+    def _recent_experience(self) -> str:
+        """读真实经历插件的最新记录，让签名能呼应她刚做过的事。"""
+        path = (
+            self._data_dir().parent
+            / "astrbot_plugin_snow_experience"
+            / "experience_state.json"
+        )
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            records = data.get("records") if isinstance(data, dict) else None
+            if not records:
+                return ""
+            last = records[-1]
+            if not isinstance(last, dict):
+                return ""
+            title = str(last.get("title") or "").strip()
+            gist = str(last.get("gist") or "").strip()
+            return f"{title}：{gist}"[:100].strip("：")
+        except Exception:
+            return ""
+
     async def _make_signature(self, activity: str, place: str, state: str) -> str:
         provider = await self._provider()
         if provider is None:
@@ -182,7 +204,9 @@ class SnowStatus(Star):
         try:
             result = await asyncio.wait_for(
                 provider.text_chat(
-                    prompt=build_signature_prompt(activity, place, state, hour),
+                    prompt=build_signature_prompt(
+                        activity, place, state, hour, self._recent_experience()
+                    ),
                     system_prompt="你正在给自己写一句 QQ 签名，只输出这一句，不要解释。",
                 ),
                 timeout=30,

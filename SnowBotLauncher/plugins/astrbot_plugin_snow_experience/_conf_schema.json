@@ -92,5 +92,27 @@
     "description": "刷手机时长（分钟）",
     "type": "int",
     "default": 15
+  },
+  "share_events_to_qzone": {
+    "description": "把真实事件分享到 QQ 空间",
+    "type": "bool",
+    "default": true,
+    "hint": "刷手机/写作完成后按概率发一条说说；qzone 插件未安装时自动跳过"
+  },
+  "qzone_share_chance": {
+    "description": "事件发说说概率",
+    "type": "float",
+    "default": 0.5
+  },
+  "qzone_share_daily_limit": {
+    "description": "每天最多发几条说说",
+    "type": "int",
+    "default": 1
+  },
+  "qzone_share_types": {
+    "description": "哪些事件可以发说说",
+    "type": "string",
+    "default": "browsing,writing",
+    "hint": "逗号分隔；可选 browsing（刷手机）、writing（写作）"
   }
 }

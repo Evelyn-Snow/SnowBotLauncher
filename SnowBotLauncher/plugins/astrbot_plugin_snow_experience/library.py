@@ -520,3 +520,21 @@ def writing_title_and_body(text: str, fallback_topic: str) -> tuple[str, str]:
 def writing_filename(day: str, title: str) -> str:
     safe = re.sub(r'[\/:*?"<>|]', "_", str(title or "随笔")).strip()[:40] or "随笔"
     return f"{str(day or '')[:10]} {safe}.md"
+
+
+# ---------------- 社交分享 ----------------
+
+def build_qzone_post(event_type: str, title: str, gist: str, body: str) -> str:
+    """把真实事件压成一条说说正文；写作只发开头，不发整篇论文。"""
+    body = str(body or "").strip()
+    gist = str(gist or "").strip()
+    if event_type == "writing":
+        first = body.split("。")[0].strip()[:100] or gist[:100]
+        clean_title = str(title or "").strip()
+        clean_title = re.sub(r"^写了", "", clean_title).strip("《》 ")
+        text = f"今天写完了《{clean_title}》。{first}" if clean_title else first
+    elif event_type == "browsing":
+        text = body[:240]
+    else:
+        text = gist[:200] or body[:200]
+    return text.strip()[:300]

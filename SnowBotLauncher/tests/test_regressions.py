@@ -263,6 +263,7 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     scan_library,
     title_from_book_name,
     topic_to_en,
+    build_qzone_post,
     build_writing_prompt,
     writing_filename,
     writing_title_and_body,
@@ -3687,8 +3688,26 @@ class SnowStatusTests(unittest.TestCase):
         self.assertIn("宿舍", prompt)
         self.assertIn("下午", prompt)
         self.assertIn("20 个汉字", prompt)
+        with_recent = build_signature_prompt(
+            "泡茶", "阳台", "available", 16, "刷了会儿手机（B站）：看到一条有趣的视频"
+        )
+        self.assertIn("刷了会儿手机", with_recent)
+        self.assertIn("不要直接复述", with_recent)
         self.assertNotEqual(fallback_signature(0), "")
         self.assertEqual(fallback_signature(0), fallback_signature(5))
+
+    def test_build_qzone_post(self):
+        browse = build_qzone_post(
+            "browsing", "刷了会儿手机（B站）", "看到一条视频", "刷到一个很有意思的视频，讲修表。"
+        )
+        self.assertIn("修表", browse)
+        writing = build_qzone_post(
+            "writing", "写了《人工智能与科研》", "写完挺空的", "人工智能正在改变科研方式。后面还有很多内容。" * 10
+        )
+        self.assertIn("今天写完了", writing)
+        self.assertLessEqual(len(writing), 300)
+        self.assertNotIn("后面还有很多内容。后面", writing)
+        self.assertEqual(build_qzone_post("book", "读书", "读后感", ""), "读后感")
 
 
 class BrowsingTests(unittest.TestCase):

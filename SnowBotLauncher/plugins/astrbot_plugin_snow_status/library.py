@@ -66,16 +66,23 @@ def pick_status(activity: str, state: str) -> str:
     return STATUS_BY_STATE.get(str(state or "").lower(), "在线")
 
 
-def build_signature_prompt(activity: str, place: str, state: str, hour: int) -> str:
+def build_signature_prompt(
+    activity: str, place: str, state: str, hour: int, recent: str = ""
+) -> str:
     scene = f"现在{activity}" if activity else "现在没什么特别的事"
     if place:
         scene += f"，在{place}"
     period = "早上" if hour < 9 else "上午" if hour < 12 else "中午" if hour < 14 else "下午" if hour < 18 else "晚上"
-    return (
-        f"你是小雪，一个大学生。现在是{period}，{scene}（状态：{state or '日常'}）。\n"
+    lines = [
+        f"你是小雪，一个大学生。现在是{period}，{scene}（状态：{state or '日常'}）。"
+    ]
+    if recent:
+        lines.append(f"你最近真实做过的事：{recent}。签名可以自然呼应这件事，但不要直接复述。")
+    lines.append(
         "写一句你此刻想挂在 QQ 签名上的短句：不超过 20 个汉字，第一人称，口语、自然、"
         "有一点自己的小情绪或画面感；不要引号、不要解释、不要带话题标签。只输出这一句。"
     )
+    return chr(10).join(lines)
 
 
 def fallback_signature(index: int = 0) -> str:

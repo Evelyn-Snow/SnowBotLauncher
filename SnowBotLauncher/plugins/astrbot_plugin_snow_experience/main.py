@@ -44,6 +44,7 @@ from .library import (
     scan_library,
     title_from_book_name,
     topic_pool,
+    build_qzone_post,
     build_writing_prompt,
     writing_filename,
     writing_title_and_body,
@@ -268,7 +269,52 @@ class SnowExperience(Star):
         state["records"] = records[-20:]
         self._save_state()
         logger.info(f"[{NAME}] 真实经历完成：{title}")
+        await self._maybe_share_to_qzone(event_type, title, gist, body)
         await self._feed_knowledge()
+
+    async def _maybe_share_to_qzone(
+        self, event_type: str, title: str, gist: str, body: str
+    ) -> None:
+        """刷手机/写作完成后，按概率把这件事发成一条说说（每天最多一条）。"""
+        if not bool(self._cfg("share_events_to_qzone", True)):
+            return
+        types = {
+            item.strip()
+            for item in str(
+                self._cfg("qzone_share_types", "browsing,writing") or ""
+            ).replace("，", ",").split(",")
+            if item.strip()
+        }
+        if event_type not in types:
+            return
+        today = datetime.date.today().isoformat()
+        state = self._load_state()
+        share = state.setdefault("qzone_share", {})
+        if share.get("date") != today:
+            share["date"] = today
+            share["count"] = 0
+        limit = max(1, int(self._cfg("qzone_share_daily_limit", 1)))
+        if int(share.get("count") or 0) >= limit:
+            return
+        chance = max(0.0, min(1.0, float(self._cfg("qzone_share_chance", 0.5))))
+        if random.random() >= chance:
+            logger.info(f"[{NAME}] 本次事件不分享到空间（概率 {chance:.0%}）")
+            return
+        try:
+            meta = self.context.get_registered_star("astrbot_plugin_qzone")
+            plugin = getattr(meta, "star_cls", None) if meta else None
+            service = getattr(plugin, "service", None)
+            if service is None or not hasattr(service, "publish_post"):
+                return
+            text = build_qzone_post(event_type, title, gist, body)
+            if not text:
+                return
+            await asyncio.wait_for(service.publish_post(text=text), timeout=90)
+            share["count"] = int(share.get("count") or 0) + 1
+            self._save_state()
+            logger.info(f"[{NAME}] 已把真实事件发到空间：{text[:60]}")
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 分享到空间失败（不影响事件）：{exc}")
 
     async def _feed_knowledge(self) -> None:
         """把本次实际读到的原文送去知识库（未装 snow_knowledge 时静默跳过）。"""

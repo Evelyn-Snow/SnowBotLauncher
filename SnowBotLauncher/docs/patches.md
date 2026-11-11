@@ -23,3 +23,17 @@ python scripts\patches\patch_qzone_snowluma.py ^
 - `main.py`：`_capture_page_client` 校验 CQHttp 对象是否还有 WS 连接，失效则重新绑定。
 
 补丁可重复执行；升级 qzone 插件后需要重新打一次。
+
+
+## qzone：看空间改为随机窗口 + 概率跳过
+
+`AutoComment` 默认每天 8 点固定执行，且没有“今天不刷”的开关。
+
+补丁：`scripts/patches/patch_qzone_comment_chance.py`，给 qzone 增加
+`trigger.comment_chance`（0-1）；到点先掷骰子，未命中记一条日志后跳过。
+
+配合配置：
+
+- `comment_cron = "0 10 * * *"`、`comment_offset = 7200` → 每天 8:00–12:00 随机
+- `comment_chance = 0.5` → 一半的日子不刷
+- `publish_cron = ""` → 关闭固定的每日 23:30 发说说，改由真实事件触发
