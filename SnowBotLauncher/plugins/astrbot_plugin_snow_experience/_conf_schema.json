@@ -114,5 +114,17 @@
     "type": "string",
     "default": "browsing,writing",
     "hint": "逗号分隔；可选 browsing（刷手机）、writing（写作）"
+  },
+  "reading_parallel": {
+    "description": "同时在读几本",
+    "type": "int",
+    "default": 3,
+    "hint": "选书时在最近在读和未读的书里各取前几本加权抽；默认 3"
+  },
+  "reading_partial_bias": {
+    "description": "续读偏好倍数",
+    "type": "float",
+    "default": 2.0,
+    "hint": "未读完的书权重是未读的多少倍；2.0 表示略微更倾向续读，而不是永远只读没读过的"
   }
 }

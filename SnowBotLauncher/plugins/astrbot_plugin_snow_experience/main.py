@@ -34,8 +34,9 @@ from .library import (
     extract_book_text,
     monthly_event_name,
     now_reading_summary,
+    last_topics,
     pick_arxiv_paper,
-    pick_book,
+    pick_book_parallel,
     pick_event_type,
     pick_gutendex_book,
     parse_arxiv_entries,
@@ -365,7 +366,13 @@ class SnowExperience(Star):
         if not files and others:
             hints = {document_format_hint(str(books_dir / rel)) for rel in others[:5]}
             logger.info(f"[{NAME}] 书库里的文件读不了：{'；'.join(hints)}")
-        book = pick_book(files, index)
+        book = pick_book_parallel(
+            files,
+            index,
+            random.random(),
+            float(self._cfg("reading_partial_bias", 2.0)),
+            int(self._cfg("reading_parallel", 3)),
+        )
         if book is None:
             book = await self._download_book()
             files = [{"name": Path(book["path"]).name, "path": book["path"]}]
@@ -470,9 +477,98 @@ class SnowExperience(Star):
         logger.info(f"[{NAME}] 已下载公版书：{title}（Gutenberg #{gid}）")
         return {"path": str(path), "name": f"{safe}.txt"}
 
-    async def _do_research(self) -> tuple[str, str, str]:
+    # ---------------- 事件之间的连续性 ----------------
+    def _recent_records(self, types: tuple[str, ...], limit: int = 3) -> list[dict]:
+        records = self._load_state().get("records") or []
+        rows = [
+            record
+            for record in reversed(records)
+            if isinstance(record, dict) and record.get("type") in types
+        ]
+        return rows[: max(1, int(limit))]
+
+    def _recent_context(self, types: tuple[str, ...], limit: int = 2) -> str:
+        rows = self._recent_records(types, limit)
+        return "；".join(
+            f"{str(row.get('title') or '').strip()}：{str(row.get('gist') or '').strip()}"[:90]
+            for row in rows
+        ).strip("；")
+
+    def _browsing_interests(self) -> list[str]:
+        topics = list(self._topics())
+        records = self._load_state().get("records") or []
+        topics.extend(
+            last_topics(records, ("research", "reading", "writing", "browsing"), 6)
+        )
+        return list(dict.fromkeys(topic for topic in topics if topic))[:20]
+
+    def _writing_topic(self) -> str:
+        records = self._load_state().get("records") or []
+        topics = last_topics(records, ("research",), 1) or last_topics(
+            records, ("reading",), 1
+        )
+        return topics[0] if topics else random.choice(self._topics())
+
+    async def _next_research_query(self) -> str:
+        recent = self._recent_context(("research",), 2)
+        if recent:
+            provider = await self._provider()
+            if provider is not None:
+                try:
+                    result = await asyncio.wait_for(
+                        provider.text_chat(
+                            prompt=(
+                                f"你之前查过：{recent}。"
+                                + chr(10)
+                                + "这次顺着其中一条线索，换一个更具体、相关的新方向继续查。"
+                                "只输出一个中文搜索查询（不超过 20 字），不要解释。"
+                            ),
+                            system_prompt="只输出一个中文搜索词，不要解释。",
+                        ),
+                        timeout=30,
+                    )
+                    query = " ".join(
+                        str(getattr(result, "completion_text", "") or "")
+                        .strip()
+                        .strip('"“”')
+                        .split()
+                    )
+                    if query:
+                        return query[:60]
+                except Exception as exc:
+                    logger.info(f"[{NAME}] 生成后续查询失败，退回随机话题：{exc}")
         topic = random.choice(self._topics())
-        query = f"{topic} {random.choice(('趣闻', '入门', '最新研究', '原理'))}"[:128]
+        return f"{topic} {random.choice(('趣闻', '入门', '最新研究', '原理'))}"[:128]
+
+    async def _next_paper_query(self, topic: str) -> str:
+        recent = self._recent_context(("research", "paper"), 2)
+        if recent:
+            provider = await self._provider()
+            if provider is not None:
+                try:
+                    result = await asyncio.wait_for(
+                        provider.text_chat(
+                            prompt=(
+                                f"你最近查过：{recent}。"
+                                + chr(10)
+                                + "为 arXiv 生成一个相关的英文检索短语，顺着这个方向继续找论文。"
+                                "只输出英文关键词，不要解释。"
+                            ),
+                            system_prompt="只输出英文检索词，不要解释。",
+                        ),
+                        timeout=30,
+                    )
+                    query = re.sub(
+                        r"[^A-Za-z ]", "", str(getattr(result, "completion_text", "") or "")
+                    ).strip()
+                    if query:
+                        return " ".join(query.split())[:60]
+                except Exception as exc:
+                    logger.info(f"[{NAME}] 生成后续论文检索失败：{exc}")
+        return topic_to_en(topic) or (await self._translate_topic(topic))
+
+    async def _do_research(self) -> tuple[str, str, str]:
+        query = await self._next_research_query()
         keys = self._deepseek_keys()
         if not keys:
             raise RuntimeError("未配置 DeepSeek 搜索 Key（provider_settings.websearch_deepseek_key）")
@@ -578,7 +674,7 @@ class SnowExperience(Star):
         return path
 
     async def _do_writing(self) -> tuple[str, str, str]:
-        topic = random.choice(self._topics())
+        topic = self._writing_topic()
         provider = await self._provider()
         if provider is None:
             raise RuntimeError("没有可用模型写文章")
@@ -652,7 +748,10 @@ class SnowExperience(Star):
         state = self._load_state()
         seen = set(state.get("browsing_seen") or [])
         picked = pick_fresh(
-            items, seen, max(1, int(self._cfg("browsing_items", 2)))
+            items,
+            seen,
+            max(1, int(self._cfg("browsing_items", 2))),
+            self._browsing_interests(),
         )
         if not picked:
             raise RuntimeError("刷到的内容都看过了，换一次再刷")
@@ -699,8 +798,7 @@ class SnowExperience(Star):
 
     async def _do_paper(self) -> tuple[str, str, str]:
         topic = random.choice(self._topics())
-        # arXiv 只认英文检索词；内置映射优先，没有的现场让模型翻一次
-        en_query = topic_to_en(topic) or (await self._translate_topic(topic))
+        en_query = await self._next_paper_query(topic)
         if not en_query:
             raise RuntimeError(f"「{topic}」翻不出可用的英文检索词")
         query = urllib.parse.quote(en_query)

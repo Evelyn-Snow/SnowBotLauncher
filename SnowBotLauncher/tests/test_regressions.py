@@ -250,11 +250,13 @@ from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     event_time_for_date,
     experience_summary,
     extract_book_text,
+    last_topics,
     monthly_event_name,
     now_reading_summary,
     parse_arxiv_entries,
     pick_arxiv_paper,
     pick_book,
+    pick_book_parallel,
     pick_event_type,
     pick_gutendex_book,
     quota_allow,
@@ -2239,6 +2241,52 @@ class ExperienceTests(unittest.TestCase):
         done = {"a.txt": {"finished": True}, "b.txt": {"finished": True}}
         self.assertIsNone(pick_book(files, done))
 
+    def test_pick_book_parallel_bias(self):
+        files = [
+            {"name": "a.txt", "path": "a"},
+            {"name": "b.txt", "path": "b"},
+            {"name": "c.txt", "path": "c"},
+        ]
+        index = {
+            "b.txt": {"offset": 100, "finished": False, "last_ts": 7},
+            "c.txt": {"offset": 50, "finished": False, "last_ts": 3},
+        }
+        # roll 极小 → 落在未读完的池子里（权重更高）
+        self.assertIn(
+            pick_book_parallel(files, index, 0.0, 2.0, 3)["name"], {"b.txt", "c.txt"}
+        )
+        # roll 极大 → 落在未读的 a
+        self.assertEqual(
+            pick_book_parallel(files, index, 0.999, 2.0, 3)["name"], "a.txt"
+        )
+        # 只有未读 / 只有续读
+        self.assertEqual(
+            pick_book_parallel([files[0]], index, 0.5, 2.0, 3)["name"], "a.txt"
+        )
+        self.assertEqual(
+            pick_book_parallel([files[1]], index, 0.5, 2.0, 3)["name"], "b.txt"
+        )
+        self.assertIsNone(
+            pick_book_parallel(
+                files,
+                {name: {"finished": True} for name in ("a.txt", "b.txt", "c.txt")},
+                0.5,
+            )
+        )
+
+    def test_last_topics(self):
+        records = [
+            {"type": "research", "title": "查了「心理学 入门」", "gist": "学到不少"},
+            {"type": "book", "title": "读了《西游记》", "gist": "好看"},
+            {"type": "writing", "title": "写了《人工智能与科研》", "gist": "写完了"},
+        ]
+        self.assertEqual(last_topics(records, ("research",), 1), ["心理学 入门"])
+        self.assertEqual(
+            last_topics(records, ("research", "writing"), 2),
+            ["人工智能与科研", "心理学 入门"],
+        )
+        self.assertEqual(last_topics(records, ("paper",)), [])
+
     def test_book_chunk_offset_and_finish(self):
         text = "字" * 100
         chunk, offset = book_chunk(text, 0, chunk=60)
@@ -3762,6 +3810,14 @@ class BrowsingTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in picked], ["c", "b"])
         self.assertEqual(pick_fresh(items, {"a", "b", "c"}, 2), [])
         self.assertEqual(trim_seen(["a", "a", "b"]), ["a", "b"])
+
+        themed = [
+            {"id": "x", "platform": "小黑盒", "has_video": True, "title": "装修日记", "desc": ""},
+            {"id": "y", "platform": "B站", "has_video": False, "title": "人工智能新进展", "desc": "模型"},
+            {"id": "z", "platform": "B站", "has_video": False, "title": "随手拍", "desc": ""},
+        ]
+        picked = pick_fresh(themed, set(), 1, ["人工智能"])
+        self.assertEqual([item["id"] for item in picked], ["y"])
 
     def test_browsing_prompt_and_filename(self):
         prompt = build_browsing_prompt(

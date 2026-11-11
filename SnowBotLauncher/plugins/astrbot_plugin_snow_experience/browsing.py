@@ -152,10 +152,37 @@ def parse_heybox_feeds(payload: dict) -> list[dict]:
     return rows
 
 
-def pick_fresh(items: list[dict], seen: set[str], limit: int) -> list[dict]:
-    """挑没见过的条目；优先非视频，避免刷手机事件太重。"""
+def pick_fresh(
+    items: list[dict],
+    seen: set[str],
+    limit: int,
+    interests: list[str] | None = None,
+) -> list[dict]:
+    """挑没见过的条目；有兴趣词时按相关度优先，否则优先非视频。"""
     fresh = [item for item in items if str(item.get("id")) not in seen]
-    fresh.sort(key=lambda item: (bool(item.get("has_video")), item.get("platform") != "B站"))
+    if interests:
+        words = [str(word).strip() for word in interests if str(word).strip()][:20]
+
+        def score(item: dict) -> int:
+            title = str(item.get("title") or "")
+            desc = str(item.get("desc") or "")
+            return sum(
+                2 if word in title else 1
+                for word in words
+                if word in title or word in desc
+            )
+
+        fresh.sort(
+            key=lambda item: (
+                -score(item),
+                bool(item.get("has_video")),
+                item.get("platform") != "B站",
+            )
+        )
+    else:
+        fresh.sort(
+            key=lambda item: (bool(item.get("has_video")), item.get("platform") != "B站")
+        )
     return fresh[: max(1, int(limit))]
 
 

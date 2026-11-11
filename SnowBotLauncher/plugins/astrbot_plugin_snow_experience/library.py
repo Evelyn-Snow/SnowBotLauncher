@@ -197,6 +197,68 @@ def now_reading_summary(index: dict, limit: int = 2) -> str:
     return "；".join(lines)
 
 
+def pick_book_parallel(
+    files: list[dict],
+    index: dict,
+    roll: float = 0.5,
+    partial_bias: float = 2.0,
+    pool: int = 3,
+) -> dict | None:
+    """并行读书：在「最近在读」和「没读过」的小池子里加权挑一本。
+
+    未读完的书权重更高（默认 2 倍），但不会像旧逻辑那样永远优先未读，
+    这样会同时开几本、又略微偏向续读；阅读位置仍由 offset 续接。
+    """
+    partial, unread = [], []
+    for file in files:
+        entry = book_shelf_entry(file["name"], index)
+        if bool(entry.get("finished")):
+            continue
+        try:
+            offset = int(entry.get("offset") or 0)
+        except (TypeError, ValueError):
+            offset = 0
+        if offset > 0:
+            partial.append((float(entry.get("last_ts") or 0), file))
+        else:
+            unread.append(file)
+    pool = max(1, int(pool or 1))
+    partial.sort(key=lambda pair: pair[0], reverse=True)
+    partial = [file for _, file in partial[:pool]]
+    unread = sorted(unread, key=lambda f: f["name"])[:pool]
+    if not partial and not unread:
+        return None
+    if not partial:
+        return unread[0]
+    if not unread:
+        return partial[0]
+    choices = [(file, max(0.1, float(partial_bias or 2.0))) for file in partial]
+    choices += [(file, 1.0) for file in unread]
+    total = sum(weight for _, weight in choices)
+    point = max(0.0, min(0.999999, float(roll or 0.0))) * total
+    for file, weight in choices:
+        point -= weight
+        if point < 0:
+            return file
+    return choices[-1][0]
+
+
+def last_topics(records: list[dict], types: tuple[str, ...], limit: int = 5) -> list[str]:
+    """从最近事件记录里提取话题（「…」/《…》），用于后续事件承接。"""
+    topics = []
+    for record in reversed(records or []):
+        if not isinstance(record, dict) or record.get("type") not in types:
+            continue
+        title = str(record.get("title") or "")
+        match = re.search(r"[「《](.+?)[」》]", title)
+        value = match.group(1).strip() if match else str(record.get("gist") or "").strip()
+        if value and value not in topics:
+            topics.append(value[:40])
+        if len(topics) >= max(1, int(limit)):
+            break
+    return topics
+
+
 def pick_book(files: list[dict], index: dict) -> dict | None:
     """从书库文件里挑一本：没读过的优先，其次续读（按最近阅读时间），读完的跳过。
 

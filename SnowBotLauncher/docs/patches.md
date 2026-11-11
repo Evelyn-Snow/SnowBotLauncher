@@ -37,3 +37,9 @@ python scripts\patches\patch_qzone_snowluma.py ^
 - `comment_cron = "0 10 * * *"`、`comment_offset = 7200` → 每天 8:00–12:00 随机
 - `comment_chance = 0.5` → 一半的日子不刷
 - `publish_cron = ""` → 关闭固定的每日 23:30 发说说，改由真实事件触发
+
+## 事件连续性（snow_experience v0.7.0）
+
+- 读书改为 `pick_book_parallel`：最近在读/未读各取前 3 本，续读权重 2 倍
+- 查资料/读论文/写作从 `records` 里取最近话题承接
+- 刷手机用 `topics` + 最近事件话题给信息流打分
