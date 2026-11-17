@@ -438,5 +438,21 @@
     "type": "string",
     "default": "",
     "hint": "例如 napcat:FriendMessage:123456789；留空时按 AstrBot 管理员判断"
+  },
+  "self_fact_enabled": {
+    "description": "记录并注入「我的近况」",
+    "type": "bool",
+    "default": true,
+    "hint": "从她的回复里抽取第一人称事实（吃了什么/在哪/做了什么），下次任何会话都优先带上，避免不同聊天说法对不上"
+  },
+  "self_fact_limit": {
+    "description": "每次注入几条近况",
+    "type": "int",
+    "default": 5
+  },
+  "self_fact_ttl_hours": {
+    "description": "近况有效期（小时）",
+    "type": "int",
+    "default": 72
   }
 }

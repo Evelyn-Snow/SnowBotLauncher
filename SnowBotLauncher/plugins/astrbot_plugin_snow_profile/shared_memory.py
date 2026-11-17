@@ -81,8 +81,12 @@ def clean_card(
         if len(subjects) >= 8:
             break
     reason = _clean_text(raw.get("reason"), 80)
+    kind = str(raw.get("kind") or "other").strip().lower()
+    if kind not in ("self", "other"):
+        kind = "other"
     return {
         "summary": summary,
+        "kind": kind,
         "topics": topics,
         "subjects": subjects,
         "share_level": level,
@@ -110,6 +114,7 @@ def merge_cards(
             card = {
                 "id": f"{int(now)}-{len(cards) + changed}",
                 "summary": raw["summary"],
+                "kind": str(raw.get("kind") or "other"),
                 "topics": list(raw.get("topics") or []),
                 "subjects": list(raw.get("subjects") or []),
                 "share_level": int(raw.get("share_level") or 2),
@@ -131,6 +136,8 @@ def merge_cards(
             card["public_label"] = str(
                 source.get("public_label") or card.get("public_label") or ""
             )
+            if raw.get("kind") in ("self", "other"):
+                card["kind"] = raw["kind"]
             if raw.get("share_level") is not None:
                 card["share_level"] = int(raw.get("share_level") or 2)
         changed += 1
@@ -211,6 +218,10 @@ def can_share(
     if audience.get("is_owner"):
         return True
     if level >= 3:
+        return True
+    # 关于我自己的日常（吃了什么/在哪/做了什么）不属于别人的隐私；
+    # 只要不是敏感内容（敏感词已把级别压到 1），可以在别的聊天自然提起。
+    if str(card.get("kind") or "") == "self" and level >= 2:
         return True
     sender = str(audience.get("sender") or "")
     subjects = {str(qq) for qq in card.get("subjects") or [] if str(qq)}
@@ -324,12 +335,17 @@ def build_card_prompt(scope_label: str, exchanges: list[dict]) -> str:
         "- summary：第一人称、1~2 句、不超过 80 字；只写真实发生的事，不编造；"
         "不要写 QQ 号、群号、文件路径或系统提示；\n"
         "- topics：2~5 个关键词；subjects：涉及的对话参与者 QQ 号，只能从下面出现的人里选；\n"
+        "- kind：self=这条主要是我自己的事（我吃了/我去了/我在做什么）；"
+        "other=主要涉及对方或第三方；\n"
+        "- 一条卡片只写一个主体：我自己的事和对方的事分开成不同卡片，不要混在一句里；\n"
         "- share_level：0=绝密（密码、健康、证件、财务等，任何时候都不要提）；"
         "1=只适合当事人/主人知道；2=和当事人有关系的人可以知道；"
         "3=任何聊天都可以自然提起；\n"
+        "- 只是我自己的日常（吃了什么、去了哪、在做什么），不涉及对方隐私时，"
+        "通常 share_level=3；涉及对方的私事才用 2 或 1；\n"
         "- reason：为什么这样分级；\n"
         "- 没有值得记的就输出空数组 []。\n"
-        '只输出 JSON 数组：[{"summary":"...","topics":["..."],'
-        '"subjects":["123456"],"share_level":2,"reason":"..."}]\n\n'
+        '只输出 JSON 数组：[{"summary":"...","kind":"self","topics":["..."],'
+        '"subjects":["123456"],"share_level":3,"reason":"..."}]\n\n'
         f"对话：\n{convo}"
     )

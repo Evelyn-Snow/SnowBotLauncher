@@ -93,6 +93,12 @@ from .privacy import (
     redact_ids,
     sanitize_context_text,
 )
+from .self_fact import (
+    FACT_MARK,
+    extract_self_facts,
+    format_self_facts,
+    merge_self_facts,
+)
 from .shared_memory import (
     SHARED_MARK,
     build_card_prompt,
@@ -390,6 +396,52 @@ class SnowProfile(Star):
         )
         return score, level, exchanges, active_days, int(impression), int(moral or 75)
 
+    # ---------------- 我的近况 ----------------
+    def _self_facts_path(self) -> Path:
+        return Path(self._state_path()).parent / "self_facts.json"
+
+    def _load_self_facts(self) -> list[dict]:
+        path = self._self_facts_path()
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            facts = data.get("facts") if isinstance(data, dict) else data
+            return [item for item in facts or [] if isinstance(item, dict)]
+        except Exception:
+            return []
+
+    def _save_self_facts(self, facts: list[dict]) -> None:
+        path = self._self_facts_path()
+        tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump({"facts": facts[-200:]}, f, ensure_ascii=False, indent=1)
+            os.replace(tmp, path)
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 我的近况保存失败：{exc}")
+
+    def _record_self_facts(self, text: str, umo: str) -> None:
+        if not bool(self._cfg("self_fact_enabled", True)):
+            return
+        clauses = extract_self_facts(text)
+        if not clauses:
+            return
+        facts = self._load_self_facts()
+        changed = 0
+        for clause in clauses:
+            changed += merge_self_facts(facts, clause, scope=umo)
+        if changed:
+            self._save_self_facts(facts)
+
+    def _self_facts_injection(self) -> str:
+        if not bool(self._cfg("self_fact_enabled", True)):
+            return ""
+        return format_self_facts(
+            self._load_self_facts(),
+            limit=int(self._cfg("self_fact_limit", 5)),
+            ttl_hours=int(self._cfg("self_fact_ttl_hours", 72)),
+        )
+
     # ---------------- 采集 ----------------
     @filter.on_llm_response(priority=100001)
     async def capture_exchange(self, event: AstrMessageEvent, resp):
@@ -404,6 +456,10 @@ class SnowProfile(Star):
         reply_text = str(getattr(resp, "completion_text", "") or "").strip()
         if not user_text or not reply_text or user_text.startswith(("/", "！")):
             return
+        try:
+            self._record_self_facts(reply_text, str(event.unified_msg_origin or ""))
+        except Exception as exc:
+            logger.warning(f"[{NAME}] 记录我的近况失败：{exc}")
         platform = str(event.get_platform_name() or "")
         if platform == "webchat" and not bool(self._cfg("include_webchat", False)):
             return
@@ -2091,6 +2147,11 @@ class SnowProfile(Star):
                 )
                 if block and RELATION_MARK not in req.system_prompt:
                     req.system_prompt += "\n\n" + redact_ids(block, ids)
+        if FACT_MARK not in req.system_prompt:
+            facts = self._self_facts_injection()
+            if facts:
+                req.system_prompt += chr(10) * 2 + redact_ids(facts, ids)
+                logger.info(f"[{NAME}] 注入我的近况：{len(facts.splitlines()) - 1} 条")
         if SHARED_MARK not in req.system_prompt:
             shared = redact_ids(self._shared_injection(event, qq, req), ids)
             if shared:

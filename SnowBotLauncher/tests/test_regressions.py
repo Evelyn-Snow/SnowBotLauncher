@@ -155,6 +155,11 @@ from plugins.astrbot_plugin_snow_profile.privacy import (  # noqa: E402
     redact_ids,
     sanitize_context_text,
 )
+from plugins.astrbot_plugin_snow_profile.self_fact import (  # noqa: E402
+    extract_self_facts,
+    format_self_facts,
+    merge_self_facts,
+)
 from plugins.astrbot_plugin_snow_profile.shared_memory import (  # noqa: E402
     can_share,
     clean_card,
@@ -3904,6 +3909,47 @@ class SnowForwardTests(unittest.TestCase):
         self.assertEqual(nested_forward_ids(self.MESSAGES), ["nested-1"])
         self.assertEqual(nested_forward_ids([]), [])
         self.assertEqual(nested_forward_ids([{"message": [{"type": "text"}]}]), [])
+
+
+class SelfFactTests(unittest.TestCase):
+    def test_extract_self_clauses_only(self):
+        text = "后来我吃了丸子汤配青菜，对方吃卷饼和鸡蛋汤。今天我有点累。"
+        facts = extract_self_facts(text)
+        self.assertIn("后来我吃了丸子汤配青菜", facts)
+        self.assertFalse(any("卷饼" in fact for fact in facts))
+        self.assertIn("今天我有点累", facts)
+
+    def test_extract_filters_sensitive_and_questions(self):
+        self.assertEqual(extract_self_facts("我年龄是 20 岁"), [])
+        self.assertEqual(extract_self_facts("你吃饭了吗？"), [])
+        self.assertEqual(extract_self_facts("他去了图书馆"), [])
+        self.assertEqual(extract_self_facts("哈哈"), [])
+
+    def test_merge_and_format_self_facts(self):
+        facts = []
+        merge_self_facts(facts, "我晚上吃了丸子汤", now=1000, scope="a")
+        merge_self_facts(facts, "我晚上吃了丸子汤", now=2000, scope="b")
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0]["ts"], 2000)
+        merge_self_facts(facts, "我在宿舍写论文", now=1500)
+        text = format_self_facts(facts, now=2100, limit=1, ttl_hours=72)
+        self.assertIn("丸子汤", text)
+        self.assertNotIn("写论文", text)
+        self.assertIn("事实以这里为准", text)
+        expired = format_self_facts(facts, now=1000000, limit=3, ttl_hours=72)
+        self.assertEqual(expired, "")
+
+    def test_self_card_shareable_level2(self):
+        card = {
+            "summary": "我吃了丸子汤",
+            "kind": "self",
+            "share_level": 2,
+            "subjects": [],
+        }
+        audience = {"sender": "999", "is_owner": False, "scope": "x", "is_group": False}
+        self.assertTrue(can_share(card, audience, {}))
+        other = dict(card, kind="other")
+        self.assertFalse(can_share(other, audience, {}))
 
 
 if __name__ == "__main__":
