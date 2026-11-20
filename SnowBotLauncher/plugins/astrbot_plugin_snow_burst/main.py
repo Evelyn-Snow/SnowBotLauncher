@@ -102,19 +102,19 @@ class SnowBurst(Star):
 
     def _wait(self, private: bool = True) -> float:
         key = "wait_seconds" if private else "group_wait_seconds"
-        default = 3.0 if private else 2.0
+        default = 6.0 if private else 3.0
         return max(0.5, float(self.conf.get(key) or default))
 
     def _max_wait(self, private: bool = True) -> float:
         key = "max_wait_seconds" if private else "group_max_wait_seconds"
-        default = 12.0 if private else 8.0
+        default = 20.0 if private else 12.0
         return max(self._wait(private), float(self.conf.get(key) or default))
 
     def _threshold(self) -> float:
         return float(self.conf.get("continuity_threshold") or 0.18)
 
     def _max_messages(self) -> int:
-        return max(1, int(self.conf.get("max_messages") or 8))
+        return max(1, int(self.conf.get("max_messages") or 12))
 
     @filter.event_message_type(
         filter.EventMessageType.ALL, priority=(1 << 31)
