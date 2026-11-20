@@ -1,0 +1,10 @@
+name: astrbot_plugin_snow_humanize
+display_name: 像个人
+desc: 按语境决定回多长：短回一句、先安慰、正经回答或普通聊天；把一条回复拆成 1~3 个自然气泡，群聊低信息消息偶尔不接
+help: 无需指令；正常聊天即可，回复会更短、更少说教，也不总是“关心+叮嘱”两段式
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_humanize
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
+  - webchat

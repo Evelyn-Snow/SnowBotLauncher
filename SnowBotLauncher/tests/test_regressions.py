@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import ast
 import json
+import random
+import re
 import shutil
 import sys
 import tempfile
@@ -86,6 +88,15 @@ from plugins.astrbot_plugin_snow_knowledge.library import (  # noqa: E402
     split_text,
     text_hash,
     top_matches,
+)
+from plugins.astrbot_plugin_snow_humanize.library import (  # noqa: E402
+    choose_mode,
+    is_ack,
+    is_low_content,
+    shape_text,
+    split_sentences,
+    style_hint,
+    update_state,
 )
 from plugins.astrbot_plugin_snow_guard.library import (  # noqa: E402
     Policy,
@@ -3950,6 +3961,128 @@ class SelfFactTests(unittest.TestCase):
         self.assertTrue(can_share(card, audience, {}))
         other = dict(card, kind="other")
         self.assertFalse(can_share(other, audience, {}))
+
+
+class HumanizeTests(unittest.TestCase):
+    SEGMENT_RE = r".*?(?:\r?\n+|[。？！~…]+)|.+$"
+    OWNER_REPLY = (
+        "连花清瘟配蓝苓口服液，算是正经吃了药。这两种别混着随便加量，按说明书来就行。"
+        "\n\n吃了药就好好躺着，中午千万吃点东西垫一垫，空腹吃药更伤胃。"
+    )
+
+    def test_ack_and_low_content(self):
+        self.assertTrue(is_ack("嗯嗯"))
+        self.assertTrue(is_ack("哈哈哈哈"))
+        self.assertTrue(is_ack("在吗"))
+        self.assertFalse(is_ack("今天去医院了"))
+        self.assertTrue(is_low_content("哦"))
+        self.assertFalse(is_low_content("这个代码为什么报错"))
+
+    def test_choose_mode(self):
+        rng = random.Random(1)
+        self.assertEqual(choose_mode("嗯", rng=rng), "short")
+        self.assertEqual(choose_mode("这个代码为什么报错", rng=rng), "answer")
+        self.assertEqual(choose_mode("我感冒了好难受", rng=rng), "warm")
+        self.assertEqual(
+            choose_mode("哈哈哈哈", is_group=True, addressed=False, rng=rng),
+            "short",
+        )
+        state = {"long_streak": 2, "energy": 0.5}
+        self.assertEqual(
+            choose_mode(
+                "今天食堂的饭好难吃啊",
+                state=state,
+                rng=type("ZeroRng", (), {"random": lambda self: 0.0})(),
+            ),
+            "short",
+        )
+
+    def test_split_keeps_protected_text(self):
+        sentences = split_sentences(
+            "看这个 https://a.com/x?y=1。然后呢？\n```\nprint(1)。\n```"
+        )
+        self.assertIn("看这个 https://a.com/x?y=1。", sentences)
+        self.assertIn("然后呢？", sentences)
+        self.assertTrue(any("print(1)。" in item for item in sentences))
+
+    def test_short_mode_collapses_two_paragraph_template(self):
+        bubbles = shape_text(
+            self.OWNER_REPLY,
+            mode="short",
+            short_max_chars=45,
+            rng=random.Random(1),
+        )
+        self.assertEqual(len(bubbles), 1)
+        self.assertLessEqual(len(bubbles[0]), 45)
+        self.assertNotIn("\n", bubbles[0])
+        self.assertIn("连花清瘟", bubbles[0])
+        self.assertNotIn("空腹吃药", bubbles[0])
+
+    def test_each_bubble_is_one_segment(self):
+        for seed in range(8):
+            bubbles = shape_text(
+                self.OWNER_REPLY,
+                mode="normal",
+                segment_threshold=80,
+                conf={"two_bubble_chance": 0.6, "three_bubble_chance": 0.3},
+                rng=random.Random(seed),
+            )
+            self.assertGreaterEqual(len(bubbles), 1)
+            self.assertLessEqual(len(bubbles), 3)
+            for bubble in bubbles:
+                self.assertEqual(
+                    len(re.findall(self.SEGMENT_RE, bubble)),
+                    1,
+                    bubble,
+                )
+
+    def test_bubble_content_not_lost(self):
+        bubbles = shape_text(
+            self.OWNER_REPLY,
+            mode="normal",
+            bubble_count=2,
+            rng=random.Random(1),
+        )
+        joined = "".join(bubbles)
+        for word in ("连花清瘟", "按说明书", "好好躺着", "空腹吃药"):
+            self.assertIn(word, joined)
+
+    def test_code_and_lists_keep_format(self):
+        code = "先这样改：\n```python\nprint(1)\n```\n再跑一次。"
+        self.assertEqual(shape_text(code, mode="answer"), [code])
+        steps = "按这几步来：\n1. 打开配置\n2. 改端口"
+        self.assertEqual(shape_text(steps, mode="answer"), [steps])
+
+    def test_trailing_quote_or_emoji_stays_one_bubble(self):
+        for text in ("好呀。”", "好呀。😊", "他说：“今天真好。”然后走了。"):
+            bubbles = shape_text(text, mode="normal", bubble_count=1)
+            self.assertEqual(len(bubbles), 1, text)
+            self.assertEqual(
+                len(re.findall(self.SEGMENT_RE, bubbles[0])),
+                1,
+                bubbles[0],
+            )
+
+    def test_state_breaks_long_streak(self):
+        state = {}
+        state = update_state(
+            state, user_text="嗯", reply_text=self.OWNER_REPLY, now=1000
+        )
+        self.assertGreaterEqual(state["long_streak"], 1)
+        self.assertTrue(state["last_template"])
+        state = update_state(
+            state, user_text="嗯", reply_text=self.OWNER_REPLY, now=1100
+        )
+        self.assertGreaterEqual(state["long_streak"], 2)
+        self.assertLess(state["energy"], 0.55)
+
+    def test_style_hint_has_marker_and_anti_template(self):
+        hint = style_hint(
+            "short", {"last_template": True}, random.Random(1)
+        )
+        self.assertIn("[怎么回]", hint)
+        self.assertIn("两段式", hint)
+        self.assertIn("不要在回复里提到", hint)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,45 @@
+{
+  "enabled": {
+    "description": "启用像个人",
+    "type": "bool",
+    "default": true
+  },
+  "enabled_platforms": {
+    "description": "生效平台",
+    "type": "string",
+    "default": "aiocqhttp,webchat",
+    "hint": "逗号分隔；默认 QQ 和网页测试台都生效"
+  },
+  "short_reply_max_chars": {
+    "description": "短回模式最多保留多少字",
+    "type": "int",
+    "default": 45,
+    "hint": "模型没听“只回一句”时，会在句末截断到大概这个长度；不会切链接和代码"
+  },
+  "two_bubble_chance": {
+    "description": "普通聊天拆成两段的概率",
+    "type": "float",
+    "default": 0.35
+  },
+  "three_bubble_chance": {
+    "description": "普通聊天拆成三段的概率",
+    "type": "float",
+    "default": 0.1
+  },
+  "group_skip_low_content": {
+    "description": "群聊低信息消息按概率不接",
+    "type": "bool",
+    "default": true,
+    "hint": "只在没被 @/点名、对方只发“哈哈/嗯/好”这类内容时生效；私聊永远会回"
+  },
+  "group_skip_chance": {
+    "description": "群聊不接的概率",
+    "type": "float",
+    "default": 0.55
+  },
+  "state_ttl_days": {
+    "description": "会话状态保留天数",
+    "type": "int",
+    "default": 7
+  }
+}
