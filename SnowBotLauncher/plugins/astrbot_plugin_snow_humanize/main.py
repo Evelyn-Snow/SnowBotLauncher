@@ -181,39 +181,43 @@ class SnowHumanize(Star):
     async def hint_reply_style(self, event: AstrMessageEvent, req):
         if not self._enabled() or not self._platform_enabled(event):
             return
-        if event.get_extra(PREPARED_EXTRA):
-            return
         text = str(getattr(event, "message_str", "") or "")
         umo = str(event.unified_msg_origin or "")
-        private = event.is_private_chat()
-        addressed = self._addressed(event)
         state = self._session_state(umo) if umo else {}
-        mode = choose_mode(
-            text,
-            is_group=not private,
-            addressed=addressed,
-            state=state,
-            rng=self._rng,
-        )
-        event.set_extra(PREPARED_EXTRA, True)
-        event.set_extra(MODE_EXTRA, mode)
+        prepared = bool(event.get_extra(PREPARED_EXTRA))
+        if prepared:
+            # 工具调用可能让同一轮产生多次 LLM 请求：模式保持不变，
+            # 但每次新的请求对象都要重新补一遍风格提示。
+            mode = str(event.get_extra(MODE_EXTRA) or "normal")
+        else:
+            private = event.is_private_chat()
+            addressed = self._addressed(event)
+            mode = choose_mode(
+                text,
+                is_group=not private,
+                addressed=addressed,
+                state=state,
+                rng=self._rng,
+            )
+            event.set_extra(PREPARED_EXTRA, True)
+            event.set_extra(MODE_EXTRA, mode)
 
-        # 群聊里没被点名，又只是“哈哈/嗯/好”这种低信息消息：偶尔不接，别像复读机。
-        if (
-            mode == "short"
-            and not private
-            and not addressed
-            and is_low_content(text)
-            and bool(self._cfg("group_skip_low_content", True))
-        ):
-            try:
-                chance = float(self._cfg("group_skip_chance", 0.55))
-            except (TypeError, ValueError):
-                chance = 0.55
-            if self._rng.random() < max(0.0, min(1.0, chance)):
-                logger.info(f"[{NAME}] 群聊低信息消息，这轮不接：{text[:30]!r}")
-                event.stop_event()
-                return
+            # 群聊里没被点名，又只是“哈哈/嗯/好”这种低信息消息：偶尔不接，别像复读机。
+            if (
+                mode == "short"
+                and not private
+                and not addressed
+                and is_low_content(text)
+                and bool(self._cfg("group_skip_low_content", True))
+            ):
+                try:
+                    chance = float(self._cfg("group_skip_chance", 0.55))
+                except (TypeError, ValueError):
+                    chance = 0.55
+                if self._rng.random() < max(0.0, min(1.0, chance)):
+                    logger.info(f"[{NAME}] 群聊低信息消息，这轮不接：{text[:30]!r}")
+                    event.stop_event()
+                    return
 
         try:
             prompt = str(getattr(req, "system_prompt", "") or "")
@@ -222,7 +226,8 @@ class SnowHumanize(Star):
         if STYLE_MARK not in prompt:
             hint = style_hint(mode, state, self._rng)
             req.system_prompt = (prompt + "\n\n" + hint) if prompt else hint
-        logger.debug(f"[{NAME}] 这轮按 {mode} 回：{text[:40]!r}")
+        if bool(self._cfg("debug_log", False)):
+            logger.info(f"[{NAME}] 这轮按 {mode} 回：{text[:40]!r}")
 
     # ---------------- 把回复拆成气泡 ----------------
     @filter.on_decorating_result(priority=-1500)

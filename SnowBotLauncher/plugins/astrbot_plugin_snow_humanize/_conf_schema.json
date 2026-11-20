@@ -41,5 +41,10 @@
     "description": "会话状态保留天数",
     "type": "int",
     "default": 7
+  },
+  "debug_log": {
+    "description": "在日志里记录每轮的回复模式",
+    "type": "bool",
+    "default": false
   }
 }
