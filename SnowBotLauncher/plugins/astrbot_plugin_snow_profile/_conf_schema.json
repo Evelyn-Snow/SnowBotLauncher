@@ -433,6 +433,12 @@
     "type": "string",
     "default": "小雪"
   },
+  "proactive_max_chars": {
+    "description": "主动消息最多保留多少字",
+    "type": "int",
+    "default": 45,
+    "hint": "模型容易写成两段，发出前只保留第一句；第一句太短才并第二句"
+  },
   "owner_session": {
     "description": "所有者会话（永不忽略）",
     "type": "string",

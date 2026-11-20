@@ -229,6 +229,7 @@ from plugins.astrbot_plugin_snow_profile.library import (  # noqa: E402
     moral_level,
     moral_section,
     normalize_relation_type,
+    one_line_opening,
     parse_owner_verify_reply,
     parse_profile,
     parse_relation_bundle,
@@ -4052,6 +4053,20 @@ class HumanizeTests(unittest.TestCase):
         self.assertEqual(shape_text(code, mode="answer"), [code])
         steps = "按这几步来：\n1. 打开配置\n2. 改端口"
         self.assertEqual(shape_text(steps, mode="answer"), [steps])
+
+    def test_proactive_opening_is_one_line(self):
+        text = (
+            "在校园里散步消食，抬头一看天还挺干净，星星稀稀拉拉的。"
+            "\n\n下午那一觉睡出结果没呀，感冒松快了点吗。"
+        )
+        opening = one_line_opening(text)
+        self.assertNotIn("\n", opening)
+        self.assertEqual(
+            opening,
+            "在校园里散步消食，抬头一看天还挺干净，星星稀稀拉拉的。",
+        )
+        self.assertIn("感冒", one_line_opening("好呀。\n\n你感冒好点没呀？"))
+        self.assertLessEqual(len(one_line_opening("啊" * 80)), 46)
 
     def test_trailing_quote_or_emoji_stays_one_bubble(self):
         for text in ("好呀。”", "好呀。😊", "他说：“今天真好。”然后走了。"):

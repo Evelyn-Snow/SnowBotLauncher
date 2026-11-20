@@ -72,6 +72,7 @@ from .library import (
     moral_injection,
     moral_level,
     moral_section,
+    one_line_opening,
     parse_owner_verify_reply,
     parse_profile,
     parse_relation_bundle,
@@ -1974,7 +1975,7 @@ class SnowProfile(Star):
             logger.info(f"[{NAME}] 生成主动消息失败：{exc}")
             return ""
         text = str(getattr(result, "completion_text", "") or "").strip()
-        return text[:160]
+        return one_line_opening(text, int(self._cfg("proactive_max_chars", 45)) or 45)
 
     async def _send_proactive(self, umo: str, text: str) -> bool:
         recipient = str(umo or "").rsplit(":", 1)[-1]

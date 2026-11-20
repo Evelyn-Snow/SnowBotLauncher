@@ -1694,3 +1694,31 @@ def build_relation_prompt(
         f"已经记下的关系（没有新证据就不要重复输出）：\n{known}\n\n"
         "请按系统提示的 JSON 格式输出。"
     )
+
+
+def one_line_opening(text: str, limit: int = 45) -> str:
+    """把主动消息收成一句自然的话。
+
+    主动消息的提示词一直要求“一句、不超过 40 字”，但模型还是爱写成
+    “我在做什么。\\n\\n你最近怎么样”两段。这里只保留第一句；第一句太短时
+    才把第二句并进来，避免主动消息变成模板化的关心+追问。
+    """
+    value = re.sub(r"\s+", " ", str(text or "")).strip()
+    value = value.strip("\"'“”‘’ ")
+    if not value:
+        return ""
+    parts = [
+        part.strip()
+        for part in re.split(r"(?<=[。！？!?~…])\s*", value)
+        if part.strip()
+    ]
+    if not parts:
+        return value[:limit]
+    result = parts[0]
+    if len(result) < 12 and len(parts) > 1:
+        result = result + parts[1]
+    if len(result) > limit:
+        result = result[:limit].rstrip("，。！？；：,.!?;: ")
+        if result and result[-1] not in "。！？!?~…":
+            result += "…"
+    return result
