@@ -920,7 +920,10 @@ class SnowExperience(Star):
             return
         state = self._load_state()
         records = state.get("records") or []
-        now_reading = now_reading_summary(state.get("reading_index") or {})
+        now_reading = now_reading_summary(
+            state.get("reading_index") or {},
+            fresh_days=int(self._cfg("reading_fresh_days", 14) or 14),
+        )
         block = experience_summary(records, int(self._cfg("inject_limit_chars", 380)))
         if not block and not now_reading:
             return

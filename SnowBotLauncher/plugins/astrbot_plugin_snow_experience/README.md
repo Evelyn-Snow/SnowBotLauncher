@@ -18,7 +18,7 @@
 
 同一类事件会承接上一次，而不是每次从头随机：
 
-- **读书**：在「最近在读」和「没读过」里各取前几本加权抽，未读完权重默认是未读的 2 倍；选中后从该书的 offset 继续读，所以会并行开几本、又略微偏向续读
+- **读书**：在「最近在读」和「没读过」里各取前几本加权抽，未读完权重默认是未读的 3 倍；选中后从该书的 offset 继续读，所以会并行开几本、明显偏向续读。没读过的书按卷号排序（Lv.2/第2卷/Chapter 5 这类），同系列从第 1 卷按顺序读，不受子目录名影响
 - **查资料**：读取最近几条查资料记录，让模型顺着上次的线索生成一个更具体的新查询；没有历史才退回兴趣词池
 - **读论文**：优先沿着最近查资料/读论文的方向生成英文 arXiv 检索词，失败再退回内置话题映射
 - **写作**：优先沿用最近一次查资料或读书的话题
@@ -64,13 +64,20 @@
 | event_window | 10:00-21:00 | 事件触发时段 |
 | event_chance | 0.7 | 每天触发概率 |
 | weekly_book / weekly_research / weekly_paper / weekly_writing | 2 / 3 / 1 / 2 | 每周各类型上限 |
-| reading_parallel / reading_partial_bias | 3 / 2.0 | 同时读几本、续读相对未读的权重 |
+| reading_parallel / reading_partial_bias | 3 / 3.0 | 同时读几本、续读相对未读的权重 |
+| reading_fresh_days | 14 | 超过这么多天没碰的书不再注入为「正在读」 |
 | share_events_to_qzone | true | 刷手机/写作完成后按概率发一条说说（需安装 qzone 插件） |
 | qzone_share_chance / qzone_share_daily_limit / qzone_share_types | 0.5 / 1 / browsing,writing | 发说说概率、每天上限、允许分享的事件 |
 | writing_dir | 空 | 写作事件保存目录；留空 = 插件数据目录 writings/ |
 | browsing_dir | 空 | 刷手机记录目录；留空 = 插件数据目录 browsing/ |
 | weekly_browsing / browsing_items / browsing_minutes | 3 / 2 / 15 | 每周次数、每条数、每次时长 |
 | inject_limit_chars | 380 | 聊天注入经历的最大字数 |
+
+## v0.7.2 修复
+
+- 聊天注入的「最近经历」错取了**最旧**两条记录（11-02 的石猴读后感被注入了半个多月），日记因此反复出现「读《西游记》」；改为取最新两条
+- 「正在读」注入没有新鲜度：停更的书永远被说成在读；超过 `reading_fresh_days`（默认 14 天）没碰的书不再注入
+- 未读书池按文件路径字典序取前 3，同系列卷号会因子目录名乱序（先读 Lv.9 再读 Lv.2）；改为按文件名里的卷号排序
 
 ## 依赖
 

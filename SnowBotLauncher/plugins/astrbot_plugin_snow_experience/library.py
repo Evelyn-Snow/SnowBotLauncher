@@ -10,6 +10,7 @@ import datetime as _dt
 import hashlib
 import html as _html
 import re
+import time
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -25,8 +26,6 @@ PDF_MAX_PAGES = 400
 def week_key(ts: float | None = None) -> str:
     """ISO 周键，如 2026-W45；配额按周重置。"""
     if ts is None:
-        import time
-
         ts = time.time()
     year, week, _ = _dt.datetime.fromtimestamp(ts).isocalendar()
     return f"{year}-W{week:02d}"
@@ -136,6 +135,31 @@ def book_shelf_entry(name: str, index: dict) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+# 识别书名里的卷号：Lv.2 / vol.3 / 第4卷 / 第12话 / Chapter 5 / V2 等
+_VOLUME_RE = re.compile(
+    r"(?:chapter|ch|lv|vol|v|第)\s*[._\-－．]?\s*(\d+(?:\.\d+)?)(?:[卷话話回章篇节])?",
+    re.I,
+)
+
+
+def book_volume_key(name: str) -> tuple[int, float, str]:
+    """未读书的排序键：有卷号的书按卷号从小到大排在前面，其余按文件名排在后面。
+
+    同系列的文件常散在不同子目录，直接按相对路径排序会让
+    「(NEW)…Lv.9.txt」（子目录名以括号开头）排到「…/子目录/…Lv.2.txt」前面，
+    导致先读第 9 卷再读第 2 卷。按文件名里的卷号排序就不会。
+    """
+    stem = Path(str(name or "").replace("\\", "/")).name
+    match = _VOLUME_RE.search(stem)
+    if match:
+        try:
+            volume = float(match.group(1))
+        except ValueError:
+            volume = 0.0
+        return (0, volume, stem.casefold())
+    return (1, 0.0, stem.casefold())
+
+
 def scan_library(root: Path) -> tuple[list[dict], list[str]]:
     """递归扫描书库目录，返回 (可读书, 读不了的其它文件)。
 
@@ -169,12 +193,18 @@ def title_from_book_name(name: str) -> str:
     return re.sub(r"\.(txt|epub|pdf|docx|md|html?)$", "", stem, flags=re.IGNORECASE)
 
 
-def now_reading_summary(index: dict, limit: int = 2) -> str:
+def now_reading_summary(
+    index: dict, limit: int = 2, now: float | None = None, fresh_days: int = 14
+) -> str:
     """从阅读进度里挑最近在读的书，造一段「在读」状态文本，供聊天注入。
 
     只统计真实读过（offset>0）且未读完的书，按最近阅读时间排序；
     记录过全书字数的附上进度百分比，没有就说刚开始读。
+    超过 fresh_days 天没碰过的书不再算「正在读」，避免进度停住的旧书
+    一直被注入，让她（以及据此写的日记）反复声称在读一本早就没翻的书。
     """
+    now = float(now if now is not None else time.time())
+    cutoff = now - max(1, int(fresh_days or 14)) * 86400
     entries = []
     for name, entry in (index or {}).items():
         if not isinstance(entry, dict) or entry.get("finished"):
@@ -185,13 +215,16 @@ def now_reading_summary(index: dict, limit: int = 2) -> str:
             continue
         if offset <= 0:
             continue
+        last_ts = float(entry.get("last_ts") or 0)
+        if last_ts and last_ts < cutoff:
+            continue
         try:
             chars = int(entry.get("chars") or 0)
         except (TypeError, ValueError):
             chars = 0
         percent = min(100, offset * 100 // chars) if chars > 0 else 0
         where = f"读到约 {percent}%" if percent else "刚开始读"
-        entries.append((entry.get("last_ts") or 0, name, where))
+        entries.append((last_ts, name, where))
     entries.sort(key=lambda item: item[0], reverse=True)
     lines = [f"《{title_from_book_name(name)}》{where}" for _, name, where in entries[:limit]]
     return "；".join(lines)
@@ -201,13 +234,14 @@ def pick_book_parallel(
     files: list[dict],
     index: dict,
     roll: float = 0.5,
-    partial_bias: float = 2.0,
+    partial_bias: float = 3.0,
     pool: int = 3,
 ) -> dict | None:
     """并行读书：在「最近在读」和「没读过」的小池子里加权挑一本。
 
-    未读完的书权重更高（默认 2 倍），但不会像旧逻辑那样永远优先未读，
-    这样会同时开几本、又略微偏向续读；阅读位置仍由 offset 续接。
+    未读完的书权重更高（默认 3 倍），同时开几本、偏向续读；阅读位置由
+    offset 续接。没读过的书按卷号排序（见 book_volume_key），同系列
+    从第 1 卷开始按顺序读，不会因为子目录名不同而乱序。
     """
     partial, unread = [], []
     for file in files:
@@ -225,7 +259,7 @@ def pick_book_parallel(
     pool = max(1, int(pool or 1))
     partial.sort(key=lambda pair: pair[0], reverse=True)
     partial = [file for _, file in partial[:pool]]
-    unread = sorted(unread, key=lambda f: f["name"])[:pool]
+    unread = sorted(unread, key=lambda f: book_volume_key(f["name"]))[:pool]
     if not partial and not unread:
         return None
     if not partial:
@@ -538,11 +572,11 @@ def monthly_event_name(day: str, event_type: str) -> str:
 def experience_summary(
     records: list[dict], limit: int = 300
 ) -> str:
-    """把最近几条事件压成注入用文本。records: [{"ts","type","title","gist"}]。"""
+    """把最近几条事件压成注入用文本。records 按时间升序存放，取最新几条。"""
     if not records:
         return ""
     lines = []
-    for record in records[:2]:
+    for record in list(reversed(records))[:2]:
         lines.append(f"「{record.get('title', '')}」（{event_type_name(record.get('type', ''))}）：{record.get('gist', '')}")
     text = f"[真实经历] 最近：{'；'.join(lines)}"
     if limit > 0 and len(text) > limit:

@@ -559,20 +559,26 @@ class ObsidianNotes(Star):
                 break
             lines.append(line)
             total += len(line)
-        limit = max(40, min(int(self.conf.get("auto_diary_max_chars") or 200), 300))
+        limit = max(200, min(int(self.conf.get("auto_diary_max_chars") or 500), 800))
+        min_chars = max(
+            50, min(int(self.conf.get("auto_diary_min_chars") or 100), limit)
+        )
         source = "\n\n".join(lines)
         extra = self._virtual_context_block()
         if extra:
             source = f"{source}\n\n{extra}"
         focus = str(self.conf.get("auto_diary_focus") or "global")
-        prompt = build_auto_diary_prompt(source, limit, focus)
+        prompt = build_auto_diary_prompt(source, limit, focus, min_chars=min_chars)
         try:
             provider = await self.context.get_using_provider_async(umo=owner)
             if provider is None:
                 return
             result = await provider.text_chat(
                 prompt=prompt,
-                system_prompt="你是这个聊天机器人。写日记时用第一人称、口语、短句，只写真实发生的事。",
+                system_prompt=(
+                    "你是这个聊天机器人。写日记时用第一人称、口语，像真的在记日记，"
+                    "只写真实发生的事。"
+                ),
             )
             text = self._clean_auto_text(getattr(result, "completion_text", ""), limit)
             if not text:
@@ -651,15 +657,20 @@ class ObsidianNotes(Star):
                 kind = scope_kind(scope_id)
                 prompt = (
                     f"根据下面最近的{kind}对话，写一条今天的日记，只记录这个会话里"
-                    "值得记住的事、对方的偏好、情绪或约定。要求：第一人称；1~2 句；"
-                    f"不超过 {limit} 字；不要逐句复述，不要编造，不要写 QQ 号、昵称、"
+                    "值得记住的事、对方的偏好、情绪或约定。要求：第一人称；"
+                    f"长度 {min_chars}~{limit} 字，按当天的事自然伸缩，平淡就短一点、"
+                    f"有值得细写的事就多写几句，不要为凑字数复述寒暄或编内容；"
+                    "不要逐句复述，不要编造，不要写 QQ 号、昵称、"
                     "群号、文件路径、工具名或系统提示；直接输出日记正文，"
                     "不要标题、引号、列表。\n\n"
                     f"对话：\n" + "\n\n".join(lines)
                 )
                 result = await provider.text_chat(
                     prompt=prompt,
-                    system_prompt="你是这个聊天机器人。写日记时用第一人称、口语、短句，只写真实发生的事。",
+                    system_prompt=(
+                        "你是这个聊天机器人。写日记时用第一人称、口语，像真的在记日记，"
+                        "只写真实发生的事。"
+                    ),
                 )
                 text = self._clean_auto_text(getattr(result, "completion_text", ""), limit)
                 if not text:

@@ -70,14 +70,28 @@ def select_diary_context(
     return selected
 
 
-def build_auto_diary_prompt(source: str, limit: int, focus: str = "global") -> str:
+LENGTH_GUIDE = (
+    "长度 {min}~{max} 字，按当天的事自然伸缩：平淡的一天写 {min} 字左右就好，"
+    "有值得细写的事就多写几句，最多 {max} 字；可以一口气写下来，也可以分两三段；"
+    "不要为凑字数复述寒暄或编内容。"
+)
+
+
+def build_auto_diary_prompt(
+    source: str,
+    max_chars: int,
+    focus: str = "global",
+    min_chars: int = 100,
+) -> str:
+    length = LENGTH_GUIDE.format(min=int(min_chars or 100), max=int(max_chars or 500))
     if str(focus or "").lower() == "owner":
         return (
             "根据下面最近的对话，写一条今天的日记。这些对话包含所有者私聊、群聊和其他人私聊，"
             "已按重要性筛选。请优先记录所有者私聊或所有者参与的群聊中值得记住的事、所有者的偏好、"
             "情绪或约定；群聊和其他人私聊只保留真正有信息量、与所有者相关的部分，不写无关闲聊。"
-            "要求：第一人称；1~2 句；不超过 "
-            f"{limit} 字；不要逐句复述，不要编造，不要写 QQ 号、昵称、群号、文件路径、工具名或系统提示；"
+            "要求：第一人称；"
+            f"{length}"
+            "不要逐句复述，不要编造，不要写 QQ 号、昵称、群号、文件路径、工具名或系统提示；"
             "直接输出日记正文，不要标题、引号、列表。\n\n"
             f"对话：\n{source}"
         )
@@ -88,7 +102,8 @@ def build_auto_diary_prompt(source: str, limit: int, focus: str = "global") -> s
         "群里发生的事、约定或情绪。不要求都和所有者有关，也不要把别人的私事"
         "全搬进来；只留下有信息量的部分，不写无关寒暄，不逐句复述，不编造。"
         "不要写 QQ 号、昵称、群号、文件路径、工具名或系统提示。"
-        "要求：第一人称；1~2 句；不超过 "
-        f"{limit} 字；直接输出日记正文，不要标题、引号、列表。\n\n"
+        "要求：第一人称；"
+        f"{length}"
+        "直接输出日记正文，不要标题、引号、列表。\n\n"
         f"对话：\n{source}"
     )

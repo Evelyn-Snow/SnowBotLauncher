@@ -265,6 +265,7 @@ from plugins.astrbot_plugin_snow_media.library import (  # noqa: E402
 from plugins.astrbot_plugin_snow_experience.library import (  # noqa: E402
     SUPPORTED_DOC_SUFFIXES,
     book_chunk,
+    book_volume_key,
     document_format_hint,
     event_time_for_date,
     experience_summary,
@@ -809,8 +810,11 @@ class ObsidianScopeRegressionTests(unittest.TestCase):
         global_prompt = build_auto_diary_prompt("对话", 120, "global")
         self.assertIn("按会话取样", global_prompt)
         self.assertIn("不要求都和所有者有关", global_prompt)
+        self.assertIn("100~120 字", global_prompt)
+        self.assertIn("不要为凑字数", global_prompt)
         owner_prompt = build_auto_diary_prompt("对话", 120, "owner")
         self.assertIn("优先记录所有者", owner_prompt)
+        self.assertIn("100~120 字", owner_prompt)
 
 
 class ContinuityRegressionTests(unittest.TestCase):
@@ -2260,6 +2264,34 @@ class ExperienceTests(unittest.TestCase):
         done = {"a.txt": {"finished": True}, "b.txt": {"finished": True}}
         self.assertIsNone(pick_book(files, done))
 
+    def test_pick_book_parallel_volume_order(self):
+        files = [
+            {"name": "series/(NEW)x Lv.9(试看).txt", "path": "p9"},
+            {"name": "series/sub/(NEW)x Lv.2.txt", "path": "p2"},
+            {"name": "西遊記.txt", "path": "p0"},
+        ]
+        # 卷号排序键：有卷号的按卷号排（Lv.2 < Lv.9），无卷号的排最后
+        ordered = sorted(files, key=lambda f: book_volume_key(f["name"]))
+        self.assertEqual(
+            [f["name"] for f in ordered],
+            ["series/sub/(NEW)x Lv.2.txt", "series/(NEW)x Lv.9(试看).txt", "西遊記.txt"],
+        )
+        # 全都没读过：严格从第一本（卷号最小）开始
+        self.assertEqual(
+            pick_book_parallel(files, {}, 0.5, 3.0, 3)["name"],
+            "series/sub/(NEW)x Lv.2.txt",
+        )
+        # 有在读的书时，roll 落在未读池 → 开下一本没读过的，也是卷号最小的 Lv.2
+        index = {"西遊記.txt": {"offset": 100, "finished": False, "last_ts": 9}}
+        self.assertEqual(
+            pick_book_parallel(files, index, 0.7, 3.0, 3)["name"],
+            "series/sub/(NEW)x Lv.2.txt",
+        )
+        self.assertEqual(book_volume_key("a/第2卷.txt")[0:2], (0, 2.0))
+        self.assertEqual(book_volume_key("a/第12话.txt")[0:2], (0, 12.0))
+        self.assertEqual(book_volume_key("Chapter 5.md")[0:2], (0, 5.0))
+        self.assertEqual(book_volume_key("西遊記.txt")[0], 1)
+
     def test_pick_book_parallel_bias(self):
         files = [
             {"name": "a.txt", "path": "a"},
@@ -2358,28 +2390,54 @@ class ExperienceTests(unittest.TestCase):
         self.assertEqual(title_from_book_name(""), "")
 
     def test_now_reading_summary(self):
+        now = 30 * 86400
         index = {
             "西遊記.txt": {
                 "offset": 12000,
                 "finished": False,
                 "chars": 1_000_000,
-                "last_ts": 100,
+                "last_ts": now - 100,
             },
-            "蛊真人.epub": {"offset": 0, "finished": False, "chars": 100, "last_ts": 200},
-            "旧书.txt": {"offset": 500, "finished": True, "chars": 1000, "last_ts": 300},
+            "蛊真人.epub": {
+                "offset": 0,
+                "finished": False,
+                "chars": 100,
+                "last_ts": now - 50,
+            },
+            "旧书.txt": {
+                "offset": 500,
+                "finished": True,
+                "chars": 1000,
+                "last_ts": now - 80,
+            },
             "无进度.txt": {"finished": False},
         }
-        text = now_reading_summary(index)
+        text = now_reading_summary(index, now=now)
         self.assertIn("《西遊記》", text)
         self.assertIn("读到约 1%", text)  # 12000/1000000
         self.assertNotIn("蛊真人", text)  # offset 0：还没真正读
         self.assertNotIn("旧书", text)  # 读完的不再报
         self.assertNotIn("无进度", text)
         # limit 生效：最近读的排前面
-        index["新书.txt"] = {"offset": 50, "finished": False, "chars": 100, "last_ts": 999}
-        text = now_reading_summary(index, limit=1)
+        index["新书.txt"] = {
+            "offset": 50,
+            "finished": False,
+            "chars": 100,
+            "last_ts": now - 1,
+        }
+        text = now_reading_summary(index, limit=1, now=now)
         self.assertIn("《新书》", text)
         self.assertNotIn("《西遊記》", text)
+        # 超过新鲜期的书不再算「正在读」
+        index["停更书.txt"] = {
+            "offset": 900,
+            "finished": False,
+            "chars": 1000,
+            "last_ts": now - 20 * 86400,
+        }
+        text = now_reading_summary(index, now=now, fresh_days=14)
+        self.assertNotIn("停更书", text)
+        self.assertIn("《西遊記》", text)  # 100 秒前还在读
         self.assertEqual(now_reading_summary({}), "")
         self.assertEqual(now_reading_summary({"坏条目": "x"}), "")
 
@@ -2477,6 +2535,8 @@ class ExperienceTests(unittest.TestCase):
         summary = experience_summary(records, limit=400)
         self.assertTrue(summary.startswith("[真实经历]"))
         self.assertIn("吶喊", summary)
+        # 注入的是最新的记录，最新的排前面
+        self.assertLess(summary.index("论文《X》"), summary.index("吶喊"))
         long = experience_summary(records, limit=30)
         self.assertLessEqual(len(long), 33)
         self.assertEqual(experience_summary([], 400), "")

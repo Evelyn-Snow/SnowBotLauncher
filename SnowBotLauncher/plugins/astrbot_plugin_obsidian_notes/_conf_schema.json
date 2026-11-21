@@ -63,8 +63,14 @@
   "auto_diary_max_chars": {
     "description": "每条自动日记最大字数",
     "type": "int",
-    "default": 200,
-    "hint": "超过会截断；建议 160–240，最大 300"
+    "default": 500,
+    "hint": "超过会截断；建议 300–600，最大 800"
+  },
+  "auto_diary_min_chars": {
+    "description": "每条自动日记最小字数",
+    "type": "int",
+    "default": 100,
+    "hint": "只是提示模型的目标下限，不硬截断；平淡的日子写 100 字左右就好"
   },
   "auto_diary_quiet_hours": {
     "description": "免打扰时段",

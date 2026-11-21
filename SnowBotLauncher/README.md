@@ -58,9 +58,9 @@ AstrBot + QQ 协议端（NapCat / SnowLuma）的 Windows 桌面统一控制台�
 | `snow_media` | 视频/语音理解：群里视频抽帧看画面并转写音频，语音消息优先 QQ 转文字、失败回退本地 | [astrbot_plugin_snow_media](https://github.com/Evelyn-Snow/astrbot_plugin_snow_media) |
 | `snow_reply` | 自主引用回复：话题乱/目标远时自己搜前文并引用，有冷却和频率上限 | [astrbot_plugin_snow_reply](https://github.com/Evelyn-Snow/astrbot_plugin_snow_reply) |
 | `snow_imagebox` | 图库：存图/表情包、打标签、按需发送、自动清理 | [astrbot_plugin_snow_imagebox](https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagebox) |
-| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与覆盖所有会话的自动日记 | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
+| `obsidian_notes` | 日记/笔记：写入 Obsidian，支持会话作用域与覆盖所有会话的自动日记（每篇 100~500 字，按当天内容自然伸缩） | [astrbot_plugin_obsidian_notes](https://github.com/Evelyn-Snow/astrbot_plugin_obsidian_notes) |
 | `star_citizen` | 星际公民数据：飞船参数、商品价格、终端行情 | [astrbot_plugin_star_citizen](https://github.com/Evelyn-Snow/astrbot_plugin_star_citizen) |
-| `snow_experience` | 真实经历：自主读公版书/查资料/读论文/写课程小论文（每周限次），经历注入聊天与日记 | [astrbot_plugin_snow_experience](https://github.com/Evelyn-Snow/astrbot_plugin_snow_experience) |
+| `snow_experience` | 真实经历：自主读公版书/查资料/读论文/写课程小论文（每周限次），经历注入聊天与日记；同系列按卷号顺序读，停更的书不再说成“正在读” | [astrbot_plugin_snow_experience](https://github.com/Evelyn-Snow/astrbot_plugin_snow_experience) |
 | `snow_files` | 发文件：把她自己文件夹里的文章/图片发到聊天；只允许配置目录，拒绝画像/日记/配置与含账号密钥的文件 | [astrbot_plugin_snow_files](https://github.com/Evelyn-Snow/astrbot_plugin_snow_files) |
 | `snow_status` | 状态：按虚拟日程和心情自动更新 QQ 签名与在线状态，静默时段不动 | [astrbot_plugin_snow_status](https://github.com/Evelyn-Snow/astrbot_plugin_snow_status) |
 | `snow_chat_priority` | 对话优先：软化虚拟人生的状态约束，连续聊天时先别主动结束对话 | [astrbot_plugin_snow_chat_priority](https://github.com/Evelyn-Snow/astrbot_plugin_snow_chat_priority) |

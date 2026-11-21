@@ -124,8 +124,14 @@
   "reading_partial_bias": {
     "description": "续读偏好倍数",
     "type": "float",
-    "default": 2.0,
-    "hint": "未读完的书权重是未读的多少倍；2.0 表示略微更倾向续读，而不是永远只读没读过的"
+    "default": 3.0,
+    "hint": "未读完的书权重是未读的多少倍；3.0 表示明显偏向把在读的书读完，而不是一直开新书"
+  },
+  "reading_fresh_days": {
+    "description": "“正在读”的新鲜期（天）",
+    "type": "int",
+    "default": 14,
+    "hint": "超过这么多天没碰的书不再注入为“正在读”，避免停更的旧书被反复提起"
   },
   "semantic_browse": {
     "description": "刷手机用语义向量筛选",

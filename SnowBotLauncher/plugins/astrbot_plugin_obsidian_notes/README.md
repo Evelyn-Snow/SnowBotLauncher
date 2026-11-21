@@ -35,7 +35,8 @@
 | auto_diary_min_interval_minutes | 120 | 两次自动日记最小间隔 |
 | auto_diary_max_per_day | 3 | 每天自动日记上限 |
 | auto_diary_min_exchanges | 3 | 至少多少轮对话才写 |
-| auto_diary_max_chars | 200 | 单篇日记字数上限（40–300） |
+| auto_diary_min_chars | 100 | 单篇日记目标下限，不硬截断；平淡的日子写 100 字左右就好 |
+| auto_diary_max_chars | 500 | 单篇日记字数上限（200–800），超过截断 |
 | auto_diary_quiet_hours | 0-7 | 免打扰时段，不写日记 |
 | auto_diary_include_groups / include_other_private | true / true | 是否参考群聊 / 其他人的私聊 |
 | auto_diary_owner_weight / group_weight / other_weight | 3 / 2 / 1 | `owner` 模式下自动日记素材的侧重权重 |
