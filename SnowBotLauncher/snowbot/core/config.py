@@ -101,6 +101,7 @@ def default_config() -> dict:
         "qq_backend": "napcat",
         "snowluma_dir": r"C:\SnowLuma",
         "snowluma_webui_port": 5099,
+        "lagrange_dir": r"C:\Lagrange\OneBot",
         "qq_exe": r"C:\Program Files\Tencent\QQNT\QQ.exe",
         "node_exe": "",
         "owner_qq": "",

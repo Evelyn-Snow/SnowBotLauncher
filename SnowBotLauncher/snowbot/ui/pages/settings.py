@@ -76,10 +76,9 @@ class SettingsMixin:
         self.qq_backend = QComboBox()
         self.qq_backend.addItem("NapCat（内置流程）", "napcat")
         self.qq_backend.addItem("SnowLuma（外部安装）", "snowluma")
+        self.qq_backend.addItem("Lagrange（独立协议实现）", "lagrange")
         current_backend = str(self.cfg.get("qq_backend") or "napcat")
-        self.qq_backend.setCurrentIndex(
-            1 if current_backend == "snowluma" else 0
-        )
+        self.qq_backend.setCurrentIndex(max(0, self.qq_backend.findData(current_backend)))
         self.dir_napcat = QLineEdit(self.cfg["napcat_dir"])
         self.port_napcat = QSpinBox()
         self.port_napcat.setRange(1, 65535)
@@ -88,6 +87,7 @@ class SettingsMixin:
         self.port_snowluma = QSpinBox()
         self.port_snowluma.setRange(1, 65535)
         self.port_snowluma.setValue(int(self.cfg.get("snowluma_webui_port") or 5099))
+        self.dir_lagrange = QLineEdit(str(self.cfg.get("lagrange_dir") or r"C:\Lagrange\OneBot"))
         self.node_exe = QLineEdit(str(self.cfg.get("node_exe") or ""))
         self.node_exe.setPlaceholderText("留空自动查找 node")
         self.qq_exe = QLineEdit(str(self.cfg.get("qq_exe") or ""))
@@ -100,6 +100,8 @@ class SettingsMixin:
         qform.addRow("SnowLuma 目录", self._path_row(self.dir_snowluma, dir_mode=True))
         self._qq_rows["snowluma_port"] = qform.rowCount()
         qform.addRow("SnowLuma WebUI 端口", self.port_snowluma)
+        self._qq_rows["lagrange_dir"] = qform.rowCount()
+        qform.addRow("Lagrange 目录", self._path_row(self.dir_lagrange, dir_mode=True))
         self._qq_rows["node"] = qform.rowCount()
         qform.addRow("Node.js", self._path_row(self.node_exe, dir_mode=False))
         qform.addRow("QQ 程序", self._path_row(self.qq_exe, dir_mode=False))
@@ -201,22 +203,34 @@ class SettingsMixin:
         return page
 
     def _update_backend_visibility(self, *_args):
-        """按所选协议端显示对应路径/端口，避免两套配置同时铺在页面上。"""
-        snow = str(self.qq_backend.currentData() or "napcat") == "snowluma"
-        self._qq_form.setRowVisible(self._qq_rows["napcat_dir"], not snow)
-        self._qq_form.setRowVisible(self._qq_rows["napcat_port"], not snow)
+        """按所选协议端显示对应路径/端口，避免几套配置同时铺在页面上。"""
+        backend = str(self.qq_backend.currentData() or "napcat")
+        snow = backend == "snowluma"
+        lag = backend == "lagrange"
+        self._qq_form.setRowVisible(self._qq_rows["napcat_dir"], backend == "napcat")
+        self._qq_form.setRowVisible(self._qq_rows["napcat_port"], backend == "napcat")
         self._qq_form.setRowVisible(self._qq_rows["snowluma_dir"], snow)
         self._qq_form.setRowVisible(self._qq_rows["snowluma_port"], snow)
+        self._qq_form.setRowVisible(self._qq_rows["lagrange_dir"], lag)
         self._qq_form.setRowVisible(self._qq_rows["node"], snow)
-        self.chk_quick_login.setVisible(not snow)
-        self.napcat_maint_box.setVisible(not snow)
-        text = (
-            "SnowLuma 需要你先从官方 Releases 解压到本机目录（启动器不分发它），"
-            "并自行用手机扫码登录一次；Node.js 留空时自动查找。"
-            if snow
-            else "NapCat 由启动器内置流程启动，目录需包含 launcher.bat；"
-            "已保存账号时默认走快速登录，避免每次扫码。"
-        )
+        self.chk_quick_login.setVisible(backend == "napcat")
+        self.napcat_maint_box.setVisible(backend == "napcat")
+        if snow:
+            text = (
+                "SnowLuma 需要你先从官方 Releases 解压到本机目录（启动器不分发它），"
+                "并自行用手机扫码登录一次；Node.js 留空时自动查找。"
+            )
+        elif lag:
+            text = (
+                "Lagrange 是独立协议实现（C#，不依赖 QQ 客户端）。目录需包含 "
+                "Lagrange.OneBot.exe，启动器会自动写好反向 WS（指向 AstrBot 的 "
+                "OneBot 端口）和登录账号；首次使用看日志窗口扫码。"
+            )
+        else:
+            text = (
+                "NapCat 由启动器内置流程启动，目录需包含 launcher.bat；"
+                "已保存账号时默认走快速登录，避免每次扫码。"
+            )
         self.qq_hint.setText(
             text + " OneBot 反向连到 AstrBot 的 6199，平台 ID 保持 napcat 以保留会话。"
         )
@@ -289,6 +303,7 @@ class SettingsMixin:
                 "qq_backend": str(self.qq_backend.currentData() or "napcat"),
                 "snowluma_dir": self.dir_snowluma.text().strip(),
                 "snowluma_webui_port": int(self.port_snowluma.value()),
+                "lagrange_dir": self.dir_lagrange.text().strip(),
                 "node_exe": self.node_exe.text().strip(),
                 "qq_exe": self.qq_exe.text().strip(),
                 "intro_code": self.intro_code.text().strip(),
@@ -357,6 +372,7 @@ class SettingsMixin:
             self.qq_backend.setCurrentIndex(idx)
         self.dir_snowluma.setText(defaults.get("snowluma_dir", r"C:\SnowLuma"))
         self.port_snowluma.setValue(int(defaults.get("snowluma_webui_port", 5099)))
+        self.dir_lagrange.setText(defaults.get("lagrange_dir", r"C:\Lagrange\OneBot"))
         self.node_exe.setText(defaults.get("node_exe", ""))
         self.qq_exe.setText(
             defaults.get("qq_exe", r"C:\Program Files\Tencent\QQNT\QQ.exe")

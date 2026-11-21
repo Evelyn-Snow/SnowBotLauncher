@@ -46,6 +46,57 @@ def qq_processes():
     return result
 
 
+def lagrange_processes():
+    """Lagrange.OneBot 进程列表（单文件 exe，无 WebUI，健康检查靠进程本身）。"""
+    result = []
+    for p in psutil.process_iter(["pid", "name"]):
+        try:
+            if (p.info["name"] or "").lower().startswith("lagrange.onebot"):
+                result.append(p)
+        except Exception:
+            continue
+    return result
+
+
+QQ_BACKENDS = ("napcat", "snowluma", "lagrange")
+QQ_BACKEND_LABELS = {"napcat": "NapCat", "snowluma": "SnowLuma", "lagrange": "Lagrange"}
+
+
+def build_lagrange_config(existing, uin, onebot_port):
+    """生成/修补 Lagrange.OneBot 的 appsettings.json。
+
+    只动账号和反向 WS（连接 AstrBot 的 OneBot 端口，路径与 NapCat/SnowLuma
+    一致是 /ws），其余键（SignServerUrl 等）原样保留。
+    """
+    data = dict(existing) if isinstance(existing, dict) else {}
+    data.setdefault("$schema", "https://raw.githubusercontent.com/LagrangeDev/Lagrange.Core/master/Lagrange.OneBot/Resources/appsettings_schema.json")
+    account = dict(data.get("Account") or {})
+    try:
+        account["Uin"] = int(uin) if str(uin or "").strip().isdigit() else int(account.get("Uin") or 0)
+    except Exception:
+        account["Uin"] = 0
+    account.setdefault("Protocol", "Linux")
+    account["AutoReconnect"] = bool(account.get("AutoReconnect", True))
+    account["GetOptimumServer"] = bool(account.get("GetOptimumServer", True))
+    data["Account"] = account
+    impls = [item for item in data.get("Implementations") or [] if isinstance(item, dict)]
+    target = None
+    for item in impls:
+        if str(item.get("Type") or "").lower() == "reversewebsocket":
+            target = item
+            break
+    if target is None:
+        target = {"Type": "ReverseWebSocket"}
+        impls.insert(0, target)
+    target["Host"] = "127.0.0.1"
+    target["Port"] = int(onebot_port)
+    target["Suffix"] = "/ws"
+    target["ReconnectInterval"] = int(target.get("ReconnectInterval") or 5000)
+    target["HeartBeatInterval"] = int(target.get("HeartBeatInterval") or 5000)
+    data["Implementations"] = impls
+    return data
+
+
 def kill_tree(pid: int, timeout: float = 6.0) -> None:
     if not pid:
         return
@@ -285,16 +336,17 @@ class QqHealthMonitor:
 class ServiceManager:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.procs = {"astrbot": None, "napcat": None, "snowluma": None}
-        self.started_at = {"astrbot": None, "napcat": None, "snowluma": None}
+        self.procs = {"astrbot": None, "napcat": None, "snowluma": None, "lagrange": None}
+        self.started_at = {"astrbot": None, "napcat": None, "snowluma": None, "lagrange": None}
         LOG_DIR.mkdir(exist_ok=True)
 
     # ---------- QQ 协议端 ----------
     def qq_backend(self) -> str:
-        return "snowluma" if str(self.cfg.get("qq_backend") or "").lower() == "snowluma" else "napcat"
+        value = str(self.cfg.get("qq_backend") or "").lower()
+        return value if value in QQ_BACKENDS else "napcat"
 
     def qq_backend_label(self) -> str:
-        return "SnowLuma" if self.qq_backend() == "snowluma" else "NapCat"
+        return QQ_BACKEND_LABELS[self.qq_backend()]
 
     def snowluma_dir(self) -> Path:
         return Path(str(self.cfg.get("snowluma_dir") or r"C:\SnowLuma"))
@@ -320,6 +372,32 @@ class ServiceManager:
         p = LOG_DIR / "snowluma_console.log"
         return p if p.exists() else None
 
+    # ---------- Lagrange（独立协议实现，无 WebUI） ----------
+    def lagrange_dir(self) -> Path:
+        return Path(str(self.cfg.get("lagrange_dir") or r"C:\Lagrange\OneBot"))
+
+    def lagrange_account(self) -> str:
+        try:
+            data = json.loads((self.lagrange_dir() / "appsettings.json").read_text(encoding="utf-8-sig"))
+            uin = str((data.get("Account") or {}).get("Uin") or "")
+            return uin if uin.isdigit() else ""
+        except Exception:
+            return ""
+
+    def lagrange_log_file(self):
+        p = LOG_DIR / "lagrange_console.log"
+        return p if p.exists() else None
+
+    def ensure_lagrange_config(self, uin: str) -> None:
+        path = self.lagrange_dir() / "appsettings.json"
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            data = {}
+        data = build_lagrange_config(data, uin, int(self.cfg["onebot_port"]))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
     def _ensure_snowluma_runtime(self) -> None:
         """确保 SnowLuma 自动注入 QQ，并使用启动器配置的 WebUI 端口。"""
         cfgdir = self.snowluma_dir() / "config"
@@ -344,31 +422,46 @@ class ServiceManager:
         ob = int(self.cfg["onebot_port"])
         nc = int(self.cfg["napcat_port"])
         backend = self.qq_backend()
-        webui_port = self.snowluma_webui_port() if backend == "snowluma" else nc
 
         dash_snap = port_snapshot(dash, conns)
-        qq_snap = port_snapshot(webui_port, conns)
         astrbot_up = bool(dash_snap["listening"])
-        qq_up = bool(qq_snap["listening"])
+        label = QQ_BACKEND_LABELS[backend]
+        if backend == "lagrange":
+            # Lagrange 反向 WS 不监听本地端口，健康检查看进程
+            lprocs = lagrange_processes()
+            qq_up = bool(lprocs)
+            qq_pid = lprocs[0].pid if lprocs else None
+            webui_port = None
+            qq_webui = ""
+            account = self.lagrange_account()
+        else:
+            webui_port = self.snowluma_webui_port() if backend == "snowluma" else nc
+            qq_snap = port_snapshot(webui_port, conns)
+            qq_up = bool(qq_snap["listening"])
+            qq_pid = qq_snap["pid"]
+            qq_webui = f"http://127.0.0.1:{webui_port}"
+            account = (
+                self.snowluma_account() if backend == "snowluma" else self.napcat_account()
+            )
         qqs = qq_processes()
 
         return {
             "astrbot_up": astrbot_up,
             "astrbot_pid": dash_snap["pid"],
             "qq_backend": backend,
-            "qq_label": "SnowLuma" if backend == "snowluma" else "NapCat",
+            "qq_label": label,
             "qq_up": qq_up,
-            "qq_pid": qq_snap["pid"],
-            "qq_webui": f"http://127.0.0.1:{webui_port}",
+            "qq_pid": qq_pid,
+            "qq_webui": qq_webui,
             "qq_webui_port": webui_port,
             # 兼容旧界面字段
             "napcat_up": qq_up,
-            "napcat_pid": qq_snap["pid"],
+            "napcat_pid": qq_pid,
             "qq_running": bool(qqs),
             "qq_pids": [p.pid for p in qqs],
             "onebot_connected": onebot_connected(ob, conns),
             "token": self.napcat_token() if backend == "napcat" else "",
-            "qq": self.snowluma_account() if backend == "snowluma" else self.napcat_account(),
+            "qq": account,
             "astrbot_started_at": self.started_at.get("astrbot"),
             "napcat_started_at": self.started_at.get(backend),
         }
@@ -666,17 +759,82 @@ class ServiceManager:
             else (False, "SnowLuma / QQ 未在运行")
         )
 
+    # ---------- Lagrange ----------
+    def start_lagrange(self):
+        d = self.lagrange_dir()
+        exe = d / "Lagrange.OneBot.exe"
+        if not exe.exists():
+            return False, (
+                f"Lagrange 目录无效：{d}（需要 Lagrange.OneBot.exe，"
+                "可从 github.com/LagrangeDev/Lagrange.Core nightly 下载）"
+            )
+        if lagrange_processes():
+            return False, "Lagrange 已在运行"
+        # 登录账号优先用 SnowLuma/NapCat 已配置的 QQ 号，保持账号一致
+        uin = self.napcat_account() or self.snowluma_account() or self.lagrange_account()
+        self.ensure_lagrange_config(uin)
+        LOG_DIR.mkdir(exist_ok=True)
+        log_path = LOG_DIR / "lagrange_console.log"
+        log_f = open(log_path, "ab", buffering=0)
+        log_f.write(f"\n===== {now_str()} 启动 Lagrange =====\n".encode("utf-8"))
+        try:
+            p = subprocess.Popen(
+                [str(exe)],
+                cwd=str(d),
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                creationflags=subprocess.CREATE_NO_WINDOW
+                | subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+        except Exception as exc:
+            log_f.close()
+            return False, f"启动失败：{exc}"
+        finally:
+            try:
+                log_f.close()
+            except Exception:
+                pass
+        self.procs["lagrange"] = p
+        self.started_at["lagrange"] = time.time()
+        msg = f"Lagrange 启动中（{uin}），反向 WS：ws://127.0.0.1:{int(self.cfg['onebot_port'])}/ws"
+        if not uin:
+            msg += "；首次使用请在日志窗口扫码登录"
+        return True, msg
+
+    def stop_lagrange(self):
+        stopped = False
+        p = self.procs.get("lagrange")
+        if p and p.poll() is None:
+            kill_tree(p.pid)
+            stopped = True
+        for proc in lagrange_processes():
+            try:
+                kill_tree(proc.pid)
+                stopped = True
+            except Exception:
+                continue
+        self.started_at["lagrange"] = None
+        return (True, "Lagrange 已停止") if stopped else (False, "Lagrange 未在运行")
+
     # 统一入口：界面只关心“QQ 协议端”，具体后端由配置决定。
     def start_qq(self):
-        return self.start_snowluma() if self.qq_backend() == "snowluma" else self.start_napcat()
+        backend = self.qq_backend()
+        if backend == "snowluma":
+            return self.start_snowluma()
+        if backend == "lagrange":
+            return self.start_lagrange()
+        return self.start_napcat()
 
     def stop_qq(self):
-        """停止 QQ 协议端：两个后端都清一遍，避免切换后残留。"""
+        """停止 QQ 协议端：三个后端都清一遍，避免切换后残留。"""
         results = []
-        for backend in ("napcat", "snowluma"):
+        for backend in QQ_BACKENDS:
             try:
                 if backend == "napcat":
                     results.append(self.stop_napcat())
+                elif backend == "lagrange":
+                    results.append(self.stop_lagrange())
                 else:
                     results.append(self.stop_snowluma())
             except Exception as exc:

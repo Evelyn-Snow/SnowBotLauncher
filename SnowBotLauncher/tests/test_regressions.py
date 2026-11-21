@@ -470,6 +470,67 @@ class NapCatRegressionTests(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_lagrange_backend_helpers(self):
+        root = Path(tempfile.mkdtemp(prefix="snowbot-lagrange-"))
+        try:
+            (root / "Lagrange.OneBot.exe").write_bytes(b"exe")
+            cfg = {
+                "qq_backend": "lagrange",
+                "lagrange_dir": str(root),
+                "dashboard_port": 1,
+                "onebot_port": 6199,
+                "napcat_port": 3,
+                "napcat_dir": str(root),
+            }
+            m = ServiceManager(cfg)
+            self.assertEqual(m.qq_backend(), "lagrange")
+            self.assertEqual(m.qq_backend_label(), "Lagrange")
+            # 写配置：反向 WS 指向 AstrBot 的 OneBot 端口，路径与 NapCat 一致
+            (root / "appsettings.json").write_text(
+                json.dumps({"Account": {"Uin": 10001, "Protocol": "Linux"}}),
+                encoding="utf-8",
+            )
+            m.ensure_lagrange_config("10001")
+            data = json.loads(
+                (root / "appsettings.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(data["Account"]["Uin"], 10001)
+            impl = data["Implementations"][0]
+            self.assertEqual(impl["Type"], "ReverseWebSocket")
+            self.assertEqual(impl["Port"], 6199)
+            self.assertEqual(impl["Suffix"], "/ws")
+            # 账号识别
+            self.assertEqual(m.lagrange_account(), "10001")
+            # 状态：无 WebUI，健康靠进程（测试环境没有进程 → 未运行）
+            st = m.status()
+            self.assertEqual(st["qq_backend"], "lagrange")
+            self.assertEqual(st["qq_label"], "Lagrange")
+            self.assertEqual(st["qq_webui"], "")
+            self.assertFalse(st["qq_up"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_build_lagrange_config_keeps_existing_keys(self):
+        from snowbot.core.services import build_lagrange_config
+
+        data = build_lagrange_config(
+            {
+                "SignServerUrl": "https://sign.example",
+                "Account": {"Uin": 0, "Protocol": "Linux"},
+                "Implementations": [
+                    {"Type": "ForwardWebSocket", "Port": 8080},
+                ],
+            },
+            "3651873041",
+            6199,
+        )
+        self.assertEqual(data["SignServerUrl"], "https://sign.example")
+        self.assertEqual(data["Account"]["Uin"], 3651873041)
+        self.assertEqual(len(data["Implementations"]), 2)
+        self.assertEqual(data["Implementations"][0]["Suffix"], "/ws")
+        # 坏数据也能兜底
+        self.assertEqual(build_lagrange_config(None, "", 6199)["Account"]["Uin"], 0)
+
     def test_quick_login_argument_is_passed(self):
         root = Path(tempfile.mkdtemp(prefix="snowbot-napcat-"))
         try:

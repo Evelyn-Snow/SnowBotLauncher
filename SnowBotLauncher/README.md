@@ -125,19 +125,20 @@ scripts/                     # 开发/发布脚本；一次性迁移脚本在 ar
 
 ## 前置准备
 
-**SnowBotLauncher 只是统一控制台，不负责下载安装 AstrBot 和 QQ 协议端本体。** 首次使用请按下面步骤把环境装好、打通一次，之后日常启停都可以在启动器里完成。QQ 协议端 **NapCat 与 SnowLuma 二选一**，不要同时登录同一个 QQ。
+**SnowBotLauncher 只是统一控制台，不负责下载安装 AstrBot 和 QQ 协议端本体。** 首次使用请按下面步骤把环境装好、打通一次，之后日常启停都可以在启动器里完成。QQ 协议端 **NapCat / SnowLuma / Lagrange 三选一**，不要同时登录同一个 QQ。
 
 ### 你需要准备
 
 | 组件 | 作用 | 获取 |
 |---|---|---|
-| QQ NT 桌面版 | 协议端依赖 QQ 本体运行 | [QQ 官网](https://im.qq.com/pcqq/index.shtml) |
+| QQ NT 桌面版 | NapCat/SnowLuma 依赖 QQ 本体运行（Lagrange 不需要） | [QQ 官网](https://im.qq.com/pcqq/index.shtml) |
 | AstrBot | 机器人核心：接入大模型、插件、WebUI | [GitHub](https://github.com/AstrBotDevs/AstrBot) · [文档](https://docs.astrbot.app/) |
-| NapCat（可选） | QQ 协议端：把 QQ 消息接入 AstrBot | [GitHub](https://github.com/NapNeko/NapCatQQ) · [Releases](https://github.com/NapNeko/NapCatQQ/releases) · [文档](https://napneko.github.io/) |
-| SnowLuma（可选） | 另一套 QQ 协议端，NapCat 频繁掉线时替代 | [GitHub](https://github.com/SnowLuma/SnowLuma) · [Releases](https://github.com/SnowLuma/SnowLuma/releases) · [文档](https://snowluma.github.io) |
+| NapCat（可选） | QQ 协议端：把 QQ 消息接入 AstrBot（上游已停更，源码见社区 fork） | [GitHub](https://github.com/NapNeko/NapCatQQ) · [文档](https://napneko.github.io/) |
+| SnowLuma（可选） | 另一套 QQ 协议端，NapCat 频繁掉线时替代（上游已收到律师函停止公开，源码见社区归档） | [文档](https://snowluma.github.io) |
+| Lagrange（可选） | 纯 C# 独立协议实现，不依赖 QQ 客户端，作为前两者失效时的备胎 | [GitHub](https://github.com/LagrangeDev/Lagrange.Core) · [Nightly](https://github.com/LagrangeDev/Lagrange.Core/releases) |
 | 本机扩展插件 | 25 个自研插件，随安装包分发，也可从各自仓库安装 | 见下方[本机扩展插件](#本机扩展插件)表 |
 
-> **协议端选择建议**：先用 NapCat；如果反复被踢下线，再换 SnowLuma。SnowLuma Lite 需要 **Node.js 24+**，采用源码可见非商业许可，本项目不打包/不再分发它的本体。
+> **协议端选择建议**：NapCat 与 SnowLuma 上游均已停止公开维护（2026 年底腾讯集中治理第三方协议端）。现有本机安装仍可用，但建议锁定 QQ 版本（关闭自动更新）；Lagrange 是独立实现、不受 QQ 客户端升级影响，可作最后备胎。SnowLuma Lite 需要 **Node.js 24+**，采用源码可见非商业许可，本项目不打包/不再分发它的本体。
 
 > 建议：QQ 登录后关闭「自动更新」，QQ 大版本升级可能导致协议端短暂不适配；用小号跑机器人，降低风控影响。
 
@@ -175,6 +176,15 @@ SnowLuma 是另一套 QQ 协议端，适合 NapCat 频繁被踢下线时替代�
 2. 启动器「设置」→ QQ 协议端选 **SnowLuma**，填 SnowLuma 目录、WebUI 端口（默认 `5099`）、QQ 路径。
 3. SnowLuma 的 OneBot 反向 WS 指向 `ws://127.0.0.1:6199/ws`，访问令牌必须与 AstrBot 的 `ws_reverse_token` 一致。
 4. 启动器会先拉起 QQ，再由 SnowLuma 注入；首次需要扫码登录。
+
+### 可选 · 用 Lagrange 作备胎
+
+Lagrange 是纯 C# 的独立 NTQQ 协议实现，**不需要 QQ 客户端**，也不受 QQ 自动升级影响，适合在 NapCat/SnowLuma 因 QQ 版本升级失效时兜底。
+
+1. 从 [Lagrange.Core nightly](https://github.com/LagrangeDev/Lagrange.Core/releases) 下载 `Lagrange.OneBot_win-x64_net9.0_SelfContained.zip`，解压到 `C:\Lagrange\OneBot`（含 `Lagrange.OneBot.exe`）。
+2. 启动器「设置」→ QQ 协议端选 **Lagrange**，填 Lagrange 目录。
+3. 启动器会自动写好 `appsettings.json`（反向 WS 指向 AstrBot 的 OneBot 端口，路径 `/ws`，账号取自 NapCat/SnowLuma 配置）；首次启动看启动器「日志」页的二维码扫码。
+4. Lagrange 没有 WebUI；协议位与 PC 端 QQ 冲突，同一账号不要同时开 QQ 客户端。
 
 ### 第 4 步 · 回到 SnowBotLauncher
 

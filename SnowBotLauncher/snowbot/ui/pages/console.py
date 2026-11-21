@@ -31,6 +31,7 @@ from snowbot.ui.widgets import Card, link_button, scroll_page
 QQ_CARD_BRANDS = {
     "snowluma": ("S", "#0ea5e9"),
     "napcat": ("N", "#10b981"),
+    "lagrange": ("L", "#8b5cf6"),
 }
 
 
@@ -87,10 +88,13 @@ class ConsoleMixin:
             self.astrbot_card.buttons.addWidget(b)
         cards.addWidget(self.astrbot_card, 1)
 
-        # NapCat / SnowLuma 卡片
-        snowluma = str(self.cfg.get("qq_backend") or "napcat") == "snowluma"
-        letter, accent = QQ_CARD_BRANDS["snowluma" if snowluma else "napcat"]
-        qq_name = "SnowLuma" if snowluma else "NapCat"
+        # QQ 协议端卡片（NapCat / SnowLuma / Lagrange，按配置换标题和配色）
+        backend0 = str(self.cfg.get("qq_backend") or "napcat")
+        letter, accent = QQ_CARD_BRANDS.get(backend0, QQ_CARD_BRANDS["napcat"])
+        qq_name = {
+            "snowluma": "SnowLuma",
+            "lagrange": "Lagrange",
+        }.get(backend0, "NapCat")
         self.napcat_card = Card(accent, letter, qq_name, "QQ 协议端（OneBot v11）")
         self.napcat_status_lbl = QLabel("—")
         self.napcat_status_lbl.setObjectName("value")
@@ -276,6 +280,9 @@ class ConsoleMixin:
         if backend == "snowluma":
             if qq_running and not conn:
                 self.qq_lbl.setText(f"等待扫码登录（{backend_label} WebUI）")
+        elif backend == "lagrange":
+            if napcat_up and not conn:
+                self.qq_lbl.setText("等待扫码登录（看 Lagrange 日志里的二维码）")
         elif health_qr := getattr(self, "health", None):
             try:
                 if qq_running and health_qr.qrcode_waiting():
@@ -302,7 +309,9 @@ class ConsoleMixin:
         self.astrbot_runtime.setText(self._runtime_text(st["astrbot_started_at"], astrbot_up))
         # 地址同步设置（只影响显示）
         self.astrbot_link.setText(f"http://localhost:{self.cfg['dashboard_port']}")
-        self.napcat_link.setText(webui)
+        self.napcat_link.setText(
+            "无 WebUI" if backend == "lagrange" else webui
+        )
         self.ob_lbl.setText(f"ws://127.0.0.1:{self.cfg['onebot_port']}/ws")
 
         # 顶部汇总
@@ -416,10 +425,15 @@ class ConsoleMixin:
 
     def refresh_logs(self):
         self._update_log(self.astrbot_log_view, tail_text(self.astrbot_log))
-        snowluma = self.manager.qq_backend() == "snowluma"
-        self.log_tabs.setTabText(1, "SnowLuma" if snowluma else "NapCat")
-        if snowluma:
+        backend = self.manager.qq_backend()
+        self.log_tabs.setTabText(
+            1,
+            {"snowluma": "SnowLuma", "lagrange": "Lagrange"}.get(backend, "NapCat"),
+        )
+        if backend == "snowluma":
             qq_text = tail_text(self.manager.snowluma_log_file())
+        elif backend == "lagrange":
+            qq_text = tail_text(self.manager.lagrange_log_file())
         else:
             napcat_file = self.manager.napcat_log_file()
             qq_text = tail_text(napcat_file) if napcat_file else ""
@@ -487,6 +501,9 @@ class ConsoleMixin:
 
     def _open_qq_webui(self):
         st = self.manager.status()
+        if st.get("qq_backend") == "lagrange":
+            self._toast("Lagrange 没有 WebUI（反向 WS 直连 AstrBot）", False)
+            return
         url = st.get("qq_webui") or f"http://127.0.0.1:{self.cfg['napcat_port']}"
         self.open_url(url)
 
