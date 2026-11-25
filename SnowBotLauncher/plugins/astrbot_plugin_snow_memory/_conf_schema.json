@@ -1,0 +1,152 @@
+{
+  "enabled": {
+    "description": "启用全局记忆",
+    "type": "bool",
+    "default": true
+  },
+  "capture_enabled": {
+    "description": "采集所有会话",
+    "type": "bool",
+    "default": true,
+    "hint": "私聊、群聊、真实经历都写进同一个事件账本；全局学习不等于全局复述"
+  },
+  "include_groups": {
+    "description": "采集群聊",
+    "type": "bool",
+    "default": true,
+    "hint": "群里的事实默认 privacy=3，只在同一个群/会话里可见"
+  },
+  "include_webchat": {
+    "description": "采集网页测试台",
+    "type": "bool",
+    "default": false,
+    "hint": "测试台内容可能污染记忆，默认不采集"
+  },
+  "extract_enabled": {
+    "description": "自动抽取事实",
+    "type": "bool",
+    "default": true
+  },
+  "extract_batch_size": {
+    "description": "每批抽取多少条事件",
+    "type": "int",
+    "default": 24,
+    "hint": "越大越省调用次数，但单次 prompt 更长"
+  },
+  "extract_min_events": {
+    "description": "至少攒多少条事件再抽",
+    "type": "int",
+    "default": 6
+  },
+  "extract_interval_minutes": {
+    "description": "抽取检查间隔（分钟）",
+    "type": "int",
+    "default": 30
+  },
+  "extract_batches_per_run": {
+    "description": "每次检查最多抽几批",
+    "type": "int",
+    "default": 1,
+    "hint": "首次导入历史时可临时调大（如 5），跑完再改回 1"
+  },
+  "retrieve_enabled": {
+    "description": "聊天时检索记忆",
+    "type": "bool",
+    "default": true
+  },
+  "shadow_mode": {
+    "description": "影子模式（只抽取不注入）",
+    "type": "bool",
+    "default": false,
+    "hint": "打开后只在日志里看命中，不影响回复；用来先观察抽取质量"
+  },
+  "max_facts": {
+    "description": "每轮最多注入几条事实",
+    "type": "int",
+    "default": 8
+  },
+  "max_insights": {
+    "description": "每轮最多注入几条洞察",
+    "type": "int",
+    "default": 3
+  },
+  "min_score": {
+    "description": "检索最低分",
+    "type": "float",
+    "default": 0.15
+  },
+  "min_similarity": {
+    "description": "最低语义/关键词相似度",
+    "type": "float",
+    "default": 0.1,
+    "hint": "低于这个值的事实即使重要度再高也不注入；防止每轮都塞无关记忆"
+  },
+  "inject_limit_chars": {
+    "description": "记忆注入字数上限",
+    "type": "int",
+    "default": 900
+  },
+  "insights_enabled": {
+    "description": "自动归纳洞察",
+    "type": "bool",
+    "default": true,
+    "hint": "Phase 2：从多条事实归纳稳定认识；建议等事实抽取稳定后再开"
+  },
+  "insight_min_facts": {
+    "description": "至少多少条事实才归纳",
+    "type": "int",
+    "default": 6
+  },
+  "insight_min_evidence": {
+    "description": "每条洞察最少证据数",
+    "type": "int",
+    "default": 3,
+    "hint": "低于这个数不生成；防止一条事实就过度概括"
+  },
+  "insight_max_facts": {
+    "description": "每次归纳最多看多少条事实",
+    "type": "int",
+    "default": 600
+  },
+  "insight_max_subjects": {
+    "description": "每次最多归纳几个主体",
+    "type": "int",
+    "default": 6
+  },
+  "insight_interval_hours": {
+    "description": "洞察检查间隔（小时）",
+    "type": "int",
+    "default": 24
+  },
+  "embedding_provider_id": {
+    "description": "向量提供商",
+    "type": "string",
+    "default": "snowbot-memory",
+    "hint": "本地 bge-m3；留空自动取第一个可用的 embedding provider"
+  },
+  "owner_name": {
+    "description": "主人称呼",
+    "type": "string",
+    "default": "哥哥"
+  },
+  "owner_qq": {
+    "description": "主人 QQ",
+    "type": "string",
+    "default": "1282164886"
+  },
+  "bot_name": {
+    "description": "她的名字",
+    "type": "string",
+    "default": "小雪"
+  },
+  "profile_dir": {
+    "description": "画像目录（用于把QQ号和昵称对齐）",
+    "type": "string",
+    "default": "C:\\Evelyn_Snow\\画像"
+  },
+  "debug_log": {
+    "description": "记录检索细节",
+    "type": "bool",
+    "default": false
+  }
+}

@@ -1,0 +1,10 @@
+name: astrbot_plugin_snow_memory
+display_name: 全局记忆
+desc: 全局学习、按听众读取：把私聊/群聊/真实经历写进同一事件账本，抽取带双时间轴和证据的事实，再归纳带证据的洞察
+help: 无需指令；她会从所有会话里积累事实，但只在合适的听众面前提起，群聊不会看到别人私聊的私事
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_memory
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
+  - webchat
