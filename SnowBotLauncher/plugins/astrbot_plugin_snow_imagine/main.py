@@ -131,7 +131,11 @@ class SnowImagine(Star):
         max_per_day = max(1, int(self._cfg("max_per_day", 2) or 2))
         if count >= max_per_day:
             return False, f"今天已经发过 {count} 张生活画面了，明天再拍。"
-        cooldown = max(0, int(self._cfg("cooldown_minutes", 30) or 30)) * 60
+        try:
+            cooldown_minutes = int(self._cfg("cooldown_minutes", 30))
+        except (TypeError, ValueError):
+            cooldown_minutes = 30
+        cooldown = max(0, cooldown_minutes) * 60
         last_ts = float(state.get("last_ts") or 0)
         if last_ts and time.time() - last_ts < cooldown:
             return False, "刚发过没多久，等一会儿再拍。"
@@ -254,6 +258,9 @@ class SnowImagine(Star):
         event: AstrMessageEvent,
         scene: str,
         composition: str = "auto",
+        shot: str = "auto",
+        expression: str = "auto",
+        outfit: str = "auto",
         reason: str = "",
     ) -> str:
         """生成一张“我生活里的画面”并直接发到当前聊天。
@@ -267,6 +274,9 @@ class SnowImagine(Star):
         Args:
             scene(string): 画面内容，例如“刚画完的速写和散在桌上的铅笔”“食堂热汤面”“图书馆窗边的书”
             composition(string): auto/scene/partial/candid/group/portrait；默认 auto
+            shot(string): auto/rule_of_thirds/leading_lines/over_shoulder/pov/closeup/wide/low_angle/high_angle/framed/reflection/backlit/motion_blur/flash/film
+            expression(string): auto/smile/sleepy/proud/shy/surprised/pouty/teary/thinking/laughing/worried/focused/soft/embarrassed/deadpan
+            outfit(string): auto/daily_campus/library/home_study/snow_night/formal/rainy_day/sport/summer/winter/art/sleepwear
             reason(string): 为什么想分享这个画面，一句话
         """
         if not self._enabled():
@@ -293,6 +303,9 @@ class SnowImagine(Star):
             spec=spec,
             allow_other_people=bool(self._cfg("allow_other_people", True)),
             style=str(self._cfg("style", "") or ""),
+            shot=shot,
+            expression=expression,
+            outfit=outfit,
         )
         path, error = await self._generate(prompt, chosen)
         if path is None:
@@ -328,6 +341,8 @@ class SnowImagine(Star):
         hint = (
             f"{HINT_MARK} 想给TA看生活里的画面时，调用 share_life_image；"
             "构图可以是场景/局部/抓拍/人群，不必每次都出镜或正脸；"
+            "取景可用三分法/引导线/过肩/POV/特写/广角/低角度/俯拍/窗框/逆光/动态模糊/直闪/胶片；"
+            "表情和服装可以按场景选，不必每张都微笑+日常套；"
             "没生成成功就不要承诺发图；不要每句话都发。"
         )
         req.system_prompt = prompt + "\n\n" + hint

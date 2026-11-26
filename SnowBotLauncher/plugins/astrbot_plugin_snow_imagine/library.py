@@ -22,6 +22,74 @@ COMPOSITION_LABELS = {
     "portrait": "正面半身/立绘（仅在明确要求时）",
 }
 
+SHOT_PRESETS = {
+    "rule_of_thirds": "rule-of-thirds composition, subject off-center, generous negative space",
+    "leading_lines": "strong leading lines guiding the eye toward the subject, corridor or desk lines",
+    "over_shoulder": "over-the-shoulder shot, foreground shoulder and hair softly blurred",
+    "pov": "first-person POV, hands and objects in the lower frame, immersive viewpoint",
+    "closeup": "close-up detail shot, shallow depth of field, soft blurred background",
+    "wide": "wide establishing shot, character small in the environment, environment dominant",
+    "low_angle": "low-angle shot, dynamic perspective, slight upward view",
+    "high_angle": "high-angle tabletop shot, looking down at desk, food or hands",
+    "framed": "framed composition through a window or doorway, natural vignette",
+    "reflection": "reflection in glass or water, face not necessarily visible, layered composition",
+    "backlit": "backlit subject, rim light on hair, slightly overexposed highlights",
+    "motion_blur": "slow shutter, motion blur, panning shot, movement trails",
+    "flash": "direct flash snapshot, candid, slightly harsh light, everyday imperfection",
+    "film": "film grain, polaroid color shift, soft contrast, snapshot feel",
+}
+
+SHOT_LABELS = {
+    "rule_of_thirds": "三分法",
+    "leading_lines": "引导线",
+    "over_shoulder": "过肩",
+    "pov": "第一人称 POV",
+    "closeup": "特写",
+    "wide": "广角环境",
+    "low_angle": "低角度",
+    "high_angle": "高角度/俯拍",
+    "framed": "窗框/门框",
+    "reflection": "反射",
+    "backlit": "逆光",
+    "motion_blur": "动态模糊",
+    "flash": "直闪抓拍",
+    "film": "胶片感",
+}
+
+EXPRESSION_PROMPTS = {
+    "smile": "gentle soft smile",
+    "sleepy": "sleepy half-closed eyes, small yawn",
+    "proud": "playful proud smirk with a slight wink",
+    "shy": "shy blush, looking away",
+    "surprised": "surprised wide eyes, mouth slightly open",
+    "pouty": "pouty puffed cheeks, cute annoyed expression",
+    "teary": "teary eyes, slightly downturned mouth, not fully crying",
+    "thinking": "deadpan thinking, resting cheek on one hand",
+    "laughing": "bright laughing, eyes curved, happy",
+    "worried": "worried frown, slightly furrowed brows",
+    "focused": "focused serious expression, concentrated",
+    "soft": "relaxed absent-minded gaze, soft expression",
+    "embarrassed": "embarrassed, covering face with one hand",
+    "deadpan": "deadpan unimpressed look, half-lidded eyes",
+}
+
+EXPRESSION_LABELS = {
+    "smile": "微笑",
+    "sleepy": "困",
+    "proud": "得意",
+    "shy": "害羞",
+    "surprised": "惊讶",
+    "pouty": "鼓腮生气",
+    "teary": "委屈",
+    "thinking": "托腮/思考",
+    "laughing": "大笑",
+    "worried": "担心",
+    "focused": "认真",
+    "soft": "发呆",
+    "embarrassed": "害羞捂脸",
+    "deadpan": "无语",
+}
+
 _PORTRAIT_WORDS = ("自拍", "正脸", "你长什么样", "看看你", "你的脸", "立绘", "半身", "照片给我")
 _GROUP_WORDS = ("朋友", "同学", "同事", "大家", "人群", "聚会", "一起", "合照")
 _MOTION_WORDS = ("跑", "走", "回头", "抓拍", "动态", "冲", "跳", "骑车", "赶", "追")
@@ -78,15 +146,33 @@ def choose_composition(
     )[0]
 
 
-def wardrobe_for_scene(spec: dict, scene: str) -> dict:
-    """按场景从衣橱里挑一套；没有匹配就日常。"""
+def wardrobe_for_scene(spec: dict, scene: str, outfit: str = "auto") -> dict:
+    """按场景/显式 outfit 从衣橱里挑一套；没有匹配就日常。"""
     wardrobe = spec.get("wardrobe") or {}
+    requested = str(outfit or "auto").strip().lower()
+    if requested in wardrobe:
+        value = wardrobe.get(requested) or {}
+        return dict(value) if isinstance(value, dict) else {}
     text = str(scene or "")
-    if any(word in text for word in ("雪", "冬", "夜", "正式", "出门")):
-        key = "snow_night"
+    if any(word in text for word in ("雨", "伞")):
+        key = "rainy_day"
+    elif any(word in text for word in ("跑", "运动", "操场", "健身")):
+        key = "sport"
+    elif any(word in text for word in ("夏", "热", "短袖")):
+        key = "summer"
+    elif ("雪" in text and "夜" in text) or any(
+        word in text for word in ("正式", "晚宴", "表演")
+    ):
+        key = "snow_night" if ("雪" in text or "夜" in text) and "snow_night" in wardrobe else "formal"
+    elif any(word in text for word in ("雪", "冬", "冷", "围巾")):
+        key = "winter"
+    elif any(word in text for word in ("夜", "睡前", "晚安")):
+        key = "sleepwear"
+    elif any(word in text for word in ("画", "颜料", "速写", "水彩")):
+        key = "art"
     elif any(word in text for word in ("图书馆", "自习", "考试")):
         key = "library"
-    elif any(word in text for word in ("居家", "宿舍", "书桌", "手账", "画", "床")):
+    elif any(word in text for word in ("居家", "宿舍", "书桌", "手账", "床")):
         key = "home_study"
     else:
         key = "daily_campus"
@@ -94,6 +180,56 @@ def wardrobe_for_scene(spec: dict, scene: str) -> dict:
     if not value and spec.get("daily_default"):
         value = spec["daily_default"]
     return dict(value) if isinstance(value, dict) else {}
+
+
+def choose_shot(
+    scene: str,
+    requested: str = "auto",
+    *,
+    composition: str = "scene",
+    rng: random.Random | None = None,
+) -> str:
+    """选一个摄影取景预设；auto 按构图类型挑，不总是正面平视。"""
+    rng = rng or random
+    value = str(requested or "auto").strip().lower()
+    if value in SHOT_PRESETS:
+        return value
+    pools = {
+        "scene": ("high_angle", "closeup", "leading_lines", "pov", "film"),
+        "partial": ("over_shoulder", "closeup", "framed", "reflection"),
+        "candid": ("motion_blur", "low_angle", "wide", "flash"),
+        "group": ("wide", "rule_of_thirds", "framed"),
+        "portrait": ("closeup", "rule_of_thirds", "backlit"),
+    }
+    return rng.choice(pools.get(composition, pools["scene"]))
+
+
+def choose_expression(
+    scene: str,
+    requested: str = "auto",
+    *,
+    composition: str = "scene",
+    rng: random.Random | None = None,
+) -> str:
+    """选一个表情；auto 按场景关键词推断。"""
+    rng = rng or random
+    value = str(requested or "auto").strip().lower()
+    if value in EXPRESSION_PROMPTS:
+        return value
+    text = str(scene or "")
+    if any(word in text for word in ("困", "睡", "哈欠", "早起")):
+        return "sleepy"
+    elif any(word in text for word in ("画", "书", "论文", "作业", "考试")):
+        return rng.choice(("focused", "thinking"))
+    elif any(word in text for word in ("跑", "下课", "冲", "跳")):
+        return "laughing"
+    elif any(word in text for word in ("夸", "表扬", "好看")):
+        return rng.choice(("shy", "proud"))
+    elif any(word in text for word in ("雨", "阴天")):
+        return "soft"
+    elif composition == "group":
+        return rng.choice(("laughing", "smile"))
+    return "smile"
 
 
 def character_anchors(spec: dict, wardrobe: dict | None = None) -> str:
@@ -163,6 +299,9 @@ def build_prompt(
     allow_other_people: bool = True,
     include_character: bool | None = None,
     style: str = "",
+    shot: str = "auto",
+    expression: str = "auto",
+    outfit: str = "auto",
 ) -> str:
     """拼装给 Seedream 的最终提示词。"""
     composition = composition if composition in COMPOSITIONS else "scene"
@@ -172,13 +311,17 @@ def build_prompt(
         "anime illustration, soft cel shading, clean lineart, light watercolor texture, "
         "low saturation cool palette, natural light, no text, no watermark"
     )
+    chosen_shot = choose_shot(scene, shot, composition=composition)
+    chosen_expression = choose_expression(scene, expression, composition=composition)
     parts = [
         composition_prompt(composition, scene, allow_other_people),
+        SHOT_PRESETS.get(chosen_shot, ""),
         base_style,
     ]
     if include_character:
-        wardrobe = wardrobe_for_scene(spec, scene)
+        wardrobe = wardrobe_for_scene(spec, scene, outfit)
         parts.append("character design: " + character_anchors(spec, wardrobe))
+        parts.append("expression: " + EXPRESSION_PROMPTS.get(chosen_expression, "gentle smile"))
         if composition == "group" and allow_other_people:
             parts.append("background people are generic, blurred, no detailed faces, no real-person likeness")
         if composition == "candid":

@@ -14,6 +14,8 @@ from plugins.astrbot_plugin_snow_imagine.library import (  # noqa: E402
     build_prompt,
     character_anchors,
     choose_composition,
+    choose_expression,
+    choose_shot,
     sanitize_scene,
     wardrobe_for_scene,
 )
@@ -98,6 +100,43 @@ class ImagineLibraryTests(unittest.TestCase):
         )
         self.assertIn("other people", group)
         self.assertIn("background", group)
+
+    def test_shot_and_expression_presets(self):
+        self.assertEqual(
+            choose_shot("桌面", "leading_lines", composition="scene"), "leading_lines"
+        )
+        self.assertIn(
+            choose_shot("桌面", composition="scene"),
+            {"high_angle", "closeup", "leading_lines", "pov", "film"},
+        )
+        self.assertEqual(choose_expression("好困", composition="partial"), "sleepy")
+        self.assertEqual(
+            choose_expression("随便", "shy", composition="portrait"), "shy"
+        )
+        prompt = build_prompt(
+            "图书馆窗边的书",
+            composition="partial",
+            spec=SPEC,
+            shot="over_shoulder",
+            expression="shy",
+        )
+        self.assertIn("over-the-shoulder", prompt)
+        self.assertIn("shy blush", prompt)
+
+    def test_wardrobe_new_outfits(self):
+        spec = dict(SPEC)
+        spec["wardrobe"] = dict(SPEC["wardrobe"])
+        spec["wardrobe"].update(
+            {
+                "rainy_day": {"outfit": "trench coat"},
+                "sport": {"outfit": "sport jacket"},
+            }
+        )
+        self.assertIn("trench", wardrobe_for_scene(spec, "下雨了")["outfit"])
+        self.assertIn("sport", wardrobe_for_scene(spec, "去跑步")["outfit"])
+        self.assertEqual(
+            wardrobe_for_scene(spec, "随便", "rainy_day")["outfit"], "trench coat"
+        )
 
     def test_character_anchors(self):
         anchors = character_anchors(SPEC, wardrobe_for_scene(SPEC, "校园"))
