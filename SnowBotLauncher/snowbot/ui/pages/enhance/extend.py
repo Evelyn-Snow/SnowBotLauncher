@@ -39,6 +39,7 @@ EXT_PLUGINS = (
     ("astrbot_plugin_snow_chat_priority", "对话优先"),
     ("astrbot_plugin_snow_humanize", "像个人"),
     ("astrbot_plugin_snow_memory", "全局记忆"),
+    ("astrbot_plugin_snow_imagine", "生活画面"),
     ("astrbot_plugin_snow_forward", "合并转发阅读"),
     ("astrbot_plugin_snow_knowledge", "Bot 知识库"),
     ("astrbot_plugin_snow_guard", "Bot 安全守卫"),

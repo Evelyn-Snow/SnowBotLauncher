@@ -1,0 +1,108 @@
+{
+  "enabled": {
+    "description": "启用生活画面",
+    "type": "bool",
+    "default": true
+  },
+  "owner_only": {
+    "description": "只对主人开放",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后其他人私聊也能请求；群聊仍受 allow_groups 限制"
+  },
+  "allow_groups": {
+    "description": "允许群聊生成",
+    "type": "bool",
+    "default": false,
+    "hint": "群聊图片会被转发，默认关闭；开启后也必须被 @/点名"
+  },
+  "allow_portrait": {
+    "description": "允许正面半身/立绘",
+    "type": "bool",
+    "default": true,
+    "hint": "只在明确说“看看你/你的脸/自拍”时使用；auto 不会默认选正脸"
+  },
+  "allow_other_people": {
+    "description": "允许画面中出现其他人物",
+    "type": "bool",
+    "default": true,
+    "hint": "背景人物会做虚化、不细化脸，不生成真实人物肖像"
+  },
+  "max_per_day": {
+    "description": "每天最多几张",
+    "type": "int",
+    "default": 2
+  },
+  "cooldown_minutes": {
+    "description": "两张之间至少间隔（分钟）",
+    "type": "int",
+    "default": 30
+  },
+  "max_scene_chars": {
+    "description": "场景描述最大字数",
+    "type": "int",
+    "default": 200
+  },
+  "hint_enabled": {
+    "description": "在聊天里提示她可以分享画面",
+    "type": "bool",
+    "default": true
+  },
+  "model": {
+    "description": "图像模型 ID",
+    "type": "string",
+    "default": "doubao-seedream-5-0-pro-260628"
+  },
+  "base_url": {
+    "description": "图像 API 地址",
+    "type": "string",
+    "default": "https://ark.cn-beijing.volces.com/api/v3"
+  },
+  "api_key_file": {
+    "description": "API Key 文件",
+    "type": "string",
+    "default": "",
+    "hint": "只填本机路径；不要把 Key 写进配置文本或提交到仓库。留空则读环境变量 ARK_API_KEY"
+  },
+  "size": {
+    "description": "输出分辨率",
+    "type": "string",
+    "default": "2k"
+  },
+  "watermark": {
+    "description": "是否加 AI 水印",
+    "type": "bool",
+    "default": false
+  },
+  "character_ref": {
+    "description": "角色母版图",
+    "type": "string",
+    "default": "C:/Evelyn_Snow/角色/character_ref.png"
+  },
+  "character_spec": {
+    "description": "角色设定 JSON",
+    "type": "string",
+    "default": "C:/Working_Files/AIMade/SnowBotArtwork/spec/character.json"
+  },
+  "output_dir": {
+    "description": "生成图目录",
+    "type": "string",
+    "default": "C:/Working_Files/AIMade/SnowBotArtwork/generated"
+  },
+  "style": {
+    "description": "画风补充",
+    "type": "string",
+    "default": "",
+    "hint": "留空使用内置：anime illustration, soft cel shading, clean lineart, light watercolor texture"
+  },
+  "timeout_seconds": {
+    "description": "图像 API 超时（秒）",
+    "type": "int",
+    "default": 240
+  },
+  "debug_log": {
+    "description": "记录构图与生成细节",
+    "type": "bool",
+    "default": false
+  }
+}

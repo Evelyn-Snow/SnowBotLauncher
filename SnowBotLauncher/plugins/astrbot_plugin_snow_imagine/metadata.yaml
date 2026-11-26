@@ -1,0 +1,10 @@
+name: astrbot_plugin_snow_imagine
+display_name: 生活画面
+desc: 按场景生成二次元生活插画：可以只拍桌面/书/食物，也可以只露手/背影、动态抓拍、跑出画面或出现在人群背景里
+help: 无需指令；她想分享生活或你让她“给我看看”时，会生成一张画面发到当前聊天
+version: v0.1.0
+repo: https://github.com/Evelyn-Snow/astrbot_plugin_snow_imagine
+author: Evelyn-Snow
+support_platforms:
+  - aiocqhttp
+  - webchat
